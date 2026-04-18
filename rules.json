@@ -5,128 +5,208 @@
     "version": "6",
     "platform": "TradingView Pine Script v6",
     "overlay": true,
-    "description": "Detects two trade setups on the DXY (US Dollar Index) during the London session. Uses the 23:45 GMT Open Zone as a structural reference level, then fires alerts for either an Attraction trade (price far from zone, pulling back toward it) or a Reversal trade (zone broken, retesting as support/resistance). Signals are confirmed by candlestick patterns.",
+    "description": "Detects two trade setups (Attraction and Reversal) on the DXY during the London session. Uses the 23:45 GMT Open Zone as the structural reference level. Signals fire only when confirmed by a candlestick entry pattern within the correct session window.",
     "markets": ["DXY"],
     "correlated_pairs": {
       "long_USD_bias": ["USDCHF", "USDCAD", "USDJPY"],
       "short_USD_bias": ["EURUSD", "GBPUSD", "NZDUSD", "AUDUSD"]
     },
-    "timeframe": "5-minute (primary backtesting timeframe)"
+    "timeframes": {
+      "context": ["Weekly", "Daily"],
+      "bias_confirmation": ["4H", "1H"],
+      "entry": ["15m", "5m (for early entry refinement)"]
+    }
   },
 
   "core_concept": {
     "open_zone": {
-      "definition": "The gap (or overlap) between the close of the candle immediately before 23:45 GMT and the open of the 23:45 GMT candle.",
+      "definition": "The gap (or overlap) between the close of the candle immediately before 23:45 GMT and the open of the 23:45 GMT candle. Defined using candle bodies, not wicks. The wider the gap, the more significant the zone.",
       "zone_top": "math.max(prior_candle_close, japan_open)",
       "zone_bottom": "math.min(prior_candle_close, japan_open)",
-      "rationale": "The 23:45 GMT candle marks the start of the Japan session. The gap between the preceding candle's close and this candle's open defines a structural zone that price is expected to interact with during the London session.",
-      "pristine_definition": "Zone is PRISTINE if all Japan session candle CLOSES remain on the same side of the zone they started on. A close inside the zone is acceptable — pristine is only broken when a close crosses THROUGH to the opposite side (beyond the far edge).",
-      "pristine_broken": "If Japan is bullish (opens above zone), pristine breaks if any candle closes below zone_bottom. If Japan is bearish (opens below zone), pristine breaks if any candle closes above zone_top.",
-      "visual": "Displayed as a shaded orange box (pristine) or grey box (broken) on the chart."
+      "rationale": "The 23:45 GMT candle marks the start of the Japan session. The gap between the preceding candle's close and this open defines a structural reference zone that price is expected to interact with during London.",
+      "pristine_definition": "Zone is PRISTINE if all Japan session candle CLOSES remain on the same side of the zone they started on. A close inside the zone is acceptable. Pristine is broken only when a close crosses THROUGH to the opposite side (beyond the far edge). Wicks through the zone are acceptable — only closes matter.",
+      "pristine_broken": "If Japan is bullish (opened above zone), pristine breaks if any candle closes BELOW zone_bottom. If Japan is bearish (opened below zone), pristine breaks if any candle closes ABOVE zone_top.",
+      "visual": "Displayed as a shaded orange box (pristine) or grey box (broken) on the chart.",
+      "no_trade_condition": "If price is ranging tightly around the DXY Open Zone with no clear directional move, or if the zone has been bridged repeatedly during the Japan session, do not trade for that day."
     }
+  },
+
+  "htf_bias": {
+    "indicator": "MTFTI (Multi-Timeframe Trading Indicator — displayed on DXY Open layout in TradingView)",
+    "description": "MTFTI shows the directional bias on multiple timeframes. The 1H and 4H bias readings are used to filter Reversal trades. This indicator runs alongside DXY Trade Alert on the same chart layout.",
+    "weekly_daily_analysis": {
+      "method": "3 Simple Moving Averages: 50 / 100 / 200",
+      "uptrend": "200 SMA at bottom, 100 SMA in middle, 50 SMA at top",
+      "downtrend": "200 SMA at top, 100 SMA in middle, 50 SMA at bottom",
+      "additional": "Mark key Supply & Demand zones and Fibonacci levels (0.382 / 0.618) for confluence areas"
+    },
+    "4h_analysis": "Confirm alignment with Daily bias. Assess momentum and MACD divergence. Identify whether price is in continuation or correction.",
+    "1h_analysis": "Momentum check. Is price returning to the moving average? Assess whether HTF direction supports the trade."
   },
 
   "trade_types": {
     "attraction": {
-      "description": "Taken when the zone is PRISTINE. Price has moved a minimum distance away from the zone during the Japan session and is expected to be 'attracted' back toward the zone during London.",
-      "required_zone_state": "Pristine",
-      "long_setup": {
-        "condition": "Japan session is bearish (opened below zone). Price is 150–500 pts below zone_bottom. Bullish candlestick signal fires during London session.",
-        "target": "zone_bottom (lower edge of the Open Zone)",
-        "label": "ATTRACTION LONG"
+      "description": "Mean-reversion trade. Price has moved a minimum distance away from the zone during the Japan session and is expected to be attracted back toward the zone during London.",
+      "required_zone_state": "PRISTINE — zone must not have been breached by a candle close during the Japan session.",
+      "htf_bias_requirement": "NONE. Attraction trades do NOT require 1H or 4H MTFTI bias alignment. The pristine zone is sufficient context.",
+      "direction_logic": {
+        "long_setup": "Japan session is bearish (price opened below zone). Price is 150–500 pts below zone_bottom during London. Bullish entry signal fires. Target: zone_bottom.",
+        "short_setup": "Japan session is bullish (price opened above zone). Price is 150–500 pts above zone_top during London. Bearish entry signal fires. Target: zone_top."
       },
-      "short_setup": {
-        "condition": "Japan session is bullish (opened above zone). Price is 150–500 pts above zone_top. Bearish candlestick signal fires during London session.",
-        "target": "zone_top (upper edge of the Open Zone)",
-        "label": "ATTRACTION SHORT"
+      "distance_requirement": {
+        "minimum_pts": 1500,
+        "maximum_pts": 5000,
+        "note": "1 pt = 0.0001 DXY (equivalent to 1 pip on a 4-decimal pair). 1500 pts = 0.1500 DXY move = 15 pips. Minimum 150 DXY points (1500 pts) required from zone edge to entry. 250 pts max preferred per original backtesting rules.",
+        "preferred_condition": "Slow, gradual movement away from the zone without strong momentum. Strong momentum away from the zone is a warning sign — reassess."
       },
-      "defaults": {
-        "min_distance_pts": 1500,
-        "max_distance_pts": 5000,
-        "note": "1 pt = 0.0001 DXY price. 1500 pts = 0.1500 DXY move."
-      }
+      "momentum_check": "Verify Japan session momentum was not strong. If there is strong directional momentum in the Japan session, consider skipping the attraction trade."
     },
+
     "reversal": {
-      "description": "Taken when the zone is BROKEN (pristine lost). Price has returned to the zone edge, which now acts as support or resistance, confirmed by a tap-and-reverse on the prior bar.",
-      "required_zone_state": "Broken (not pristine)",
-      "long_setup": {
-        "condition": "Japan was bearish. Price closes within 200 pts of zone_bottom. Prior bar's LOW pierced at least 75 pts below zone_bottom (tap and reject).",
-        "target": "Zone-based, discretionary",
-        "label": "REVERSAL LONG"
+      "description": "Rejection trade. The Open Zone has been broken (pristine lost). Price returns to the zone edge, which now acts as support or resistance, and rejects with a bounce and entry signal.",
+      "required_zone_state": "BROKEN — zone pristine status has been lost (a candle closed beyond the far edge during Japan session).",
+      "htf_bias_requirement": "MANDATORY. Reversal trades must be taken only in the direction of BOTH the 1H and 4H MTFTI bias. If 1H and 4H bias do not align with the trade direction, skip the trade.",
+      "setup_sequence": [
+        "1. Zone pristine is broken during Japan session (candle closes on the opposing side).",
+        "2. During London session, price returns to the zone edge (zone_top for short, zone_bottom for long).",
+        "3. Price shows an impulsive rejection (bounce) off the zone — prior bar must have pierced at least 75 pts beyond the zone edge.",
+        "4. Price closes back within 200 pts of the zone edge (tap-and-return).",
+        "5. A valid entry signal fires (Engulfing, Pin Bar, or 3-Bar Reversal).",
+        "6. The 1H AND 4H MTFTI bias both confirm the trade direction."
+      ],
+      "direction_logic": {
+        "long_setup": "Japan was bearish. Zone broken below. Price returns to zone_bottom (now support). Rejection bounce upward. 1H + 4H bias bullish. Bullish entry signal.",
+        "short_setup": "Japan was bullish. Zone broken above. Price returns to zone_top (now resistance). Rejection bounce downward. 1H + 4H bias bearish. Bearish entry signal."
       },
-      "short_setup": {
-        "condition": "Japan was bullish. Price closes within 200 pts of zone_top. Prior bar's HIGH pierced at least 75 pts above zone_top (tap and reject).",
-        "target": "Zone-based, discretionary",
-        "label": "REVERSAL SHORT"
-      },
-      "defaults": {
-        "tolerance_pts": 200,
-        "min_tap_pts": 75
-      }
+      "tap_requirement": "Prior bar must pierce at least 75 pts (0.0075) beyond the zone edge to confirm a genuine test of the level.",
+      "tolerance": "Current candle must close within 200 pts of the zone edge to qualify as a valid reversal entry location."
+    }
+  },
+
+  "entry_signals": {
+    "description": "At least one of these three candlestick patterns must form at the entry location during the session window for any alert to trigger. No signal = no trade.",
+    "minimum_trade_size_pts": 1500,
+    "minimum_trade_size_note": "All trades (attraction and reversal) require a minimum of 150 DXY points (1500 pts) between entry and the zone. This ensures sufficient room for a 1:1 risk-reward setup.",
+    "engulfing_candle": {
+      "bull": "Current bar bullish, prior bar bearish. Current close > prior open, current open < prior close. Current body >= 80% of prior body.",
+      "bear": "Current bar bearish, prior bar bullish. Current close < prior open, current open > prior close. Current body >= 80% of prior body.",
+      "note": "Avoid excessively large engulfing candles — they reduce the quality of the entry.",
+      "enabled_by_default": true
+    },
+    "pin_bar": {
+      "bull": "Lower wick >= body × wick_multiplier (default 2.0). Upper wick <= body × 1.5. Long lower wick preferred.",
+      "bear": "Upper wick >= body × wick_multiplier (default 2.0). Lower wick <= body × 1.5.",
+      "enabled_by_default": true,
+      "default_wick_multiplier": 2.0
+    },
+    "3_bar_reversal": {
+      "bull": "Bar -2 is bearish. Bar -1 is indecision (body <= 50% of bar -2 body). Current bar is bullish and closes above bar -2 open.",
+      "bear": "Bar -2 is bullish. Bar -1 is indecision (body <= 50% of bar -2 body). Current bar is bearish and closes below bar -2 open.",
+      "enabled_by_default": true
+    },
+    "timeframe_note": "Entry signals assessed on the 15m chart. The 5m chart may be used for early entry refinement when the 15m structure is still forming."
+  },
+
+  "risk_management": {
+    "stop_loss": {
+      "placement": "Set at the most recent swing high (for SHORT trades) or swing low (for LONG trades) at the time of entry.",
+      "minimum_distance_pts": 1500,
+      "minimum_distance_note": "Stop loss must be a minimum of 150 DXY points (1500 pts / 0.1500 DXY) from the entry price. If the nearest swing high/low is closer than 150 pts, do not take the trade or extend to the next valid swing level.",
+      "rule": "Stop is placed behind the structural swing level, not a fixed pip distance. The 150 pt minimum is a floor, not the target distance."
+    },
+    "take_profit": {
+      "primary_target": "DXY Open Zone edge (zone_bottom for longs, zone_top for shorts).",
+      "minimum_rr": "1:1 — Take Profit distance must be at least equal to the Stop Loss distance.",
+      "partial_profits": "At the primary target, close ½ to ⅔ of the position. Leave a runner if the HTF context supports continuation.",
+      "runner_management": "Check 4H and 1H bias. If initial trade direction aligns with 4H trend, consider leaving the remainder open. Reassess at target: close fully, reverse, or continue as swing."
+    },
+    "risk_per_trade": "Maximum 1% of account equity per DXY trade.",
+    "news_filter": {
+      "rule": "Check economic calendar before every trade. Avoid entering during high-impact news events (NFP, FOMC, CPI, PMI, retail sales, JOLTS, durable goods).",
+      "management": "If already in a trade and high-impact news is imminent, consider exiting before the release or waiting until the market settles."
     }
   },
 
   "session_rules": {
     "london_entry_window": {
-      "default_start_gmt": "06:00",
-      "default_end_gmt": "12:00",
+      "standard_start_gmt": "06:00",
+      "extended_end_gmt": "12:00",
       "monday_start_gmt": "05:00",
-      "rationale": "Window extended to 12:00 GMT based on backtesting results. Monday opens 1 hour earlier to capture the weekly open gap."
+      "rationale": "Extended to 12:00 GMT based on backtesting. Monday opens 1 hour earlier to capture the weekly open gap dynamic."
     },
     "japan_session": {
       "start": "23:45 GMT",
       "end": "06:00 GMT (default)",
-      "purpose": "Sets the Open Zone and establishes directional bias. Zone pristine status monitored throughout this session."
+      "purpose": "Defines the Open Zone and establishes directional bias. Zone pristine status monitored throughout. No trades taken during Japan session — observation only."
     },
     "zone_reset": "Zone top, bottom, and pristine status reset at each new 23:45 GMT bar."
   },
 
-  "entry_signals": {
-    "description": "Three candlestick confirmation patterns. At least one must fire during the London window for an alert to trigger.",
-    "engulfing_candle": {
-      "bull_conditions": "Current bar is bullish, prior bar is bearish. Current close > prior open, current open < prior close. Current body >= 80% of prior body.",
-      "bear_conditions": "Current bar is bearish, prior bar is bullish. Current close < prior open, current open > prior close. Current body >= 80% of prior body.",
-      "default_enabled": true
+  "no_trade_conditions": [
+    "Price ranging tightly around the DXY Open Zone with no clear directional expansion.",
+    "Zone has been bridged repeatedly during Japan session — no clear bias.",
+    "Strong directional momentum during Japan session that may negate an attraction trade.",
+    "Conflicting 1H and 4H MTFTI bias (for reversal trades).",
+    "High-impact news imminent during the trade window.",
+    "Less than 150 pts between entry and target (insufficient room for 1:1 RR).",
+    "No valid entry signal (engulfing, pin bar, or 3-bar reversal) — no signal, no trade."
+  ],
+
+  "workflow_checklist": [
+    "SUNDAY: Review weekly fundamentals and high-impact news calendar.",
+    "DAILY (Weekly/Daily chart): Check 50/100/200 SMA trend. Mark S&D zones and Fibonacci confluence levels.",
+    "DAILY (4H chart): Confirm Daily bias alignment. Check MACD momentum and divergence.",
+    "23:45 GMT: Mark the DXY Open Zone on the 15m chart. Note whether Japan session opens above or below the prior candle close.",
+    "JAPAN SESSION: Monitor for zone pristine status. Note if any candle closes beyond the far zone edge.",
+    "PRE-LONDON: Assess Japan session momentum. Check MTFTI 1H and 4H bias.",
+    "LONDON SESSION: Wait for price to expand away from zone (min 150 pts). Identify trade type (Attraction or Reversal).",
+    "ATTRACTION (pristine zone): Confirm 150–500 pt distance. Look for entry signal. No HTF bias required.",
+    "REVERSAL (broken zone): Confirm price has returned to zone edge with bounce. Confirm 1H AND 4H MTFTI bias aligns. Look for entry signal.",
+    "PRE-ENTRY: Check news calendar. Confirm SL placement at recent swing high/low (min 150 pts). Confirm 1:1 RR is achievable.",
+    "ENTRY: Place trade with defined SL and TP. Risk ≤ 1% account.",
+    "MANAGEMENT: At target, take partial profits (½ to ⅔). Reevaluate runner based on HTF context. If DXY zone is hit, manually exit all correlated FX pair trades."
+  ],
+
+  "trade_execution_on_correlated_pairs": {
+    "description": "Trades are executed on USD major FX pairs in correlation with the DXY direction. Begin with 2–3 pairs; experienced traders can trade all pairs simultaneously.",
+    "long_dxy_trades": {
+      "go_long": ["USDCHF", "USDCAD", "USDJPY"],
+      "go_short": ["EURUSD", "GBPUSD", "NZDUSD", "AUDUSD"]
     },
-    "pin_bar": {
-      "bull_conditions": "Lower wick >= body × wick_multiplier (default 2.0). Upper wick <= body × 1.5.",
-      "bear_conditions": "Upper wick >= body × wick_multiplier (default 2.0). Lower wick <= body × 1.5.",
-      "default_enabled": true,
-      "default_wick_multiplier": 2.0
+    "short_dxy_trades": {
+      "go_short": ["USDCHF", "USDCAD", "USDJPY"],
+      "go_long": ["EURUSD", "GBPUSD", "NZDUSD", "AUDUSD"]
     },
-    "3_bar_reversal": {
-      "bull_conditions": "Bar -2 is bearish. Bar -1 is indecision (body <= 50% of bar -2 body). Current bar is bullish and closes above bar -2 open.",
-      "bear_conditions": "Bar -2 is bullish. Bar -1 is indecision (body <= 50% of bar -2 body). Current bar is bearish and closes below bar -2 open.",
-      "default_enabled": true
-    }
+    "fx_pair_stop_loss": "25 pips default, adjusted for pair structure. Verify no structural level between entry and target that could prevent reaching the TP.",
+    "manual_exit_rule": "If DXY level is hit, manually close ALL correlated FX pair trades even if individual pair targets have not been reached."
   },
 
   "distance_units": {
-    "explanation": "Distance is measured in 'pts' where 1 pt = 0.0001 DXY price (equivalent to 1 pip on a 4-decimal FX pair).",
+    "explanation": "Distance is measured in 'pts' where 1 pt = 0.0001 DXY (equivalent to 1 pip on a 4-decimal FX pair).",
     "formula": "dist_above = (close - zone_top) * 10000  |  dist_below = (zone_bottom - close) * 10000",
     "examples": {
-      "1500_pts": "= 0.1500 DXY price move",
-      "5000_pts": "= 0.5000 DXY price move"
+      "150_dxy_points": "= 1500 pts in the indicator = 0.1500 DXY price move",
+      "500_dxy_points": "= 5000 pts in the indicator = 0.5000 DXY price move"
     }
   },
 
   "alerts": {
-    "attraction_long":  "Fires when attr_long condition is true. Message includes pair direction guidance.",
-    "attraction_short": "Fires when attr_short condition is true. Message includes pair direction guidance.",
-    "reversal_long":    "Fires when rev_long condition is true.",
-    "reversal_short":   "Fires when rev_short condition is true.",
-    "any_setup":        "Fires when any of the four conditions is true. Useful as a single catch-all alert."
+    "attraction_long":  "Zone PRISTINE, Japan bearish, price 150–500 pts below zone_bottom, bullish entry signal in session. Go LONG USD pairs.",
+    "attraction_short": "Zone PRISTINE, Japan bullish, price 150–500 pts above zone_top, bearish entry signal in session. Go SHORT USD pairs.",
+    "reversal_long":    "Zone BROKEN, price at zone_bottom with prior bar bounce, bullish entry signal, 1H+4H bias bullish. Go LONG USD pairs.",
+    "reversal_short":   "Zone BROKEN, price at zone_top with prior bar bounce, bearish entry signal, 1H+4H bias bearish. Go SHORT USD pairs.",
+    "any_setup":        "Catch-all alert for any of the four conditions. Check chart for zone status and direction."
   },
 
   "visual_outputs": {
     "open_zone_box": "Shaded band between zone_top and zone_bottom. Orange = pristine, grey = broken.",
-    "attraction_bands": "Dashed lines at zone_top ± attr_max_pts and zone_top ± attr_min_pts showing the valid attraction entry distance window.",
+    "attraction_bands": "Lines at zone_top ± attr_max_pts and ± attr_min_pts showing the valid attraction entry distance window.",
     "london_session_background": "Light blue background shading during the London entry window.",
     "labels": {
-      "attraction_long":  "Green label below bar. Shows signal name, pts from zone, and target.",
-      "attraction_short": "Red label above bar. Shows signal name, pts from zone, and target.",
-      "reversal_long":    "Teal label below bar.",
-      "reversal_short":   "Purple label above bar."
+      "attraction_long":  "Green label below bar — signal name, pts from zone, target price.",
+      "attraction_short": "Red label above bar — signal name, pts from zone, target price.",
+      "reversal_long":    "Teal label below bar — signal name, zone bottom level.",
+      "reversal_short":   "Purple label above bar — signal name, zone top level."
     }
   },
 
@@ -143,5 +223,11 @@
     "use_engulfing": true,
     "use_pin_bar": true,
     "use_3bar_reversal": true
-  }
+  },
+
+  "source_documents": [
+    "Strategy Rules/DXY Backtesting Rules Doc _1.pdf",
+    "Strategy Rules/Dxy Open Strategy – Clean Operating Process.pdf",
+    "Strategy Rules/Nancy's Backtesting Rules for DXY Open Doc #1.docx"
+  ]
 }
