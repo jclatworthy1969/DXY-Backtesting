@@ -1,0 +1,147 @@
+{
+  "indicator": {
+    "name": "DXY Trade Alert",
+    "file": "DXYTradeAlert.pine",
+    "version": "6",
+    "platform": "TradingView Pine Script v6",
+    "overlay": true,
+    "description": "Detects two trade setups on the DXY (US Dollar Index) during the London session. Uses the 23:45 GMT Open Zone as a structural reference level, then fires alerts for either an Attraction trade (price far from zone, pulling back toward it) or a Reversal trade (zone broken, retesting as support/resistance). Signals are confirmed by candlestick patterns.",
+    "markets": ["DXY"],
+    "correlated_pairs": {
+      "long_USD_bias": ["USDCHF", "USDCAD", "USDJPY"],
+      "short_USD_bias": ["EURUSD", "GBPUSD", "NZDUSD", "AUDUSD"]
+    },
+    "timeframe": "5-minute (primary backtesting timeframe)"
+  },
+
+  "core_concept": {
+    "open_zone": {
+      "definition": "The gap (or overlap) between the close of the candle immediately before 23:45 GMT and the open of the 23:45 GMT candle.",
+      "zone_top": "math.max(prior_candle_close, japan_open)",
+      "zone_bottom": "math.min(prior_candle_close, japan_open)",
+      "rationale": "The 23:45 GMT candle marks the start of the Japan session. The gap between the preceding candle's close and this candle's open defines a structural zone that price is expected to interact with during the London session.",
+      "pristine_definition": "Zone is PRISTINE if all Japan session candle CLOSES remain on the same side of the zone they started on. A close inside the zone is acceptable — pristine is only broken when a close crosses THROUGH to the opposite side (beyond the far edge).",
+      "pristine_broken": "If Japan is bullish (opens above zone), pristine breaks if any candle closes below zone_bottom. If Japan is bearish (opens below zone), pristine breaks if any candle closes above zone_top.",
+      "visual": "Displayed as a shaded orange box (pristine) or grey box (broken) on the chart."
+    }
+  },
+
+  "trade_types": {
+    "attraction": {
+      "description": "Taken when the zone is PRISTINE. Price has moved a minimum distance away from the zone during the Japan session and is expected to be 'attracted' back toward the zone during London.",
+      "required_zone_state": "Pristine",
+      "long_setup": {
+        "condition": "Japan session is bearish (opened below zone). Price is 150–500 pts below zone_bottom. Bullish candlestick signal fires during London session.",
+        "target": "zone_bottom (lower edge of the Open Zone)",
+        "label": "ATTRACTION LONG"
+      },
+      "short_setup": {
+        "condition": "Japan session is bullish (opened above zone). Price is 150–500 pts above zone_top. Bearish candlestick signal fires during London session.",
+        "target": "zone_top (upper edge of the Open Zone)",
+        "label": "ATTRACTION SHORT"
+      },
+      "defaults": {
+        "min_distance_pts": 1500,
+        "max_distance_pts": 5000,
+        "note": "1 pt = 0.0001 DXY price. 1500 pts = 0.1500 DXY move."
+      }
+    },
+    "reversal": {
+      "description": "Taken when the zone is BROKEN (pristine lost). Price has returned to the zone edge, which now acts as support or resistance, confirmed by a tap-and-reverse on the prior bar.",
+      "required_zone_state": "Broken (not pristine)",
+      "long_setup": {
+        "condition": "Japan was bearish. Price closes within 200 pts of zone_bottom. Prior bar's LOW pierced at least 75 pts below zone_bottom (tap and reject).",
+        "target": "Zone-based, discretionary",
+        "label": "REVERSAL LONG"
+      },
+      "short_setup": {
+        "condition": "Japan was bullish. Price closes within 200 pts of zone_top. Prior bar's HIGH pierced at least 75 pts above zone_top (tap and reject).",
+        "target": "Zone-based, discretionary",
+        "label": "REVERSAL SHORT"
+      },
+      "defaults": {
+        "tolerance_pts": 200,
+        "min_tap_pts": 75
+      }
+    }
+  },
+
+  "session_rules": {
+    "london_entry_window": {
+      "default_start_gmt": "06:00",
+      "default_end_gmt": "12:00",
+      "monday_start_gmt": "05:00",
+      "rationale": "Window extended to 12:00 GMT based on backtesting results. Monday opens 1 hour earlier to capture the weekly open gap."
+    },
+    "japan_session": {
+      "start": "23:45 GMT",
+      "end": "06:00 GMT (default)",
+      "purpose": "Sets the Open Zone and establishes directional bias. Zone pristine status monitored throughout this session."
+    },
+    "zone_reset": "Zone top, bottom, and pristine status reset at each new 23:45 GMT bar."
+  },
+
+  "entry_signals": {
+    "description": "Three candlestick confirmation patterns. At least one must fire during the London window for an alert to trigger.",
+    "engulfing_candle": {
+      "bull_conditions": "Current bar is bullish, prior bar is bearish. Current close > prior open, current open < prior close. Current body >= 80% of prior body.",
+      "bear_conditions": "Current bar is bearish, prior bar is bullish. Current close < prior open, current open > prior close. Current body >= 80% of prior body.",
+      "default_enabled": true
+    },
+    "pin_bar": {
+      "bull_conditions": "Lower wick >= body × wick_multiplier (default 2.0). Upper wick <= body × 1.5.",
+      "bear_conditions": "Upper wick >= body × wick_multiplier (default 2.0). Lower wick <= body × 1.5.",
+      "default_enabled": true,
+      "default_wick_multiplier": 2.0
+    },
+    "3_bar_reversal": {
+      "bull_conditions": "Bar -2 is bearish. Bar -1 is indecision (body <= 50% of bar -2 body). Current bar is bullish and closes above bar -2 open.",
+      "bear_conditions": "Bar -2 is bullish. Bar -1 is indecision (body <= 50% of bar -2 body). Current bar is bearish and closes below bar -2 open.",
+      "default_enabled": true
+    }
+  },
+
+  "distance_units": {
+    "explanation": "Distance is measured in 'pts' where 1 pt = 0.0001 DXY price (equivalent to 1 pip on a 4-decimal FX pair).",
+    "formula": "dist_above = (close - zone_top) * 10000  |  dist_below = (zone_bottom - close) * 10000",
+    "examples": {
+      "1500_pts": "= 0.1500 DXY price move",
+      "5000_pts": "= 0.5000 DXY price move"
+    }
+  },
+
+  "alerts": {
+    "attraction_long":  "Fires when attr_long condition is true. Message includes pair direction guidance.",
+    "attraction_short": "Fires when attr_short condition is true. Message includes pair direction guidance.",
+    "reversal_long":    "Fires when rev_long condition is true.",
+    "reversal_short":   "Fires when rev_short condition is true.",
+    "any_setup":        "Fires when any of the four conditions is true. Useful as a single catch-all alert."
+  },
+
+  "visual_outputs": {
+    "open_zone_box": "Shaded band between zone_top and zone_bottom. Orange = pristine, grey = broken.",
+    "attraction_bands": "Dashed lines at zone_top ± attr_max_pts and zone_top ± attr_min_pts showing the valid attraction entry distance window.",
+    "london_session_background": "Light blue background shading during the London entry window.",
+    "labels": {
+      "attraction_long":  "Green label below bar. Shows signal name, pts from zone, and target.",
+      "attraction_short": "Red label above bar. Shows signal name, pts from zone, and target.",
+      "reversal_long":    "Teal label below bar.",
+      "reversal_short":   "Purple label above bar."
+    }
+  },
+
+  "default_inputs": {
+    "attr_min_pts": 1500,
+    "attr_max_pts": 5000,
+    "rev_zone_pts": 200,
+    "rev_tap_pts": 75,
+    "entry_start_gmt": 6,
+    "entry_end_gmt": 12,
+    "monday_start_gmt": 5,
+    "japan_end_gmt": 6,
+    "pin_wick_multiplier": 2.0,
+    "use_engulfing": true,
+    "use_pin_bar": true,
+    "use_3bar_reversal": true
+  }
+}
