@@ -1,0 +1,12 @@
+# Binary bar data chunks — large files, not needed in repo
+*.pkl
+
+# Claude internal session files
+.claude/
+
+# Excel output (saved to Desktop)
+*.xlsx
+
+# Python cache
+__pycache__/
+*.pyc

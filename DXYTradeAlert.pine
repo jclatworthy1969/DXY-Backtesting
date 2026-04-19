@@ -8,15 +8,18 @@ grp_sig  = "Entry Signals"
 grp_disp = "Display"
 
 attr_enabled  = input.bool(true,  "Enable Attraction Trade Alerts",            group=grp_zone)
-attr_min_pts  = input.int(1500,   "Attraction — Min Distance from Zone (pts)", group=grp_zone, minval=100, step=50, tooltip="1500 pts = 150 DXY points = 0.15 price move. Strategy minimum.")
+attr_min_pts  = input.int(1500,   "Attraction — Min Distance from Zone (pts)", group=grp_zone, minval=10, step=10, tooltip="1500 pts = 150 DXY points = 0.150 price move. Minimum gap from zone edge to entry.")
+zone_min_gap  = input.int(30,    "Zone — Min Gap to use open gap (pts)",      group=grp_zone, minval=5, step=5, tooltip="If gap between prior close and 23:45 open is smaller than this, the 23:45 candle body is used as the zone instead.")
 attr_max_pts  = input.int(5000,   "Attraction — Max Distance from Zone (pts)", group=grp_zone, minval=500, step=100, tooltip="Upper bound. Beyond this, momentum may be too strong.")
 rev_enabled   = input.bool(true,  "Enable Reversal Trade Alerts",              group=grp_zone)
 rev_zone_pts  = input.int(200,    "Reversal — Tolerance at Zone Edge (pts)",   group=grp_zone, minval=25, step=25, tooltip="Pts from zone edge that counts as at the level for a reversal.")
 rev_tap_pts   = input.int(75,     "Reversal — Min Tap Beyond Zone Edge (pts)", group=grp_zone, minval=10, step=25, tooltip="Prior bar must pierce at least this many pts past the zone edge.")
 
-entry_start  = input.int(6,  "London Entry Start (GMT hour)", group=grp_sess, minval=0, maxval=23)
-entry_end    = input.int(12, "London Entry End (GMT hour)",   group=grp_sess, minval=0, maxval=23, tooltip="Extended to 12:00 GMT based on backtesting.")
-monday_start = input.int(5,  "Monday Start Hour (GMT)",       group=grp_sess, minval=0, maxval=23)
+entry_start_h = input.int(6,  "Entry Start Hour (GMT)",         group=grp_sess, minval=0, maxval=23, tooltip="Entry window start — 06:45 GMT. Earliest validated entry in backtesting.")
+entry_start_m = input.int(45, "Entry Start Minute (GMT)",       group=grp_sess, minval=0, maxval=59)
+entry_end_h   = input.int(19, "Entry End Hour (GMT)",           group=grp_sess, minval=0, maxval=23, tooltip="Entry window ends at 19:30 GMT, covering London through NY afternoon.")
+entry_end_m   = input.int(30, "Entry End Minute (GMT)",         group=grp_sess, minval=0, maxval=59)
+monday_start  = input.int(6,  "Monday Start Hour (GMT)",        group=grp_sess, minval=0, maxval=23)
 japan_end_h  = input.int(6,  "Japan Session End Hour (GMT)",  group=grp_sess, minval=1, maxval=8)
 
 use_engulf    = input.bool(true,  "Engulfing Candle",        group=grp_sig)
@@ -32,43 +35,69 @@ show_session   = input.bool(true, "Show London Session Background", group=grp_di
 h        = hour(time, "UTC")
 m        = minute(time, "UTC")
 is_mon   = dayofweek(time, "UTC") == dayofweek.monday
-start_h  = is_mon ? monday_start : entry_start
-in_sess  = h >= start_h and h < entry_end
+start_min = (is_mon ? monday_start : entry_start_h) * 60 + entry_start_m
+curr_min  = h * 60 + m
+end_min   = entry_end_h * 60 + entry_end_m
+in_sess   = curr_min >= start_min and curr_min <= end_min
 in_japan = (h == 23 and m >= 45) or (h >= 0 and h < japan_end_h)
 is_2345  = h == 23 and m == 45
 
 // ─── DXY OPEN ZONE ───────────────────────────────────────────────────────────
-// Zone = gap between the candle IMMEDIATELY BEFORE 23:45 (close[1] at 23:45 bar)
-// and the 23:45 candle open.
-// Using close[1] at the 23:45 bar always captures the prior candle regardless of
-// any gap in the feed — it is always the immediately preceding candle.
+// Primary zone: gap between the close of the candle immediately before 23:45
+// and the 23:45 candle open. If the gap is smaller than zone_min_gap pts,
+// the body of the 23:45 candle (open-to-close) is used as the zone instead,
+// ensuring a meaningful structural reference even on flat opens.
 //
 // PRISTINE: all Japan session closes remain on the same side of the zone they started.
 // Closes INSIDE the zone are acceptable — pristine is only broken when a close
 // crosses THROUGH to the OPPOSITE side (beyond the far edge).
 
-var float zone_top      = na
-var float zone_bottom   = na
-var bool  zone_pristine = false
-var bool  japan_bull    = false   // true = Japan session is above the zone
+var float zone_top        = na
+var float zone_bottom     = na
+var bool  zone_pristine   = false   // reversal condition: no close beyond far edge
+var bool  zone_body_clean = false   // attraction condition: no body inside zone after 2nd candle
+var bool  japan_bull      = false   // true = Japan session is above the zone
+var int   japan_candle_count = 0    // candles elapsed since 23:45 (0 = the 23:45 bar itself)
 
 if is_2345
-    float prior_candle_close = close[1]   // close of the candle immediately before 23:45
+    // If the immediately prior candle is a line candle (no meaningful body — common on Monday
+    // weekend open), skip it and use the candle before that instead.
+    bool  prior_is_line      = math.abs(close[1] - open[1]) * 10000 < 10
+    float prior_candle_close = prior_is_line ? close[2] : close[1]
     float japan_open         = open       // open of the 23:45 candle
-    zone_top      := math.max(prior_candle_close, japan_open)
-    zone_bottom   := math.min(prior_candle_close, japan_open)
-    zone_pristine := true
-    japan_bull    := japan_open > prior_candle_close
+    float gap_size           = math.abs(prior_candle_close - japan_open) * 10000
+    if gap_size >= zone_min_gap
+        // Noticeable gap: use the open-gap as the zone
+        zone_top    := math.max(prior_candle_close, japan_open)
+        zone_bottom := math.min(prior_candle_close, japan_open)
+        japan_bull  := japan_open > prior_candle_close
+    else
+        // No noticeable gap: use the 23:45 candle body
+        zone_top    := math.max(japan_open, close)
+        zone_bottom := math.min(japan_open, close)
+        japan_bull  := close > japan_open
+    zone_pristine      := true
+    zone_body_clean    := true
+    japan_candle_count := 0
 
 // Monitor Japan session (23:45 onwards through to japan_end_h)
-// Pristine broken only if close goes BEYOND the far edge (opposite side of zone)
+// zone_pristine: broken only if close goes BEYOND the far edge (reversal condition)
+// zone_body_clean: first 3 candles may close inside zone; from candle 4 onward any close inside breaks it
 if in_japan and not na(zone_top) and not is_2345
-    if japan_bull
-        if close < zone_bottom
-            zone_pristine := false
-    else
-        if close > zone_top
-            zone_pristine := false
+    japan_candle_count := japan_candle_count + 1
+
+    if zone_body_clean and japan_candle_count > 3
+        bool close_in_zone = close >= zone_bottom and close <= zone_top
+        if close_in_zone
+            zone_body_clean := false
+
+    if zone_pristine
+        if japan_bull
+            if close < zone_bottom
+                zone_pristine := false
+        else
+            if close > zone_top
+                zone_pristine := false
 
 // ─── CANDLE MEASUREMENTS ─────────────────────────────────────────────────────
 body_sz    = math.abs(close - open)
@@ -92,19 +121,21 @@ bear_sig      = bear_engulf or bear_pin or bear_3bar
 bull_sig_name = bull_engulf ? "Engulfing" : bull_pin ? "Pin Bar" : bull_3bar ? "3-Bar Reversal" : "Signal"
 bear_sig_name = bear_engulf ? "Engulfing" : bear_pin ? "Pin Bar" : bear_3bar ? "3-Bar Reversal" : "Signal"
 
-// ─── DISTANCE FROM ZONE ──────────────────────────────────────────────────────
-dist_above = (close - zone_top)    * 10000
-dist_below = (zone_bottom - close) * 10000
+// ─── DISTANCE FROM ZONE (measured to FAR side = TP target) ──────────────────
+// attr_short: entry above zone, TP = zone_bottom (far side)
+// attr_long:  entry below zone, TP = zone_top    (far side)
+dist_to_tp_short = (close - zone_bottom) * 10000
+dist_to_tp_long  = (zone_top - close)    * 10000
 
-// ─── ATTRACTION CONDITIONS (pristine zone only) ───────────────────────────────
-attr_short = attr_enabled and zone_pristine and japan_bull and in_sess and bear_sig and dist_above >= attr_min_pts and dist_above <= attr_max_pts
-attr_long  = attr_enabled and zone_pristine and not japan_bull and in_sess and bull_sig and dist_below >= attr_min_pts and dist_below <= attr_max_pts
+// ─── ATTRACTION CONDITIONS (body-clean zone only) ─────────────────────────────
+attr_short = attr_enabled and zone_body_clean and japan_bull    and in_sess and bear_sig and dist_to_tp_short >= attr_min_pts and dist_to_tp_short <= attr_max_pts
+attr_long  = attr_enabled and zone_body_clean and not japan_bull and in_sess and bull_sig and dist_to_tp_long  >= attr_min_pts and dist_to_tp_long  <= attr_max_pts
 
 // ─── REVERSAL CONDITIONS (broken zone only) ───────────────────────────────────
-rev_tol   = rev_zone_pts / 10000.0
-rev_tap   = rev_tap_pts  / 10000.0
-rev_short = rev_enabled and not zone_pristine and japan_bull and in_sess and bear_sig and math.abs(close - zone_top) <= rev_tol and high[1] > zone_top + rev_tap
-rev_long  = rev_enabled and not zone_pristine and not japan_bull and in_sess and bull_sig and math.abs(close - zone_bottom) <= rev_tol and low[1] < zone_bottom - rev_tap
+// Broken zone acts as temporary support/resistance. No distance requirement.
+// Direction is signal-driven. Zone levels are the SL reference, not a distance gate.
+rev_short = rev_enabled and not zone_pristine and in_sess and bear_sig
+rev_long  = rev_enabled and not zone_pristine and in_sess and bull_sig
 
 // ─── PLOTS ───────────────────────────────────────────────────────────────────
 zone_edge_col = zone_pristine ? color.new(color.orange, 20) : color.new(color.gray, 40)
@@ -125,20 +156,26 @@ bgcolor(show_session and in_sess ? color.new(color.blue, 93) : na, title="London
 lbl_pad = math.max(cndl_range, nz(zone_top, close) * 0.0003)
 
 if attr_long
-    label.new(bar_index, low - lbl_pad, "▲  ATTRACTION LONG\n" + bull_sig_name + "  |  " + str.tostring(math.round(dist_below)) + " pts from zone\nTarget: " + str.tostring(zone_bottom, "#.###") + " (zone bottom)", color=color.new(color.green, 5), textcolor=color.white, style=label.style_label_up, size=size.normal)
+    float attr_long_tp  = zone_top
+    float attr_long_rr  = attr_long_tp - close
+    float attr_long_sl  = close - attr_long_rr
+    label.new(bar_index, low - lbl_pad, "▲  ATTRACTION LONG\n" + bull_sig_name + "  |  " + str.tostring(math.round(dist_to_tp_long)) + " pts to TP\nTP: " + str.tostring(attr_long_tp, "#.###") + " (zone top — far side)\nSL: " + str.tostring(attr_long_sl, "#.###") + " (1:1)", color=color.new(color.green, 5), textcolor=color.white, style=label.style_label_up, size=size.normal)
 
 if attr_short
-    label.new(bar_index, high + lbl_pad, "▼  ATTRACTION SHORT\n" + bear_sig_name + "  |  " + str.tostring(math.round(dist_above)) + " pts from zone\nTarget: " + str.tostring(zone_top, "#.###") + " (zone top)", color=color.new(color.red, 5), textcolor=color.white, style=label.style_label_down, size=size.normal)
+    float attr_short_tp = zone_bottom
+    float attr_short_rr = close - attr_short_tp
+    float attr_short_sl = close + attr_short_rr
+    label.new(bar_index, high + lbl_pad, "▼  ATTRACTION SHORT\n" + bear_sig_name + "  |  " + str.tostring(math.round(dist_to_tp_short)) + " pts to TP\nTP: " + str.tostring(attr_short_tp, "#.###") + " (zone bottom — far side)\nSL: " + str.tostring(attr_short_sl, "#.###") + " (1:1)", color=color.new(color.red, 5), textcolor=color.white, style=label.style_label_down, size=size.normal)
 
 if rev_long
-    label.new(bar_index, low - lbl_pad, "▲  REVERSAL LONG\n" + bull_sig_name + "  |  Zone broken — support\nZone Bottom: " + str.tostring(zone_bottom, "#.###"), color=color.new(color.teal, 5), textcolor=color.white, style=label.style_label_up, size=size.normal)
+    label.new(bar_index, low - lbl_pad, "▲  REVERSAL LONG\n" + bull_sig_name + "  |  Zone broken — acts as support\nZone: " + str.tostring(zone_bottom, "#.###") + " – " + str.tostring(zone_top, "#.###") + "\nSL: swing low  |  TP: 1:1 minimum 150 pts", color=color.new(color.teal, 5), textcolor=color.white, style=label.style_label_up, size=size.normal)
 
 if rev_short
-    label.new(bar_index, high + lbl_pad, "▼  REVERSAL SHORT\n" + bear_sig_name + "  |  Zone broken — resistance\nZone Top: " + str.tostring(zone_top, "#.###"), color=color.new(color.purple, 5), textcolor=color.white, style=label.style_label_down, size=size.normal)
+    label.new(bar_index, high + lbl_pad, "▼  REVERSAL SHORT\n" + bear_sig_name + "  |  Zone broken — acts as resistance\nZone: " + str.tostring(zone_bottom, "#.###") + " – " + str.tostring(zone_top, "#.###") + "\nSL: swing high  |  TP: 1:1 minimum 150 pts", color=color.new(color.purple, 5), textcolor=color.white, style=label.style_label_down, size=size.normal)
 
 // ─── ALERTS ──────────────────────────────────────────────────────────────────
-alertcondition(attr_long,  title="DXY Attraction LONG",       message="DXY ATTRACTION LONG\nZone PRISTINE — Japan bearish, no close above zone_top.\nPrice 150+ pts below zone — attraction LONG back to zone.\nGo LONG: USDCHF, USDCAD, USDJPY | Go SHORT: EURUSD, GBPUSD, NZDUSD, AUDUSD\nZone bottom: {{plot_0}} | Price: {{close}} | {{time}}")
-alertcondition(attr_short, title="DXY Attraction SHORT",      message="DXY ATTRACTION SHORT\nZone PRISTINE — Japan bullish, no close below zone_bottom.\nPrice 150+ pts above zone — attraction SHORT back to zone.\nGo SHORT: USDCHF, USDCAD, USDJPY | Go LONG: EURUSD, GBPUSD, NZDUSD, AUDUSD\nZone top: {{plot_0}} | Price: {{close}} | {{time}}")
+alertcondition(attr_long,  title="DXY Attraction LONG",       message="DXY ATTRACTION LONG\nZone PRISTINE — Japan bearish. Price 150+ DXY pts below zone.\nTP: zone_top (far side) | SL: 1:1\nGo LONG: USDCHF, USDCAD, USDJPY | Go SHORT: EURUSD, GBPUSD, NZDUSD, AUDUSD\nZone top (TP): {{plot_0}} | Price: {{close}} | {{time}}")
+alertcondition(attr_short, title="DXY Attraction SHORT",      message="DXY ATTRACTION SHORT\nZone PRISTINE — Japan bullish. Price 150+ DXY pts above zone.\nTP: zone_bottom (far side) | SL: 1:1\nGo SHORT: USDCHF, USDCAD, USDJPY | Go LONG: EURUSD, GBPUSD, NZDUSD, AUDUSD\nZone bottom (TP): {{plot_1}} | Price: {{close}} | {{time}}")
 alertcondition(rev_long,   title="DXY Reversal LONG",         message="DXY REVERSAL LONG\nZone BROKEN — zone bottom now acting as support.\nGo LONG: USDCHF, USDCAD, USDJPY | Go SHORT: EURUSD, GBPUSD, NZDUSD, AUDUSD\nZone bottom: {{plot_1}} | Price: {{close}} | {{time}}")
 alertcondition(rev_short,  title="DXY Reversal SHORT",        message="DXY REVERSAL SHORT\nZone BROKEN — zone top now acting as resistance.\nGo SHORT: USDCHF, USDCAD, USDJPY | Go LONG: EURUSD, GBPUSD, NZDUSD, AUDUSD\nZone top: {{plot_0}} | Price: {{close}} | {{time}}")
 alertcondition(attr_long or attr_short or rev_long or rev_short, title="DXY Trade Alert - Any Setup", message="DXY TRADE ALERT — Setup detected. Check zone status and direction.\nPrice: {{close}} | {{time}}")
