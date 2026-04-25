@@ -240,27 +240,57 @@
   },
 
   "backtesting_results": {
-    "dataset": "Last 50 winning trades, May–Dec 2024, DXY 15m",
-    "zone_data": "15-minute OHLCV bars collected via TradingView replay, chunked May–Dec 2024",
-    "total_trades_analysed": 50,
-    "match_breakdown": {
-      "REVERSAL": 22,
-      "MANUAL_CHECK": 16,
-      "TOO_CLOSE_TO_ZONE": 6,
-      "ATTRACTION": 4,
-      "BODY_IN_ZONE_NO_ATTR": 2
+    "historical_test": {
+      "label": "Historical Backtest — May–Dec 2024",
+      "dataset": "Last 50 winning trades, DXY 15m",
+      "zone_data": "15-minute OHLCV bars collected via TradingView replay, chunked May–Dec 2024",
+      "total_trades_analysed": 50,
+      "match_breakdown": {
+        "REVERSAL": 22,
+        "MANUAL_CHECK": 16,
+        "TOO_CLOSE_TO_ZONE": 6,
+        "ATTRACTION": 4,
+        "BODY_IN_ZONE_NO_ATTR": 2
+      },
+      "matched_trades": 26,
+      "match_rate_with_zone_data": "76% (26 of 34 trades where zone data was available)",
+      "manual_check_note": "16 trades have missing 23:45 bar data. Require manual chart review — sideways London open = no trade.",
+      "performance_at_1000_risk_per_trade": {
+        "total_pnl_usd": 24514,
+        "avg_pnl_per_trade_usd": 943,
+        "avg_pip_gain_pts": 1541,
+        "avg_r_multiple": 0.94,
+        "attraction_avg_r": 0.82,
+        "reversal_avg_r": 0.97,
+        "win_rate_note": "100% — dataset is confirmed winners only. Real-world win rate will be lower."
+      }
     },
-    "matched_trades": 26,
-    "match_rate_with_zone_data": "76% (26 of 34 trades where zone data was available)",
-    "manual_check_note": "16 trades have missing 23:45 bar data from replay collection. These require manual chart review — if price is sideways early in London with no impulsive move, classify as no-trade day.",
-    "performance_at_1000_risk_per_trade": {
-      "total_pnl_usd": 24514,
-      "avg_pnl_per_trade_usd": 943,
-      "avg_pip_gain_pts": 1541,
-      "avg_r_multiple": 0.94,
-      "attraction_avg_r": 0.82,
-      "reversal_avg_r": 0.97,
-      "win_rate_note": "100% — dataset is confirmed winners only. Real-world win rate will be lower."
+    "forward_test": {
+      "label": "Forward Test — Feb 1 – Mar 31, 2026",
+      "dataset": "All raw signals, DXY 15m (TVC:DXY), TradingView",
+      "method": "Pine Script indicator simulation — process_orders_on_close semantics",
+      "script_file": "DXYZoneStrategy.pine",
+      "market_context": "DXY in strong downtrend (~108 Jan → ~98 Apr 2026)",
+      "total_trades": 17,
+      "trade_type_breakdown": {
+        "REV_SHORT": 9,
+        "REV_LONG": 5,
+        "ATTR_LONG": 2,
+        "ATTR_SHORT": 1
+      },
+      "wins": 3,
+      "losses": 14,
+      "win_rate_pct": 17.6,
+      "avg_duration_min": 221,
+      "win_pips_dxy": 606,
+      "loss_pips_dxy": 2478,
+      "net_pips_dxy": -1872,
+      "total_r": -11,
+      "performance_at_1000_risk_per_trade": {
+        "total_pnl_usd": -11000,
+        "pct_return_on_100k": -11.0,
+        "note": "All raw unfiltered signals. Trending market challenged zone reversal strategy."
+      }
     }
   },
 

@@ -1,0 +1,210 @@
+//@version=6
+// ─────────────────────────────────────────────────────────────────────────────
+// DXY Zone Strategy — Backtest Version
+// Converts DXYTradeAlert indicator logic into a Pine Script strategy so that
+// TradingView's Strategy Tester automatically tracks all trades, win rate,
+// duration, and P&L over the selected date range.
+//
+// POSITION SIZING NOTE:
+//   This strategy uses qty=1 (1 DXY unit). All trades are 1:1 RR so:
+//     Win  = +TP_distance DXY units
+//     Loss = -SL_distance DXY units
+//   To convert to $1,000 risk per trade: every win = +$1,000, every loss = -$1,000
+//   (because SL distance = TP distance by design).
+//   Total $ P&L = (Wins − Losses) × $1,000
+// ─────────────────────────────────────────────────────────────────────────────
+strategy("DXY Zone Strategy",
+    shorttitle       = "DXY Zone",
+    overlay          = true,
+    initial_capital  = 100000,
+    default_qty_type = strategy.fixed,
+    default_qty_value= 1,
+    process_orders_on_close = true,
+    calc_on_every_tick      = false,
+    max_labels_count        = 500,
+    commission_type  = strategy.commission.percent,
+    commission_value = 0)
+
+// ─── BACKTEST PERIOD ─────────────────────────────────────────────────────────
+grp_bt     = "Backtest Period"
+start_date = input.time(timestamp("01 Feb 2026 00:00 +0000"), "Start Date", group=grp_bt)
+end_date   = input.time(timestamp("31 Mar 2026 23:59 +0000"), "End Date",   group=grp_bt)
+in_window  = time >= start_date and time <= end_date
+
+// ─── INPUTS ──────────────────────────────────────────────────────────────────
+grp_zone = "Signal Zones"
+grp_sess = "Session Window (GMT)"
+grp_sig  = "Entry Signals"
+grp_disp = "Display"
+
+attr_enabled  = input.bool(true,  "Enable Attraction Trades",            group=grp_zone)
+attr_min_pts  = input.int(1500,   "Attraction — Min Distance (pts)",     group=grp_zone, minval=10,  step=10,  tooltip="150 DXY points = 1500 pts")
+attr_max_pts  = input.int(5000,   "Attraction — Max Distance (pts)",     group=grp_zone, minval=500, step=100, tooltip="500 DXY points = 5000 pts")
+zone_min_gap  = input.int(30,     "Zone — Min Gap to use open gap (pts)",group=grp_zone, minval=5,   step=5)
+rev_enabled   = input.bool(true,  "Enable Reversal Trades",              group=grp_zone)
+
+entry_start_h = input.int(6,  "Entry Start Hour (GMT)",  group=grp_sess)
+entry_start_m = input.int(45, "Entry Start Min  (GMT)",  group=grp_sess)
+entry_end_h   = input.int(19, "Entry End Hour   (GMT)",  group=grp_sess)
+entry_end_m   = input.int(30, "Entry End Min    (GMT)",  group=grp_sess)
+monday_start  = input.int(6,  "Monday Start Hour (GMT)", group=grp_sess)
+japan_end_h   = input.int(6,  "Japan End Hour    (GMT)", group=grp_sess, minval=1, maxval=8)
+
+use_engulf    = input.bool(true, "Engulfing Candle",       group=grp_sig)
+use_pin       = input.bool(true, "Pin Bar",                group=grp_sig)
+use_3bar      = input.bool(true, "3-Bar Reversal",         group=grp_sig)
+pin_wick_mult = input.float(2.0, "Pin Bar — Min Wick:Body",group=grp_sig, minval=1.0, step=0.25)
+
+show_zone     = input.bool(true, "Show Zone Box",          group=grp_disp)
+show_session  = input.bool(true, "Show Session Background",group=grp_disp)
+
+// ─── SESSION TIMING ──────────────────────────────────────────────────────────
+h         = hour(time, "UTC")
+m         = minute(time, "UTC")
+is_mon    = dayofweek(time, "UTC") == dayofweek.monday
+start_min = (is_mon ? monday_start : entry_start_h) * 60 + entry_start_m
+curr_min  = h * 60 + m
+end_min   = entry_end_h * 60 + entry_end_m
+in_sess   = curr_min >= start_min and curr_min <= end_min
+in_japan  = (h == 23 and m >= 45) or (h >= 0 and h < japan_end_h)
+is_2345   = h == 23 and m == 45
+
+// ─── DXY OPEN ZONE ───────────────────────────────────────────────────────────
+// Same logic as DXYTradeAlert indicator.
+// zone_body_clean  → attraction condition (no close inside zone after candle 3)
+// zone_pristine    → reversal condition (no close beyond far edge)
+// zone_traded      → prevents multiple entries per zone per day
+
+var float zone_top           = na
+var float zone_bottom        = na
+var bool  zone_pristine      = false
+var bool  zone_body_clean    = false
+var bool  japan_bull         = false
+var int   japan_candle_count = 0
+var bool  zone_traded        = false
+
+if is_2345
+    bool  prior_is_line      = math.abs(close[1] - open[1]) * 10000 < 10
+    float prior_candle_close = prior_is_line ? close[2] : close[1]
+    float japan_open         = open
+    float gap_size           = math.abs(prior_candle_close - japan_open) * 10000
+    if gap_size >= zone_min_gap
+        zone_top    := math.max(prior_candle_close, japan_open)
+        zone_bottom := math.min(prior_candle_close, japan_open)
+        japan_bull  := japan_open > prior_candle_close
+    else
+        zone_top    := math.max(japan_open, close)
+        zone_bottom := math.min(japan_open, close)
+        japan_bull  := close > japan_open
+    zone_pristine      := true
+    zone_body_clean    := true
+    japan_candle_count := 0
+    zone_traded        := false   // reset: one trade allowed per new zone
+
+if in_japan and not na(zone_top) and not is_2345
+    japan_candle_count := japan_candle_count + 1
+    if zone_body_clean and japan_candle_count > 3
+        if close >= zone_bottom and close <= zone_top
+            zone_body_clean := false
+    if zone_pristine
+        if japan_bull
+            if close < zone_bottom
+                zone_pristine := false
+        else
+            if close > zone_top
+                zone_pristine := false
+
+// ─── CANDLE MEASUREMENTS ─────────────────────────────────────────────────────
+body_sz    = math.abs(close - open)
+upper_wick = high - math.max(open, close)
+lower_wick = math.min(open, close) - low
+cndl_range = high - low
+is_bull    = close > open
+is_bear    = close < open
+
+// ─── ENTRY SIGNALS ───────────────────────────────────────────────────────────
+bull_engulf = use_engulf and is_bull and not is_bull[1] and close > open[1] and open < close[1] and body_sz >= body_sz[1] * 0.8
+bear_engulf = use_engulf and is_bear and not is_bear[1] and close < open[1] and open > close[1] and body_sz >= body_sz[1] * 0.8
+bull_pin    = use_pin and lower_wick >= body_sz * pin_wick_mult and upper_wick <= body_sz * 1.5 and cndl_range > 0
+bear_pin    = use_pin and upper_wick >= body_sz * pin_wick_mult and lower_wick <= body_sz * 1.5 and cndl_range > 0
+bar2_range  = math.abs(close[2] - open[2])
+indecision  = body_sz[1] <= bar2_range * 0.5
+bull_3bar   = use_3bar and close[2] < open[2] and indecision and is_bull and close > open[2]
+bear_3bar   = use_3bar and close[2] > open[2] and indecision and is_bear and close < open[2]
+bull_sig    = bull_engulf or bull_pin or bull_3bar
+bear_sig    = bear_engulf or bear_pin or bear_3bar
+
+// ─── DISTANCES (far-side = TP target) ────────────────────────────────────────
+dist_to_tp_long  = (zone_top    - close) * 10000   // long: TP = zone_top
+dist_to_tp_short = (close - zone_bottom) * 10000   // short: TP = zone_bottom
+
+// ─── TRADE CONDITIONS ─────────────────────────────────────────────────────────
+attr_long  = attr_enabled and zone_body_clean and not japan_bull and in_sess and bull_sig
+             and dist_to_tp_long  >= attr_min_pts and dist_to_tp_long  <= attr_max_pts
+
+attr_short = attr_enabled and zone_body_clean and japan_bull and in_sess and bear_sig
+             and dist_to_tp_short >= attr_min_pts and dist_to_tp_short <= attr_max_pts
+
+rev_long   = rev_enabled and not zone_pristine and in_sess and bull_sig
+rev_short  = rev_enabled and not zone_pristine and in_sess and bear_sig
+
+// ─── STRATEGY ENTRIES ─────────────────────────────────────────────────────────
+// Only enter if:
+//   1. Within the backtest date window
+//   2. No open position
+//   3. Zone has not been traded yet today
+//
+// TP / SL rules (all trades are 1:1 RR):
+//   Attraction Long  : TP = zone_top,    SL = entry − (zone_top − entry)
+//   Attraction Short : TP = zone_bottom, SL = entry + (entry − zone_bottom)
+//   Reversal Long    : SL = zone_bottom (zone as support), TP = 1:1
+//   Reversal Short   : SL = zone_top    (zone as resistance), TP = 1:1
+//   Reversal SL minimum enforced at 150 pts (1500 indicator units = 0.1500 DXY)
+
+can_enter = in_window and strategy.position_size == 0 and not zone_traded
+
+if can_enter and attr_long
+    float tp      = zone_top
+    float sl_dist = zone_top - close
+    float sl      = close - sl_dist
+    strategy.entry("Attr Long", strategy.long)
+    strategy.exit("AL Exit", "Attr Long", limit=tp, stop=sl)
+    label.new(bar_index, low - cndl_range, "▲ ATTR LONG", color=color.new(color.green, 10), textcolor=color.white, style=label.style_label_up, size=size.small)
+    zone_traded := true
+
+else if can_enter and attr_short
+    float tp      = zone_bottom
+    float sl_dist = close - zone_bottom
+    float sl      = close + sl_dist
+    strategy.entry("Attr Short", strategy.short)
+    strategy.exit("AS Exit", "Attr Short", limit=tp, stop=sl)
+    label.new(bar_index, high + cndl_range, "▼ ATTR SHORT", color=color.new(color.red, 10), textcolor=color.white, style=label.style_label_down, size=size.small)
+    zone_traded := true
+
+else if can_enter and rev_long
+    float min_dist = 1500 / 10000.0
+    float sl_dist  = math.max(close - zone_bottom, min_dist)
+    float tp       = close + sl_dist
+    float sl       = close - sl_dist
+    strategy.entry("Rev Long", strategy.long)
+    strategy.exit("RL Exit", "Rev Long", limit=tp, stop=sl)
+    label.new(bar_index, low - cndl_range, "▲ REV LONG", color=color.new(color.teal, 10), textcolor=color.white, style=label.style_label_up, size=size.small)
+    zone_traded := true
+
+else if can_enter and rev_short
+    float min_dist = 1500 / 10000.0
+    float sl_dist  = math.max(zone_top - close, min_dist)
+    float tp       = close - sl_dist
+    float sl       = close + sl_dist
+    strategy.entry("Rev Short", strategy.short)
+    strategy.exit("RS Exit", "Rev Short", limit=tp, stop=sl)
+    label.new(bar_index, high + cndl_range, "▼ REV SHORT", color=color.new(color.purple, 10), textcolor=color.white, style=label.style_label_down, size=size.small)
+    zone_traded := true
+
+// ─── VISUALS ─────────────────────────────────────────────────────────────────
+zone_edge_col = zone_pristine ? color.new(color.orange, 20) : color.new(color.gray, 40)
+zone_fill_col = zone_pristine ? color.new(color.orange, 80) : color.new(color.gray, 85)
+p_top = plot(show_zone and not na(zone_top)    ? zone_top    : na, "Zone Top",    color=zone_edge_col, linewidth=2)
+p_bot = plot(show_zone and not na(zone_bottom) ? zone_bottom : na, "Zone Bottom", color=zone_edge_col, linewidth=2)
+fill(p_top, p_bot, color=zone_fill_col, title="Zone Fill")
+bgcolor(show_session and in_sess ? color.new(color.blue, 93) : na, title="Session")
