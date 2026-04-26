@@ -42,6 +42,7 @@ attr_min_pts  = input.int(1500,   "Attraction — Min Distance (pts)",     group
 attr_max_pts  = input.int(5000,   "Attraction — Max Distance (pts)",     group=grp_zone, minval=500, step=100, tooltip="500 DXY points = 5000 pts")
 zone_min_gap  = input.int(30,     "Zone — Min Gap to use open gap (pts)",group=grp_zone, minval=5,   step=5)
 rev_enabled   = input.bool(true,  "Enable Reversal Trades",              group=grp_zone)
+imp_min_pts   = input.int(450,    "Reversal — Min Impulse Body (pts)",   group=grp_zone, minval=50, step=50, tooltip="Minimum body size for an impulsive bounce candle. 450 pts = 45 DXY points = 0.045 DXY price move.")
 
 entry_start_h = input.int(6,  "Entry Start Hour (GMT)",  group=grp_sess)
 entry_start_m = input.int(45, "Entry Start Min  (GMT)",  group=grp_sess)
@@ -54,6 +55,7 @@ use_engulf    = input.bool(true, "Engulfing Candle",       group=grp_sig)
 use_pin       = input.bool(true, "Pin Bar",                group=grp_sig)
 use_3bar      = input.bool(true, "3-Bar Reversal",         group=grp_sig)
 pin_wick_mult = input.float(2.0, "Pin Bar — Min Wick:Body",group=grp_sig, minval=1.0, step=0.25)
+algopro_src   = input.source(close, "AlgoPro Market Matrix — Divergence Signal", group=grp_sig, tooltip="Connect to the AlgoPro Market Matrix divergence output. Values > 0 = bullish divergence, < 0 = bearish divergence. Required for reversal signals.")
 
 show_zone     = input.bool(true, "Show Zone Box",          group=grp_disp)
 show_session  = input.bool(true, "Show Session Background",group=grp_disp)
@@ -82,6 +84,8 @@ var bool  zone_body_clean    = false
 var bool  japan_bull         = false
 var int   japan_candle_count = 0
 var bool  zone_traded        = false
+var int   last_imp_bull      = -100
+var int   last_imp_bear      = -100
 
 if is_2345
     bool  prior_is_line      = math.abs(close[1] - open[1]) * 10000 < 10
@@ -100,6 +104,8 @@ if is_2345
     zone_body_clean    := true
     japan_candle_count := 0
     zone_traded        := false   // reset: one trade allowed per new zone
+    last_imp_bull      := -100
+    last_imp_bear      := -100
 
 if in_japan and not na(zone_top) and not is_2345
     japan_candle_count := japan_candle_count + 1
@@ -121,6 +127,34 @@ lower_wick = math.min(open, close) - low
 cndl_range = high - low
 is_bull    = close > open
 is_bear    = close < open
+
+// ─── IMPULSIVE MOVE DETECTION (reversal filter) ───────────────────────────────
+// Body >= 2x nearest previous non-doji body AND >= imp_min_pts.
+// Doji threshold: body < 5 pts (0.0005 DXY). Flag persists 5 bars for entry signal to follow.
+// MTFTI 1H+4H bias alignment is a required manual check before acting on any reversal signal.
+float imp_min_body   = imp_min_pts / 10000.0
+float doji_threshold = 0.0005
+
+float prev_nondoji_body = na
+for i = 1 to 5
+    float pb = math.abs(close[i] - open[i])
+    if pb >= doji_threshold
+        prev_nondoji_body := pb
+        break
+
+is_imp_bull = not na(prev_nondoji_body) and is_bull and body_sz >= prev_nondoji_body * 2.0 and body_sz >= imp_min_body
+is_imp_bear = not na(prev_nondoji_body) and is_bear and body_sz >= prev_nondoji_body * 2.0 and body_sz >= imp_min_body
+
+if is_imp_bull and not zone_pristine and in_sess
+    last_imp_bull := bar_index
+if is_imp_bear and not zone_pristine and in_sess
+    last_imp_bear := bar_index
+
+imp_bull_active = bar_index - last_imp_bull <= 5
+imp_bear_active = bar_index - last_imp_bear <= 5
+
+algopro_bull_div = algopro_src > 0
+algopro_bear_div = algopro_src < 0
 
 // ─── ENTRY SIGNALS ───────────────────────────────────────────────────────────
 bull_engulf = use_engulf and is_bull and not is_bull[1] and close > open[1] and open < close[1] and body_sz >= body_sz[1] * 0.8
@@ -145,8 +179,8 @@ attr_long  = attr_enabled and zone_body_clean and not japan_bull and in_sess and
 attr_short = attr_enabled and zone_body_clean and japan_bull and in_sess and bear_sig
              and dist_to_tp_short >= attr_min_pts and dist_to_tp_short <= attr_max_pts
 
-rev_long   = rev_enabled and not zone_pristine and in_sess and bull_sig
-rev_short  = rev_enabled and not zone_pristine and in_sess and bear_sig
+rev_long   = rev_enabled and not zone_pristine and in_sess and imp_bull_active and algopro_bull_div and bull_sig
+rev_short  = rev_enabled and not zone_pristine and in_sess and imp_bear_active and algopro_bear_div and bear_sig
 
 // ─── STRATEGY ENTRIES ─────────────────────────────────────────────────────────
 // Only enter if:
