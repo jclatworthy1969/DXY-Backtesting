@@ -70,21 +70,42 @@
     },
 
     "reversal": {
-      "description": "Momentum-continuation trade off a broken zone. The Open Zone has been broken (pristine lost), turning the zone into a temporary support or resistance level. Any valid entry signal in the London session qualifies — no proximity or distance requirement from the zone.",
+      "description": "Momentum-continuation trade off a broken zone. The Open Zone has been broken (pristine lost), turning the zone into a temporary support or resistance level. Three confirmations are required before the entry signal: an impulsive bounce candle, AlgoPro Market Matrix divergence, and an entry candle pattern.",
       "required_zone_state": "BROKEN — zone pristine status has been lost (a Japan session candle closed beyond the far edge of the zone).",
-      "htf_bias_requirement": "RECOMMENDED. Reversal trades are strongest when the 1H and 4H MTFTI bias aligns with the trade direction. Review bias before entry but it is not a hard filter in the indicator.",
+      "htf_bias_requirement": "REQUIRED (manual check — cannot be automated). Confirm MTFTI 1H AND 4H bias both align with the trade direction before acting on any reversal alert. MTFTI outputs a table only (no plottable series), so this check cannot be enforced in the indicator code. The indicator enforces two other hard conditions: (1) impulsive bounce candle, (2) AlgoPro Market Matrix divergence.",
+      "impulsive_bounce_filter": {
+        "description": "A candle whose body confirms a genuine bounce away from the broken zone. Must appear within 5 bars before the entry signal candle.",
+        "conditions": [
+          "Body size >= 2x the body of the nearest previous non-doji candle.",
+          "Body size >= 45 DXY points (450 indicator pts / 0.045 DXY price move).",
+          "Direction matches the trade direction (bullish body for reversal long, bearish body for reversal short).",
+          "Doji definition: body < 5 indicator pts (0.0005 DXY). Doji candles are skipped when finding the previous candle for the 2x comparison."
+        ],
+        "rationale": "Filters out low-conviction bounces and sideways chop around the zone. Only an impulsive move — one that clearly dwarfs the preceding candle — counts as confirmation that price is rejecting the zone level."
+      },
+      "algopro_divergence_filter": {
+        "description": "AlgoPro Market Matrix indicator must show divergence matching the trade direction.",
+        "conditions": [
+          "Bullish divergence (AlgoPro output > 0) required for REVERSAL LONG.",
+          "Bearish divergence (AlgoPro output < 0) required for REVERSAL SHORT."
+        ],
+        "setup": "Add AlgoPro Market Matrix to the chart, then connect its divergence output to the 'AlgoPro Market Matrix — Divergence Signal' source input on the DXY Trade Alert indicator."
+      },
       "setup_sequence": [
         "1. Zone pristine is broken during Japan session (candle closes on the opposing side of the zone).",
-        "2. During London session (06:45–19:30 GMT), a valid entry signal fires (Engulfing, Pin Bar, or 3-Bar Reversal).",
-        "3. The broken zone acts as the structural reference for Stop Loss placement (behind zone_top for longs, zone_bottom for shorts).",
-        "4. Minimum TP: 150 DXY points (1:1 with SL). Check HTF bias for potential runners."
+        "2. During London session (06:45–19:30 GMT), an impulsive bounce candle fires: body >= 2x nearest prior non-doji body AND >= 45 DXY points (0.045 DXY). Direction must match trade direction.",
+        "3. AlgoPro Market Matrix divergence confirms the same direction as the impulsive candle.",
+        "4. MANUAL CHECK: Confirm MTFTI 1H AND 4H bias both align with the trade direction (table-only indicator — cannot be automated).",
+        "5. Within 5 bars of the impulsive candle, one of the three entry signals fires: Engulfing, Pin Bar, or 3-Bar Reversal.",
+        "6. The broken zone acts as the structural reference for Stop Loss placement (behind zone_top for longs, zone_bottom for shorts).",
+        "7. Minimum TP: 150 DXY points (1:1 with SL)."
       ],
       "direction_logic": {
-        "long_setup": "Zone broken. Bullish entry signal fires during London session. Zone acts as support reference. SL: recent swing low.",
-        "short_setup": "Zone broken. Bearish entry signal fires during London session. Zone acts as resistance reference. SL: recent swing high."
+        "long_setup": "Zone broken. Bullish impulsive candle + AlgoPro bullish divergence (indicator). Manual check: MTFTI 1H and 4H bullish. Then bullish entry signal. Zone acts as support reference. SL: recent swing low.",
+        "short_setup": "Zone broken. Bearish impulsive candle + AlgoPro bearish divergence (indicator). Manual check: MTFTI 1H and 4H bearish. Then bearish entry signal. Zone acts as resistance reference. SL: recent swing high."
       },
       "no_distance_requirement": "There is NO minimum or maximum distance requirement from the zone for reversal trades. The broken zone is simply a structural reference, not a distance gate.",
-      "note_on_sideways": "If price action is sideways around the zone with no impulsive move early in the London session, classify as MANUAL_CHECK — not a trade signal."
+      "note_on_sideways": "If price action is sideways around the zone with no impulsive move early in the London session, the indicator will not fire — the impulsive bounce filter will suppress the signal."
     }
   },
 
@@ -154,7 +175,9 @@
     "Price ranging tightly around the DXY Open Zone with no clear directional expansion.",
     "Zone has been bridged repeatedly during Japan session — no clear bias.",
     "Strong directional momentum during Japan session that may negate an attraction trade.",
-    "Conflicting 1H and 4H MTFTI bias (for reversal trades).",
+    "No impulsive bounce candle preceding the entry signal (reversal trades only).",
+    "AlgoPro Market Matrix divergence does not match trade direction (reversal trades only).",
+    "MTFTI 1H or 4H bias conflicts with trade direction — manual check required before acting on any reversal alert (reversal trades only).",
     "High-impact news imminent during the trade window.",
     "Less than 150 pts between entry and target (insufficient room for 1:1 RR).",
     "No valid entry signal (engulfing, pin bar, or 3-bar reversal) — no signal, no trade."
@@ -169,7 +192,7 @@
     "PRE-LONDON: Assess Japan session momentum. Check MTFTI 1H and 4H bias.",
     "LONDON SESSION: Wait for price to expand away from zone (min 150 pts). Identify trade type (Attraction or Reversal).",
     "ATTRACTION (pristine zone): Confirm 150–500 pt distance. Look for entry signal. No HTF bias required.",
-    "REVERSAL (broken zone): Confirm price has returned to zone edge with bounce. Confirm 1H AND 4H MTFTI bias aligns. Look for entry signal.",
+    "REVERSAL (broken zone): Wait for impulsive bounce candle (>= 45 DXY pts, body >= 2x prior non-doji). Confirm AlgoPro Market Matrix divergence matches direction (automated). Manually check MTFTI table — 1H AND 4H bias must match direction. Then look for entry signal within 5 bars.",
     "PRE-ENTRY: Check news calendar. Confirm SL placement at recent swing high/low (min 150 pts). Confirm 1:1 RR is achievable.",
     "ENTRY: Place trade with defined SL and TP. Risk ≤ 1% account.",
     "MANAGEMENT: At target, take partial profits (½ to ⅔). Reevaluate runner based on HTF context. If DXY zone is hit, manually exit all correlated FX pair trades."
@@ -201,8 +224,8 @@
   "alerts": {
     "attraction_long":  "Zone PRISTINE, Japan bearish, price 150–500 pts below zone_bottom, bullish entry signal in session. Go LONG USD pairs.",
     "attraction_short": "Zone PRISTINE, Japan bullish, price 150–500 pts above zone_top, bearish entry signal in session. Go SHORT USD pairs.",
-    "reversal_long":    "Zone BROKEN, price at zone_bottom with prior bar bounce, bullish entry signal, 1H+4H bias bullish. Go LONG USD pairs.",
-    "reversal_short":   "Zone BROKEN, price at zone_top with prior bar bounce, bearish entry signal, 1H+4H bias bearish. Go SHORT USD pairs.",
+    "reversal_long":    "Zone BROKEN, impulsive bullish bounce (>= 45 DXY pts, >= 2x prev body), AlgoPro bullish divergence — then manually confirm MTFTI 1H+4H bullish before acting. Bullish entry signal. Go LONG USD pairs.",
+    "reversal_short":   "Zone BROKEN, impulsive bearish bounce (>= 45 DXY pts, >= 2x prev body), AlgoPro bearish divergence — then manually confirm MTFTI 1H+4H bearish before acting. Bearish entry signal. Go SHORT USD pairs.",
     "any_setup":        "Catch-all alert for any of the four conditions. Check chart for zone status and direction."
   },
 
@@ -224,6 +247,7 @@
     "zone_min_gap": 30,
     "rev_zone_pts": 200,
     "rev_tap_pts": 75,
+    "imp_min_pts": 450,
     "entry_start_h": 6,
     "entry_start_m": 45,
     "entry_end_h": 19,
