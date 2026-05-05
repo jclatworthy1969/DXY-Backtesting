@@ -9,18 +9,19 @@ grp_disp = "Display"
 
 attr_enabled  = input.bool(true,  "Enable Attraction Trade Alerts",            group=grp_zone)
 attr_min_pts  = input.int(1500,   "Attraction — Min Distance from Zone (pts)", group=grp_zone, minval=10, step=10, tooltip="1500 pts = 150 DXY points = 0.150 price move. Minimum gap from zone edge to entry.")
-zone_min_gap  = input.int(30,    "Zone — Min Gap to use open gap (pts)",      group=grp_zone, minval=5, step=5, tooltip="If gap between prior close and 23:45 open is smaller than this, the 23:45 candle body is used as the zone instead.")
+zone_min_gap  = input.int(30,     "Zone — Min Gap to use open gap (pts)",      group=grp_zone, minval=5, step=5, tooltip="If gap between prior close and 23:45 open is smaller than this, the 23:45 candle body is used as the zone instead.")
 attr_max_pts  = input.int(5000,   "Attraction — Max Distance from Zone (pts)", group=grp_zone, minval=500, step=100, tooltip="Upper bound. Beyond this, momentum may be too strong.")
 rev_enabled   = input.bool(true,  "Enable Reversal Trade Alerts",              group=grp_zone)
-rev_zone_pts  = input.int(200,    "Reversal — Tolerance at Zone Edge (pts)",   group=grp_zone, minval=25, step=25, tooltip="Pts from zone edge that counts as at the level for a reversal.")
-rev_tap_pts   = input.int(75,     "Reversal — Min Tap Beyond Zone Edge (pts)", group=grp_zone, minval=10, step=25, tooltip="Prior bar must pierce at least this many pts past the zone edge.")
+rev_min_pts   = input.int(3000,   "Reversal — Min Bounce from Zone (pts)",     group=grp_zone, minval=500, step=500, tooltip="Minimum distance between entry and zone edge (= minimum structural SL). Backtesting shows: <3000 pts = 67% WR, 3000-5000 pts = 77% WR, 5000+ pts = 100% WR across 302 trades.")
 
-entry_start_h = input.int(6,  "Entry Start Hour (GMT)",         group=grp_sess, minval=0, maxval=23, tooltip="Entry window start — 06:45 GMT. Earliest validated entry in backtesting.")
-entry_start_m = input.int(45, "Entry Start Minute (GMT)",       group=grp_sess, minval=0, maxval=59)
-entry_end_h   = input.int(19, "Entry End Hour (GMT)",           group=grp_sess, minval=0, maxval=23, tooltip="Entry window ends at 19:30 GMT, covering London through NY afternoon.")
-entry_end_m   = input.int(30, "Entry End Minute (GMT)",         group=grp_sess, minval=0, maxval=59)
-monday_start  = input.int(6,  "Monday Start Hour (GMT)",        group=grp_sess, minval=0, maxval=23)
-japan_end_h  = input.int(6,  "Japan Session End Hour (GMT)",  group=grp_sess, minval=1, maxval=8)
+entry_start_h = input.int(6,  "Entry Start Hour (GMT)",              group=grp_sess, minval=0, maxval=23, tooltip="Entry window start — 06:45 GMT. Earliest validated entry in backtesting.")
+entry_start_m = input.int(45, "Entry Start Minute (GMT)",            group=grp_sess, minval=0, maxval=59)
+entry_end_h   = input.int(19, "Entry End Hour (GMT)",                group=grp_sess, minval=0, maxval=23, tooltip="Entry window ends at 19:30 GMT, covering London through NY afternoon.")
+entry_end_m   = input.int(30, "Entry End Minute (GMT)",              group=grp_sess, minval=0, maxval=59)
+rev_end_h     = input.int(12, "Reversal — Entry End Hour (GMT)",     group=grp_sess, minval=8, maxval=19, tooltip="Reversals fire only during the morning London session. Backtesting shows all winning reversals entered before 12:00 GMT. Attraction trades still run until entry_end_h.")
+rev_end_m     = input.int(0,  "Reversal — Entry End Min  (GMT)",     group=grp_sess, minval=0, maxval=59)
+monday_start  = input.int(6,  "Monday Start Hour (GMT)",             group=grp_sess, minval=0, maxval=23)
+japan_end_h   = input.int(6,  "Japan Session End Hour (GMT)",        group=grp_sess, minval=1, maxval=8)
 
 use_engulf    = input.bool(true,  "Engulfing Candle",        group=grp_sig)
 use_pin       = input.bool(true,  "Pin Bar",                 group=grp_sig)
@@ -38,7 +39,9 @@ is_mon   = dayofweek(time, "UTC") == dayofweek.monday
 start_min = (is_mon ? monday_start : entry_start_h) * 60 + entry_start_m
 curr_min  = h * 60 + m
 end_min   = entry_end_h * 60 + entry_end_m
-in_sess   = curr_min >= start_min and curr_min <= end_min
+in_sess     = curr_min >= start_min and curr_min <= end_min
+rev_end_min = rev_end_h * 60 + rev_end_m
+in_rev_sess = curr_min >= start_min and curr_min <= rev_end_min
 in_japan = (h == 23 and m >= 45) or (h >= 0 and h < japan_end_h)
 is_2345  = h == 23 and m == 45
 
@@ -121,11 +124,17 @@ bear_sig      = bear_engulf or bear_pin or bear_3bar
 bull_sig_name = bull_engulf ? "Engulfing" : bull_pin ? "Pin Bar" : bull_3bar ? "3-Bar Reversal" : "Signal"
 bear_sig_name = bear_engulf ? "Engulfing" : bear_pin ? "Pin Bar" : bear_3bar ? "3-Bar Reversal" : "Signal"
 
-// ─── DISTANCE FROM ZONE (measured to FAR side = TP target) ──────────────────
-// attr_short: entry above zone, TP = zone_bottom (far side)
-// attr_long:  entry below zone, TP = zone_top    (far side)
+// ─── DISTANCE FROM ZONE ──────────────────────────────────────────────────────
+// Attraction: measured to the FAR side (= TP target)
+//   attr_long:  entry below zone, TP = zone_top    (far side)
+//   attr_short: entry above zone, TP = zone_bottom (far side)
+// Reversal: measured to the NEAR side (= SL reference / zone edge)
+//   rev_long:   entry above zone_bottom, SL ref = zone_bottom
+//   rev_short:  entry below zone_top,    SL ref = zone_top
 dist_to_tp_short = (close - zone_bottom) * 10000
 dist_to_tp_long  = (zone_top - close)    * 10000
+dist_rev_long    = (close - zone_bottom) * 10000   // bounce above zone_bottom after bearish break
+dist_rev_short   = (zone_top - close)    * 10000   // bounce below zone_top after bullish break
 
 // ─── ATTRACTION CONDITIONS (zone must be BOTH body-clean AND pristine) ───────
 // zone_body_clean alone is not sufficient — if a Japan candle closes beyond the
@@ -135,11 +144,16 @@ dist_to_tp_long  = (zone_top - close)    * 10000
 attr_short = attr_enabled and zone_body_clean and zone_pristine and japan_bull     and in_sess and bear_sig and dist_to_tp_short >= attr_min_pts and dist_to_tp_short <= attr_max_pts
 attr_long  = attr_enabled and zone_body_clean and zone_pristine and not japan_bull and in_sess and bull_sig and dist_to_tp_long  >= attr_min_pts and dist_to_tp_long  <= attr_max_pts
 
-// ─── REVERSAL CONDITIONS (broken zone only) ───────────────────────────────────
-// Broken zone acts as temporary support/resistance. No distance requirement.
-// Direction is signal-driven. Zone levels are the SL reference, not a distance gate.
-rev_short = rev_enabled and not zone_pristine and in_sess and bear_sig
-rev_long  = rev_enabled and not zone_pristine and in_sess and bull_sig
+// ─── REVERSAL CONDITIONS (broken zone only) ──────────────────────────────────
+// Broken zone acts as temporary support/resistance. Price must have bounced a
+// meaningful distance from the zone edge before the signal fires (rev_min_pts).
+// This filters out premature entries right at the zone boundary where the level
+// hasn't yet proved it can hold. Backtesting (302 trades):
+//   < 3000 pts bounce → 67% WR   |   3000–5000 pts → 77% WR   |   5000+ pts → 100% WR
+// Reversal entries are also restricted to the morning London session (in_rev_sess)
+// — all winning reversals in the last 60-trade sample entered before 12:00 GMT.
+rev_short = rev_enabled and not zone_pristine and in_rev_sess and bear_sig and dist_rev_short >= rev_min_pts
+rev_long  = rev_enabled and not zone_pristine and in_rev_sess and bull_sig and dist_rev_long  >= rev_min_pts
 
 // ─── PLOTS ───────────────────────────────────────────────────────────────────
 zone_edge_col = zone_pristine ? color.new(color.orange, 20) : color.new(color.gray, 40)
