@@ -139,10 +139,13 @@ dist_to_tp_long  = (zone_top    - close) * 10000   // long: TP = zone_top
 dist_to_tp_short = (close - zone_bottom) * 10000   // short: TP = zone_bottom
 
 // ─── TRADE CONDITIONS ─────────────────────────────────────────────────────────
-attr_long  = attr_enabled and zone_body_clean and not japan_bull and in_sess and bull_sig
+// Attraction requires zone to be BOTH body-clean AND still pristine.
+// A close beyond the far edge breaks pristine but not body_clean — adding
+// zone_pristine here prevents attraction signals firing after a zone break.
+attr_long  = attr_enabled and zone_body_clean and zone_pristine and not japan_bull and in_sess and bull_sig
              and dist_to_tp_long  >= attr_min_pts and dist_to_tp_long  <= attr_max_pts
 
-attr_short = attr_enabled and zone_body_clean and japan_bull and in_sess and bear_sig
+attr_short = attr_enabled and zone_body_clean and zone_pristine and japan_bull and in_sess and bear_sig
              and dist_to_tp_short >= attr_min_pts and dist_to_tp_short <= attr_max_pts
 
 rev_long   = rev_enabled and not zone_pristine and in_sess and bull_sig

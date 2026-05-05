@@ -127,9 +127,13 @@ bear_sig_name = bear_engulf ? "Engulfing" : bear_pin ? "Pin Bar" : bear_3bar ? "
 dist_to_tp_short = (close - zone_bottom) * 10000
 dist_to_tp_long  = (zone_top - close)    * 10000
 
-// ─── ATTRACTION CONDITIONS (body-clean zone only) ─────────────────────────────
-attr_short = attr_enabled and zone_body_clean and japan_bull    and in_sess and bear_sig and dist_to_tp_short >= attr_min_pts and dist_to_tp_short <= attr_max_pts
-attr_long  = attr_enabled and zone_body_clean and not japan_bull and in_sess and bull_sig and dist_to_tp_long  >= attr_min_pts and dist_to_tp_long  <= attr_max_pts
+// ─── ATTRACTION CONDITIONS (zone must be BOTH body-clean AND pristine) ───────
+// zone_body_clean alone is not sufficient — if a Japan candle closes beyond the
+// far edge of the zone (breaking zone_pristine), the zone is structurally broken
+// and no attraction trades are valid, even if no body has closed inside the zone.
+// Once zone_pristine is false, only Reversal setups apply.
+attr_short = attr_enabled and zone_body_clean and zone_pristine and japan_bull     and in_sess and bear_sig and dist_to_tp_short >= attr_min_pts and dist_to_tp_short <= attr_max_pts
+attr_long  = attr_enabled and zone_body_clean and zone_pristine and not japan_bull and in_sess and bull_sig and dist_to_tp_long  >= attr_min_pts and dist_to_tp_long  <= attr_max_pts
 
 // ─── REVERSAL CONDITIONS (broken zone only) ───────────────────────────────────
 // Broken zone acts as temporary support/resistance. No distance requirement.
