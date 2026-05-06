@@ -10,7 +10,7 @@ i_consol    = input.int(1,   "Min Gap to Defining Candle",    minval=1, maxval=8
 i_bk        = input.float(1.0, "Breakout Strength (x ATR 14)", minval=0.3, step=0.1, group=g_z)
 i_look      = input.int(10,  "Defining Candle Lookback",      minval=2, maxval=20, group=g_z)
 i_maxz      = input.int(30,  "Max Active Zones Per Side",     minval=5, maxval=50, group=g_z)
-i_show_con  = input.bool(false, "Show Consumed Zones",        group=g_v)
+i_show_con  = input.bool(true, "Show Consumed Zones",         group=g_v)
 i_sup_col   = input.color(color.new(#FF5252, 72), "Supply Zone",  group=g_v)
 i_dem_col   = input.color(color.new(#00C853, 72), "Demand Zone",  group=g_v)
 i_fz_col    = input.color(color.new(#CC00FF, 65), "Flip Zone",    group=g_v)
@@ -168,6 +168,8 @@ if barstate.isconfirmed and array.size(st) > 0
             else if high >= zb
                 array.set(su, i, true)
                 if i_show_con
+                    box.set_extend(bx, extend.none)
+                    box.set_right(bx, bar_index)
                     box.set_bgcolor(bx, i_con_col)
                 else
                     box.delete(bx)
@@ -202,6 +204,8 @@ if barstate.isconfirmed and array.size(dt) > 0
             else if low <= zt
                 array.set(du, i, true)
                 if i_show_con
+                    box.set_extend(bx, extend.none)
+                    box.set_right(bx, bar_index)
                     box.set_bgcolor(bx, i_con_col)
                 else
                     box.delete(bx)
