@@ -165,7 +165,7 @@ if barstate.isconfirmed and array.size(st) > 0
                 array.remove(sx, i)
                 array.remove(su, i)
                 array.remove(sf, i)
-            else if close >= zb and close <= zt
+            else if high >= zb
                 array.set(su, i, true)
                 if i_show_con
                     box.set_bgcolor(bx, i_con_col)
@@ -199,7 +199,7 @@ if barstate.isconfirmed and array.size(dt) > 0
                 array.remove(dx, i)
                 array.remove(du, i)
                 array.remove(df, i)
-            else if close >= zb and close <= zt
+            else if low <= zt
                 array.set(du, i, true)
                 if i_show_con
                     box.set_bgcolor(bx, i_con_col)
