@@ -36,12 +36,14 @@ var float[] sb = array.new_float(0)
 var box[]   sx = array.new_box(0)
 var bool[]  su = array.new_bool(0)
 var bool[]  sf = array.new_bool(0)
+var bool[]  sp = array.new_bool(0)  // pending flip
 
 var float[] dt = array.new_float(0)
 var float[] db = array.new_float(0)
 var box[]   dx = array.new_box(0)
 var bool[]  du = array.new_bool(0)
 var bool[]  df = array.new_bool(0)
+var bool[]  dp = array.new_bool(0)  // pending flip
 
 if barstate.isconfirmed and body(0) > atr * i_bk and bear(0) and array.size(st) < i_maxz
     def = 0
@@ -68,6 +70,7 @@ if barstate.isconfirmed and body(0) > atr * i_bk and bear(0) and array.size(st) 
                 array.push(sx, b)
                 array.push(su, false)
                 array.push(sf, false)
+                array.push(sp, false)
 
 if barstate.isconfirmed and body(0) > atr * i_bk and bull(0) and array.size(dt) < i_maxz
     def = 0
@@ -94,6 +97,7 @@ if barstate.isconfirmed and body(0) > atr * i_bk and bull(0) and array.size(dt) 
                 array.push(dx, b)
                 array.push(du, false)
                 array.push(df, false)
+                array.push(dp, false)
 
 at_sup = false
 at_dem = false
@@ -149,23 +153,48 @@ if barstate.isconfirmed and array.size(st) > 0
             zt = array.get(st, i)
             zb = array.get(sb, i)
             bx = array.get(sx, i)
-            if close > zt
-                lb = math.max(box.get_left(bx), bar_index - 499)
-                box.delete(bx)
-                nb = box.new(lb, zt, bar_index, zb,
-                             bgcolor=i_fz_col, border_color=color.new(#CC00FF, 20),
-                             border_width=1, extend=extend.right)
-                array.push(dt, zt)
-                array.push(db, zb)
-                array.push(dx, nb)
-                array.push(du, false)
-                array.push(df, true)
-                array.remove(st, i)
-                array.remove(sb, i)
-                array.remove(sx, i)
-                array.remove(su, i)
-                array.remove(sf, i)
+            if array.get(sp, i)
+                if close > zt
+                    // Gap confirmed — complete flip to demand
+                    lb = math.max(box.get_left(bx), bar_index - 499)
+                    box.delete(bx)
+                    nb = box.new(lb, zt, bar_index, zb,
+                                 bgcolor=i_fz_col, border_color=color.new(#CC00FF, 20),
+                                 border_width=1, extend=extend.right)
+                    array.push(dt, zt)
+                    array.push(db, zb)
+                    array.push(dx, nb)
+                    array.push(du, false)
+                    array.push(df, true)
+                    array.push(dp, false)
+                    array.remove(st, i)
+                    array.remove(sb, i)
+                    array.remove(sx, i)
+                    array.remove(su, i)
+                    array.remove(sf, i)
+                    array.remove(sp, i)
+                else
+                    // Gap failed — consume the zone
+                    if i_show_con
+                        orig_col = array.get(sf, i) ? i_fz_col : i_sup_col
+                        lb = math.max(box.get_left(bx), bar_index - 499)
+                        box.delete(bx)
+                        box.new(lb, zt, bar_index, zb,
+                                bgcolor=orig_col, border_color=i_con_col,
+                                border_width=2, extend=extend.none)
+                    else
+                        box.delete(bx)
+                    array.remove(st, i)
+                    array.remove(sb, i)
+                    array.remove(sx, i)
+                    array.remove(su, i)
+                    array.remove(sf, i)
+                    array.remove(sp, i)
+            else if close > zt
+                // First close above zone — mark as pending flip
+                array.set(sp, i, true)
             else if high >= zb and box.get_right(bx) != bar_index
+                // Touch — consume zone
                 if i_show_con
                     orig_col = array.get(sf, i) ? i_fz_col : i_sup_col
                     lb = math.max(box.get_left(bx), bar_index - 499)
@@ -180,6 +209,7 @@ if barstate.isconfirmed and array.size(st) > 0
                 array.remove(sx, i)
                 array.remove(su, i)
                 array.remove(sf, i)
+                array.remove(sp, i)
 
 if barstate.isconfirmed and array.size(dt) > 0
     for i = array.size(dt) - 1 to 0
@@ -187,23 +217,48 @@ if barstate.isconfirmed and array.size(dt) > 0
             zt = array.get(dt, i)
             zb = array.get(db, i)
             bx = array.get(dx, i)
-            if close < zb
-                lb = math.max(box.get_left(bx), bar_index - 499)
-                box.delete(bx)
-                nb = box.new(lb, zt, bar_index, zb,
-                             bgcolor=i_fz_col, border_color=color.new(#CC00FF, 20),
-                             border_width=1, extend=extend.right)
-                array.push(st, zt)
-                array.push(sb, zb)
-                array.push(sx, nb)
-                array.push(su, false)
-                array.push(sf, true)
-                array.remove(dt, i)
-                array.remove(db, i)
-                array.remove(dx, i)
-                array.remove(du, i)
-                array.remove(df, i)
+            if array.get(dp, i)
+                if close < zb
+                    // Gap confirmed — complete flip to supply
+                    lb = math.max(box.get_left(bx), bar_index - 499)
+                    box.delete(bx)
+                    nb = box.new(lb, zt, bar_index, zb,
+                                 bgcolor=i_fz_col, border_color=color.new(#CC00FF, 20),
+                                 border_width=1, extend=extend.right)
+                    array.push(st, zt)
+                    array.push(sb, zb)
+                    array.push(sx, nb)
+                    array.push(su, false)
+                    array.push(sf, true)
+                    array.push(sp, false)
+                    array.remove(dt, i)
+                    array.remove(db, i)
+                    array.remove(dx, i)
+                    array.remove(du, i)
+                    array.remove(df, i)
+                    array.remove(dp, i)
+                else
+                    // Gap failed — consume the zone
+                    if i_show_con
+                        orig_col = array.get(df, i) ? i_fz_col : i_dem_col
+                        lb = math.max(box.get_left(bx), bar_index - 499)
+                        box.delete(bx)
+                        box.new(lb, zt, bar_index, zb,
+                                bgcolor=orig_col, border_color=i_con_col,
+                                border_width=2, extend=extend.none)
+                    else
+                        box.delete(bx)
+                    array.remove(dt, i)
+                    array.remove(db, i)
+                    array.remove(dx, i)
+                    array.remove(du, i)
+                    array.remove(df, i)
+                    array.remove(dp, i)
+            else if close < zb
+                // First close below zone — mark as pending flip
+                array.set(dp, i, true)
             else if low <= zt and box.get_right(bx) != bar_index
+                // Touch — consume zone
                 if i_show_con
                     orig_col = array.get(df, i) ? i_fz_col : i_dem_col
                     lb = math.max(box.get_left(bx), bar_index - 499)
@@ -218,3 +273,4 @@ if barstate.isconfirmed and array.size(dt) > 0
                 array.remove(dx, i)
                 array.remove(du, i)
                 array.remove(df, i)
+                array.remove(dp, i)
