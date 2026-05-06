@@ -1,0 +1,212 @@
+//@version=6
+indicator("Supply & Demand JC", overlay=true, max_boxes_count=100, max_labels_count=300)
+
+var g_z = "Zone Detection"
+var g_v = "Display"
+var g_s = "Entry Signals"
+var g_t = "Session"
+
+i_consol    = input.int(1,   "Min Gap to Defining Candle",    minval=1, maxval=8,  group=g_z, tooltip="Minimum bars back the defining candle must be (1 = immediately before breakout)")
+i_bk        = input.float(1.0, "Breakout Strength (x ATR 14)", minval=0.3, step=0.1, group=g_z)
+i_look      = input.int(10,  "Defining Candle Lookback",      minval=2, maxval=20, group=g_z)
+i_maxz      = input.int(30,  "Max Active Zones Per Side",     minval=5, maxval=50, group=g_z)
+i_show_con  = input.bool(false, "Show Consumed Zones",        group=g_v)
+i_sup_col   = input.color(color.new(#FF5252, 72), "Supply Zone",  group=g_v)
+i_dem_col   = input.color(color.new(#00C853, 72), "Demand Zone",  group=g_v)
+i_fz_col    = input.color(color.new(#CC00FF, 65), "Flip Zone",    group=g_v)
+i_con_col   = input.color(color.new(color.gray, 88), "Consumed",  group=g_v)
+i_sigs      = input.bool(true,  "Show Entry Signals",         group=g_s)
+i_show_sess = input.bool(true,  "Highlight Session Windows",  group=g_t)
+i_peak_only = input.bool(false, "Peak Window Only (13-16 UTC)", group=g_t)
+
+atr     = ta.atr(14)
+body(i) => math.abs(close[i] - open[i])
+bull(i) => close[i] > open[i]
+bear(i) => close[i] < open[i]
+bhi(i)  => math.max(open[i], close[i])
+blo(i)  => math.min(open[i], close[i])
+
+h        = hour(time, "UTC")
+in_peak  = h >= 13 and h < 16
+in_broad = h >= 8  and h < 17
+bgcolor(i_show_sess and (i_peak_only ? in_peak : in_broad) ? color.new(color.yellow, 94) : na, title="Session Window")
+
+var float[] st = array.new_float(0)
+var float[] sb = array.new_float(0)
+var box[]   sx = array.new_box(0)
+var bool[]  su = array.new_bool(0)
+var bool[]  sf = array.new_bool(0)
+
+var float[] dt = array.new_float(0)
+var float[] db = array.new_float(0)
+var box[]   dx = array.new_box(0)
+var bool[]  du = array.new_bool(0)
+var bool[]  df = array.new_bool(0)
+
+if barstate.isconfirmed and body(0) > atr * i_bk and bear(0) and array.size(st) < i_maxz
+    def = 0
+    for k = 1 to i_look
+        if bull(k)
+            def := k
+            break
+    if def >= i_consol
+        zt = bhi(def)
+        zb = blo(def)
+        if zt > zb
+            dup = false
+            if array.size(st) > 0
+                for i = 0 to array.size(st) - 1
+                    if math.abs(array.get(st, i) - zt) < atr * 0.15
+                        dup := true
+                        break
+            if not dup
+                b = box.new(bar_index[def], zt, bar_index, zb,
+                            bgcolor=i_sup_col, border_color=color.new(#FF5252, 30),
+                            border_width=1, extend=extend.right)
+                array.push(st, zt)
+                array.push(sb, zb)
+                array.push(sx, b)
+                array.push(su, false)
+                array.push(sf, false)
+
+if barstate.isconfirmed and body(0) > atr * i_bk and bull(0) and array.size(dt) < i_maxz
+    def = 0
+    for k = 1 to i_look
+        if bear(k)
+            def := k
+            break
+    if def >= i_consol
+        zt = bhi(def)
+        zb = blo(def)
+        if zt > zb
+            dup = false
+            if array.size(dt) > 0
+                for i = 0 to array.size(dt) - 1
+                    if math.abs(array.get(dt, i) - zt) < atr * 0.15
+                        dup := true
+                        break
+            if not dup
+                b = box.new(bar_index[def], zt, bar_index, zb,
+                            bgcolor=i_dem_col, border_color=color.new(#00C853, 30),
+                            border_width=1, extend=extend.right)
+                array.push(dt, zt)
+                array.push(db, zb)
+                array.push(dx, b)
+                array.push(du, false)
+                array.push(df, false)
+
+at_sup = false
+at_dem = false
+at_sup_flip = false
+at_dem_flip = false
+
+if i_sigs and array.size(st) > 0
+    for i = 0 to array.size(st) - 1
+        if not array.get(su, i)
+            if high >= array.get(sb, i) and low <= array.get(st, i)
+                if array.get(sf, i)
+                    at_sup_flip := true
+                else
+                    at_sup := true
+
+if i_sigs and array.size(dt) > 0
+    for i = 0 to array.size(dt) - 1
+        if not array.get(du, i)
+            if high >= array.get(db, i) and low <= array.get(dt, i)
+                if array.get(df, i)
+                    at_dem_flip := true
+                else
+                    at_dem := true
+
+wick_up  = high - math.max(open, close)
+wick_dn  = math.min(open, close) - low
+body_sz  = body(0)
+denom    = body_sz + wick_up + wick_dn + 0.000001
+pin_bear = wick_up / denom >= 0.5
+pin_bull = wick_dn / denom >= 0.5
+eng_bear = bear(0) and bull(1) and close <= open[1] and open >= close[1] and body_sz >= body(1) * 0.8
+eng_bull = bull(0) and bear(1) and close >= open[1] and open <= close[1] and body_sz >= body(1) * 0.8
+twz_bear = high >= high[1] * 0.9999 and bear(0) and wick_up / (body_sz + wick_up + 0.000001) >= 0.4
+twz_bull = low  <= low[1]  * 1.0001 and bull(0) and wick_dn / (body_sz + wick_dn + 0.000001) >= 0.4
+
+if barstate.isconfirmed and i_sigs
+    if (at_sup or at_sup_flip) and (pin_bear or eng_bear or twz_bear)
+        sig  = pin_bear ? "PIN" : eng_bear ? "ENG" : "TWZ"
+        risk = at_sup_flip ? " FZ 1%" : " 0.5%"
+        label.new(bar_index, high + atr * 0.3, "v " + sig + risk,
+                  color=at_sup_flip ? i_fz_col : i_sup_col,
+                  textcolor=color.white, style=label.style_label_down, size=size.small)
+    if (at_dem or at_dem_flip) and (pin_bull or eng_bull or twz_bull)
+        sig  = pin_bull ? "PIN" : eng_bull ? "ENG" : "TWZ"
+        risk = at_dem_flip ? " FZ 1%" : " 0.5%"
+        label.new(bar_index, low - atr * 0.3, "^ " + sig + risk,
+                  color=at_dem_flip ? i_fz_col : i_dem_col,
+                  textcolor=color.white, style=label.style_label_up, size=size.small)
+
+if barstate.isconfirmed and array.size(st) > 0
+    for i = array.size(st) - 1 to 0
+        if not array.get(su, i)
+            zt = array.get(st, i)
+            zb = array.get(sb, i)
+            bx = array.get(sx, i)
+            if close > zt
+                lb = math.max(box.get_left(bx), bar_index - 499)
+                box.delete(bx)
+                nb = box.new(lb, zt, bar_index, zb,
+                             bgcolor=i_fz_col, border_color=color.new(#CC00FF, 20),
+                             border_width=1, extend=extend.right)
+                array.push(dt, zt)
+                array.push(db, zb)
+                array.push(dx, nb)
+                array.push(du, false)
+                array.push(df, true)
+                array.remove(st, i)
+                array.remove(sb, i)
+                array.remove(sx, i)
+                array.remove(su, i)
+                array.remove(sf, i)
+            else if close >= zb and close <= zt
+                array.set(su, i, true)
+                if i_show_con
+                    box.set_bgcolor(bx, i_con_col)
+                else
+                    box.delete(bx)
+                    array.remove(st, i)
+                    array.remove(sb, i)
+                    array.remove(sx, i)
+                    array.remove(su, i)
+                    array.remove(sf, i)
+
+if barstate.isconfirmed and array.size(dt) > 0
+    for i = array.size(dt) - 1 to 0
+        if not array.get(du, i)
+            zt = array.get(dt, i)
+            zb = array.get(db, i)
+            bx = array.get(dx, i)
+            if close < zb
+                lb = math.max(box.get_left(bx), bar_index - 499)
+                box.delete(bx)
+                nb = box.new(lb, zt, bar_index, zb,
+                             bgcolor=i_fz_col, border_color=color.new(#CC00FF, 20),
+                             border_width=1, extend=extend.right)
+                array.push(st, zt)
+                array.push(sb, zb)
+                array.push(sx, nb)
+                array.push(su, false)
+                array.push(sf, true)
+                array.remove(dt, i)
+                array.remove(db, i)
+                array.remove(dx, i)
+                array.remove(du, i)
+                array.remove(df, i)
+            else if close >= zb and close <= zt
+                array.set(du, i, true)
+                if i_show_con
+                    box.set_bgcolor(bx, i_con_col)
+                else
+                    box.delete(bx)
+                    array.remove(dt, i)
+                    array.remove(db, i)
+                    array.remove(dx, i)
+                    array.remove(du, i)
+                    array.remove(df, i)
