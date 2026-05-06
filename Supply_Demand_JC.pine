@@ -1,5 +1,5 @@
 //@version=6
-indicator("Supply & Demand JC", overlay=true, max_boxes_count=100, max_labels_count=300)
+indicator("Supply & Demand JC", overlay=true, max_boxes_count=500, max_labels_count=300)
 
 var g_z = "Zone Detection"
 var g_v = "Display"
@@ -166,18 +166,20 @@ if barstate.isconfirmed and array.size(st) > 0
                 array.remove(su, i)
                 array.remove(sf, i)
             else if high >= zb and box.get_right(bx) != bar_index
-                array.set(su, i, true)
                 if i_show_con
-                    box.set_extend(bx, extend.none)
-                    box.set_right(bx, bar_index)
-                    box.set_bgcolor(bx, i_con_col)
+                    orig_col = array.get(sf, i) ? i_fz_col : i_sup_col
+                    lb = math.max(box.get_left(bx), bar_index - 499)
+                    box.delete(bx)
+                    box.new(lb, zt, bar_index, zb,
+                            bgcolor=orig_col, border_color=i_con_col,
+                            border_width=2, extend=extend.none)
                 else
                     box.delete(bx)
-                    array.remove(st, i)
-                    array.remove(sb, i)
-                    array.remove(sx, i)
-                    array.remove(su, i)
-                    array.remove(sf, i)
+                array.remove(st, i)
+                array.remove(sb, i)
+                array.remove(sx, i)
+                array.remove(su, i)
+                array.remove(sf, i)
 
 if barstate.isconfirmed and array.size(dt) > 0
     for i = array.size(dt) - 1 to 0
@@ -202,15 +204,17 @@ if barstate.isconfirmed and array.size(dt) > 0
                 array.remove(du, i)
                 array.remove(df, i)
             else if low <= zt and box.get_right(bx) != bar_index
-                array.set(du, i, true)
                 if i_show_con
-                    box.set_extend(bx, extend.none)
-                    box.set_right(bx, bar_index)
-                    box.set_bgcolor(bx, i_con_col)
+                    orig_col = array.get(df, i) ? i_fz_col : i_dem_col
+                    lb = math.max(box.get_left(bx), bar_index - 499)
+                    box.delete(bx)
+                    box.new(lb, zt, bar_index, zb,
+                            bgcolor=orig_col, border_color=i_con_col,
+                            border_width=2, extend=extend.none)
                 else
                     box.delete(bx)
-                    array.remove(dt, i)
-                    array.remove(db, i)
-                    array.remove(dx, i)
-                    array.remove(du, i)
-                    array.remove(df, i)
+                array.remove(dt, i)
+                array.remove(db, i)
+                array.remove(dx, i)
+                array.remove(du, i)
+                array.remove(df, i)
