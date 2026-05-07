@@ -30,8 +30,9 @@ use_pin       = input.bool(true,  "Pin Bar",                 group=grp_sig)
 use_3bar      = input.bool(true,  "3-Bar Reversal",          group=grp_sig)
 pin_wick_mult = input.float(2.0,  "Pin Bar — Min Wick:Body", group=grp_sig, minval=1.0, step=0.25)
 
-htf_ema_len   = input.int(50,   "EMA Length (1H & 4H bias)",       group=grp_htf, minval=5, step=5, tooltip="EMA period used to determine 1H and 4H trend bias. A reversal LONG only fires when price is above both EMAs; a reversal SHORT only fires when below both. Acts as a coded proxy for the MTFTI indicator alignment check.")
-show_htf_bias = input.bool(true, "Show HTF Bias on Labels",         group=grp_htf, tooltip="Adds 1H/4H bias status to reversal label text.")
+div_lookback  = input.int(30,   "Divergence Lookback (bars)",       group=grp_htf, minval=10, maxval=100, step=5,  tooltip="Bars to look back when measuring divergence. Controls the window across which price vs oscillator extremes are compared. 30 bars on 15m ≈ 7.5 hours.")
+rev_min_div   = input.int(2,   "Min Divergence Score (1–6)",       group=grp_htf, minval=1,  maxval=6,            tooltip="Minimum number of oscillators showing divergence before a reversal signal fires. Mirrors the AlgoPro Market Matrix score. 1 = weak, 3+ = strong, 5–6 = very high conviction.")
+show_div_info = input.bool(true, "Show Divergence Score on Labels", group=grp_htf,                               tooltip="Adds the divergence score and per-oscillator breakdown to reversal label text.")
 
 show_zone_box  = input.bool(true, "Show Open Zone (shaded box)",    group=grp_disp)
 show_attr_band = input.bool(true, "Show Attraction Distance Bands", group=grp_disp)
@@ -129,16 +130,76 @@ bear_sig      = bear_engulf or bear_pin or bear_3bar
 bull_sig_name = bull_engulf ? "Engulfing" : bull_pin ? "Pin Bar" : bull_3bar ? "3-Bar Reversal" : "Signal"
 bear_sig_name = bear_engulf ? "Engulfing" : bear_pin ? "Pin Bar" : bear_3bar ? "3-Bar Reversal" : "Signal"
 
-// ─── HTF BIAS (MTFTI PROXY) ──────────────────────────────────────────────────
-// Replicates the 1H and 4H bias check from the MTFTI indicator.
-// Uses close vs EMA(htf_ema_len) on each timeframe as the bias signal.
-// htf_bull: close > 1H EMA AND close > 4H EMA  → bullish bias on both TFs
-// htf_bear: close < 1H EMA AND close < 4H EMA  → bearish bias on both TFs
-// Required for ALL reversal entries — no alignment = no signal.
-h1_ema   = request.security(syminfo.tickerid, "60",  ta.ema(close, htf_ema_len), lookahead=barmerge.lookahead_off)
-h4_ema   = request.security(syminfo.tickerid, "240", ta.ema(close, htf_ema_len), lookahead=barmerge.lookahead_off)
-htf_bull = close > h1_ema and close > h4_ema
-htf_bear = close < h1_ema and close < h4_ema
+// ─── DIVERGENCE SCORER (AlgoPro Market Matrix proxy) ─────────────────────────
+// Counts how many of 6 oscillators show divergence against current price position.
+// Bullish divergence: price near its lookback LOW but oscillator NOT near its low
+//   → oscillator is recovering while price still depressed = momentum building
+// Bearish divergence: price near its lookback HIGH but oscillator NOT near its high
+//   → oscillator is fading while price still elevated = momentum exhausting
+// Score 0–6. rev_min_div controls the minimum score for a reversal to fire.
+
+rsi_val                       = ta.rsi(close, 14)
+[macd_line, macd_sig, macd_h] = ta.macd(close, 12, 26, 9)
+stoch_k                       = ta.stoch(close, high, low, 14)
+cci_val                       = ta.cci(hlc3, 20)
+wpr_val                       = ta.wpr(14)
+mom_val                       = ta.mom(close, 10)
+
+// Price position within lookback range (bottom/top 30% = "at extreme")
+price_lo  = ta.lowest (close, div_lookback)
+price_hi  = ta.highest(close, div_lookback)
+price_rng = price_hi - price_lo
+price_bot = price_rng > 0 and close <= price_lo + price_rng * 0.30
+price_top = price_rng > 0 and close >= price_hi - price_rng * 0.30
+
+// Helper: oscillator NOT at its lookback extreme (= diverging from price)
+f_not_bot(val) =>
+    lo  = ta.lowest (val, div_lookback)
+    hi  = ta.highest(val, div_lookback)
+    rng = hi - lo
+    rng > 0 and val > lo + rng * 0.30
+
+f_not_top(val) =>
+    lo  = ta.lowest (val, div_lookback)
+    hi  = ta.highest(val, div_lookback)
+    rng = hi - lo
+    rng > 0 and val < hi - rng * 0.30
+
+// Pre-compute function results unconditionally so ta.lowest/ta.highest history stays consistent
+_nb_rsi   = f_not_bot(rsi_val)
+_nb_macd  = f_not_bot(macd_h)
+_nb_stoch = f_not_bot(stoch_k)
+_nb_cci   = f_not_bot(cci_val)
+_nb_wpr   = f_not_bot(wpr_val)
+_nb_mom   = f_not_bot(mom_val)
+
+_nt_rsi   = f_not_top(rsi_val)
+_nt_macd  = f_not_top(macd_h)
+_nt_stoch = f_not_top(stoch_k)
+_nt_cci   = f_not_top(cci_val)
+_nt_wpr   = f_not_top(wpr_val)
+_nt_mom   = f_not_top(mom_val)
+
+// Per-oscillator divergence flags (combine price position with oscillator status)
+bd_rsi   = price_bot and _nb_rsi
+bd_macd  = price_bot and _nb_macd
+bd_stoch = price_bot and _nb_stoch
+bd_cci   = price_bot and _nb_cci
+bd_wpr   = price_bot and _nb_wpr
+bd_mom   = price_bot and _nb_mom
+
+bk_rsi   = price_top and _nt_rsi
+bk_macd  = price_top and _nt_macd
+bk_stoch = price_top and _nt_stoch
+bk_cci   = price_top and _nt_cci
+bk_wpr   = price_top and _nt_wpr
+bk_mom   = price_top and _nt_mom
+
+// Aggregate scores and reversal gates
+bull_div_score = (bd_rsi ? 1 : 0) + (bd_macd ? 1 : 0) + (bd_stoch ? 1 : 0) + (bd_cci ? 1 : 0) + (bd_wpr ? 1 : 0) + (bd_mom ? 1 : 0)
+bear_div_score = (bk_rsi ? 1 : 0) + (bk_macd ? 1 : 0) + (bk_stoch ? 1 : 0) + (bk_cci ? 1 : 0) + (bk_wpr ? 1 : 0) + (bk_mom ? 1 : 0)
+htf_bull       = bull_div_score >= rev_min_div
+htf_bear       = bear_div_score >= rev_min_div
 
 // ─── DISTANCE FROM ZONE ──────────────────────────────────────────────────────
 // Attraction: measured to FAR side (= TP target)
@@ -160,9 +221,9 @@ attr_long  = attr_enabled and zone_body_clean and zone_pristine and not japan_bu
 // ─── REVERSAL CONDITIONS (broken zone only) ──────────────────────────────────
 // Three coded gates (all must pass):
 //   1. Zone broken (not zone_pristine) + morning session (in_rev_sess)
-//   2. HTF bias aligned: close vs EMA(htf_ema_len) on 1H AND 4H
+//   2. Divergence score >= rev_min_div (AlgoPro Market Matrix proxy)
 //   3. Proximity: entry within rev_max_dist pts of zone edge
-// Plus a valid candlestick signal. No HTF alignment = no signal.
+// Plus a valid candlestick signal. Insufficient divergence score = no signal.
 rev_short = rev_enabled and not zone_pristine and in_rev_sess and bear_sig and htf_bear and dist_rev_short <= rev_max_dist
 rev_long  = rev_enabled and not zone_pristine and in_rev_sess and bull_sig and htf_bull and dist_rev_long  <= rev_max_dist
 
@@ -197,12 +258,12 @@ if attr_short
     label.new(bar_index, high + lbl_pad, "▼  ATTRACTION SHORT\n" + bear_sig_name + "  |  " + str.tostring(math.round(dist_to_tp_short)) + " pts to TP\nTP: " + str.tostring(attr_short_tp, "#.###") + " (zone bottom — far side)\nSL: " + str.tostring(attr_short_sl, "#.###") + " (1:1)", color=color.new(color.red, 5), textcolor=color.white, style=label.style_label_down, size=size.normal)
 
 if rev_long
-    htf_str = show_htf_bias ? "\n1H EMA" + str.tostring(htf_ema_len) + ": " + str.tostring(h1_ema, "#.###") + "  |  4H EMA" + str.tostring(htf_ema_len) + ": " + str.tostring(h4_ema, "#.###") + "  ✔ Both BULLISH" : ""
-    label.new(bar_index, low - lbl_pad, "▲  REVERSAL LONG\n" + bull_sig_name + "  |  Zone broken — acts as support\nZone: " + str.tostring(zone_bottom, "#.###") + " – " + str.tostring(zone_top, "#.###") + "\nSL: swing low  |  TP: 1:1 minimum 150 pts" + htf_str, color=color.new(color.teal, 5), textcolor=color.white, style=label.style_label_up, size=size.normal)
+    div_str = show_div_info ? "\nDiv Score: " + str.tostring(bull_div_score) + "/6  [RSI:" + (bd_rsi ? "✔" : "✗") + " MACD:" + (bd_macd ? "✔" : "✗") + " Stoch:" + (bd_stoch ? "✔" : "✗") + " CCI:" + (bd_cci ? "✔" : "✗") + " WPR:" + (bd_wpr ? "✔" : "✗") + " Mom:" + (bd_mom ? "✔" : "✗") + "]" : ""
+    label.new(bar_index, low - lbl_pad, "▲  REVERSAL LONG\n" + bull_sig_name + "  |  Zone broken — acts as support\nZone: " + str.tostring(zone_bottom, "#.###") + " – " + str.tostring(zone_top, "#.###") + "\nSL: swing low  |  TP: 1:1 minimum 150 pts" + div_str, color=color.new(color.teal, 5), textcolor=color.white, style=label.style_label_up, size=size.normal)
 
 if rev_short
-    htf_str = show_htf_bias ? "\n1H EMA" + str.tostring(htf_ema_len) + ": " + str.tostring(h1_ema, "#.###") + "  |  4H EMA" + str.tostring(htf_ema_len) + ": " + str.tostring(h4_ema, "#.###") + "  ✔ Both BEARISH" : ""
-    label.new(bar_index, high + lbl_pad, "▼  REVERSAL SHORT\n" + bear_sig_name + "  |  Zone broken — acts as resistance\nZone: " + str.tostring(zone_bottom, "#.###") + " – " + str.tostring(zone_top, "#.###") + "\nSL: swing high  |  TP: 1:1 minimum 150 pts" + htf_str, color=color.new(color.purple, 5), textcolor=color.white, style=label.style_label_down, size=size.normal)
+    div_str = show_div_info ? "\nDiv Score: " + str.tostring(bear_div_score) + "/6  [RSI:" + (bk_rsi ? "✔" : "✗") + " MACD:" + (bk_macd ? "✔" : "✗") + " Stoch:" + (bk_stoch ? "✔" : "✗") + " CCI:" + (bk_cci ? "✔" : "✗") + " WPR:" + (bk_wpr ? "✔" : "✗") + " Mom:" + (bk_mom ? "✔" : "✗") + "]" : ""
+    label.new(bar_index, high + lbl_pad, "▼  REVERSAL SHORT\n" + bear_sig_name + "  |  Zone broken — acts as resistance\nZone: " + str.tostring(zone_bottom, "#.###") + " – " + str.tostring(zone_top, "#.###") + "\nSL: swing high  |  TP: 1:1 minimum 150 pts" + div_str, color=color.new(color.purple, 5), textcolor=color.white, style=label.style_label_down, size=size.normal)
 
 // ─── ALERTS ──────────────────────────────────────────────────────────────────
 alertcondition(attr_long,  title="DXY Attraction LONG",       message="DXY ATTRACTION LONG\nZone PRISTINE — Japan bearish. Price 150+ DXY pts below zone.\nTP: zone_top (far side) | SL: 1:1\nGo LONG: USDCHF, USDCAD, USDJPY | Go SHORT: EURUSD, GBPUSD, NZDUSD, AUDUSD\nZone top (TP): {{plot_0}} | Price: {{close}} | {{time}}")

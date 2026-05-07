@@ -73,7 +73,7 @@
     "reversal": {
       "description": "Momentum-continuation trade off a broken zone. The Open Zone has been broken (pristine lost), turning the zone edge into temporary support or resistance. Price makes an impulse away from the zone, then retraces BACK to it. Entry is taken AT or very close to the zone edge on a valid signal. HTF alignment is REQUIRED — no alignment, no trade.",
       "required_zone_state": "BROKEN — zone pristine status has been lost (a Japan session candle closed beyond the far edge of the zone).",
-      "htf_bias_requirement": "REQUIRED — coded hard gate in the indicator. The reversal signal will NOT fire unless close is above both the 1H EMA and 4H EMA (for longs) or below both (for shorts). EMA length is configurable (default 50). This replicates the MTFTI 1H/4H alignment check in code.",
+      "htf_bias_requirement": "REQUIRED — coded hard gate in the indicator via multi-oscillator divergence scorer. The reversal signal will NOT fire unless the divergence score meets or exceeds rev_min_div (default 2 out of 6). The scorer checks 6 oscillators (RSI 14, MACD histogram 12/26/9, Stochastic %K 14, CCI 20, Williams %R 14, Momentum 10) against price position within the div_lookback range (default 30 bars). Bullish divergence: price in bottom 30% of range but oscillator NOT in its own bottom 30% (oscillator recovering while price still depressed = momentum building). Bearish divergence: price in top 30% of range but oscillator NOT in its own top 30% (oscillator fading while price still elevated = momentum exhausting). Score 1–6 mirrors the AlgoPro Market Matrix divergence display. 1 = weak; 3+ = strong; 5–6 = very high conviction. The reversal label displays the score and per-oscillator breakdown when show_div_info is enabled.",
       "session_window": {
         "indicator_default_end_gmt": "12:00",
         "instructor_rule_end_gmt": "~17:00 (noon New York / noon Eastern time)",
@@ -92,7 +92,7 @@
       },
       "setup_sequence": [
         "1. Zone pristine is broken during Japan session (candle closes on the opposing side of the zone).",
-        "2. PRE-ENTRY: Check 1H AND 4H MTFTI bias. If not aligned with trade direction, no trade.",
+        "2. PRE-ENTRY: Check divergence score (indicator requires >= rev_min_div, default 2/6). Manually cross-check AlgoPro Market Matrix for visual confirmation. If score below threshold or MTFTI not aligned, no trade.",
         "3. During London session (07:30–12:00 GMT standard, 06:30 Monday), price returns to the zone edge after an impulse away.",
         "4. A valid entry signal fires AT or very close to the zone edge (Engulfing, Pin Bar, or 3-Bar Reversal).",
         "5. Place SL behind the structural swing from the prior impulse (minimum 150 DXY pts / 3000 pts recommended).",
@@ -175,7 +175,7 @@
     "Price ranging tightly around the DXY Open Zone with no clear directional expansion.",
     "Zone has been bridged repeatedly during Japan session — no clear bias.",
     "Strong directional momentum during Japan session that may negate an attraction trade.",
-    "Conflicting 1H and 4H MTFTI bias (for reversal trades).",
+    "Insufficient divergence score for reversal trades (score < rev_min_div, default 2/6). Manually verify AlgoPro Market Matrix alignment.",
     "High-impact news imminent during the trade window.",
     "Less than 150 pts between entry and target (insufficient room for 1:1 RR).",
     "No valid entry signal (engulfing, pin bar, or 3-bar reversal) — no signal, no trade."
@@ -235,8 +235,8 @@
     "labels": {
       "attraction_long":  "Green label below bar — signal name, pts from zone, target price.",
       "attraction_short": "Red label above bar — signal name, pts from zone, target price.",
-      "reversal_long":    "Teal label below bar — signal name, zone bottom level.",
-      "reversal_short":   "Purple label above bar — signal name, zone top level."
+      "reversal_long":    "Teal label below bar — signal name, zone levels, divergence score and per-oscillator breakdown (RSI/MACD/Stoch/CCI/WPR/Mom ✔/✗).",
+      "reversal_short":   "Purple label above bar — signal name, zone levels, divergence score and per-oscillator breakdown (RSI/MACD/Stoch/CCI/WPR/Mom ✔/✗)."
     }
   },
 
@@ -246,7 +246,9 @@
     "zone_min_gap": 30,
     "rev_min_sl": 3000,
     "rev_max_dist": 500,
-    "htf_ema_len": 50,
+    "div_lookback": 30,
+    "rev_min_div": 2,
+    "show_div_info": true,
     "entry_start_h": 7,
     "entry_start_m": 30,
     "entry_end_h": 19,
