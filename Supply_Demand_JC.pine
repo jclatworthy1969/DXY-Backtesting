@@ -133,6 +133,12 @@ eng_bull = bull(0) and bear(1) and close >= open[1] and open <= close[1] and bod
 twz_bear = high >= high[1] * 0.9999 and bear(0) and wick_up / (body_sz + wick_up + 0.000001) >= 0.4
 twz_bull = low  <= low[1]  * 1.0001 and bull(0) and wick_dn / (body_sz + wick_dn + 0.000001) >= 0.4
 
+short_sig = i_sigs and (at_sup or at_sup_flip) and (pin_bear or eng_bear or twz_bear)
+long_sig  = i_sigs and (at_dem or at_dem_flip) and (pin_bull or eng_bull or twz_bull)
+
+alertcondition(short_sig, "SHORT Entry Signal", "Supply & Demand JC: SHORT entry signal")
+alertcondition(long_sig,  "LONG Entry Signal",  "Supply & Demand JC: LONG entry signal")
+
 if barstate.isconfirmed and i_sigs
     if (at_sup or at_sup_flip) and (pin_bear or eng_bear or twz_bear)
         sig  = pin_bear ? "PIN" : eng_bear ? "ENG" : "TWZ"
