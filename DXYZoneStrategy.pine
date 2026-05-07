@@ -35,6 +35,7 @@ in_window  = time >= start_date and time <= end_date
 grp_zone = "Signal Zones"
 grp_sess = "Session Window (GMT)"
 grp_sig  = "Entry Signals"
+grp_htf  = "HTF Bias (Reversal Gate)"
 grp_disp = "Display"
 
 attr_enabled  = input.bool(true,  "Enable Attraction Trades",            group=grp_zone)
@@ -43,6 +44,7 @@ attr_max_pts  = input.int(5000,   "Attraction — Max Distance (pts)",     group
 zone_min_gap  = input.int(30,     "Zone — Min Gap to use open gap (pts)",group=grp_zone, minval=5,   step=5)
 rev_enabled   = input.bool(true,  "Enable Reversal Trades",              group=grp_zone)
 rev_min_sl    = input.int(3000,   "Reversal — Min Structural SL (pts)", group=grp_zone, minval=500, step=500, tooltip="Minimum SL size enforced for reversal entries. Backtest finding: reversals with structural SL ≥3000 pts = 77%+ WR; ≥5000 pts = 100% WR across 302 trades. Entry is AT the zone; this floor pushes the SL to at least rev_min_sl pts below/above entry.")
+rev_max_dist  = input.int(500,    "Reversal — Max Distance from Zone (pts)", group=grp_zone, minval=50, step=50, tooltip="Reversal entry only fires when price is within this many pts of the zone edge. Default 500 pts = 50 DXY points.")
 
 entry_start_h = input.int(7,  "Entry Start Hour (GMT)",          group=grp_sess)
 entry_start_m = input.int(30, "Entry Start Min  (GMT)",          group=grp_sess)
@@ -57,6 +59,8 @@ use_engulf    = input.bool(true, "Engulfing Candle",       group=grp_sig)
 use_pin       = input.bool(true, "Pin Bar",                group=grp_sig)
 use_3bar      = input.bool(true, "3-Bar Reversal",         group=grp_sig)
 pin_wick_mult = input.float(2.0, "Pin Bar — Min Wick:Body",group=grp_sig, minval=1.0, step=0.25)
+
+htf_ema_len   = input.int(50,   "EMA Length (1H & 4H bias)", group=grp_htf, minval=5, step=5, tooltip="EMA period for 1H and 4H trend bias. Reversal LONG fires only when close > both EMAs; SHORT only when close < both EMAs.")
 
 show_zone     = input.bool(true, "Show Zone Box",          group=grp_disp)
 show_session  = input.bool(true, "Show Session Background",group=grp_disp)
@@ -139,9 +143,19 @@ bear_3bar   = use_3bar and close[2] > open[2] and indecision and is_bear and clo
 bull_sig    = bull_engulf or bull_pin or bull_3bar
 bear_sig    = bear_engulf or bear_pin or bear_3bar
 
-// ─── DISTANCES (attraction — measured to FAR side = TP target) ───────────────
-dist_to_tp_long  = (zone_top    - close) * 10000   // long:  TP = zone_top
-dist_to_tp_short = (close - zone_bottom) * 10000   // short: TP = zone_bottom
+// ─── HTF BIAS (MTFTI PROXY) ──────────────────────────────────────────────────
+h1_ema   = request.security(syminfo.tickerid, "60",  ta.ema(close, htf_ema_len), lookahead=barmerge.lookahead_off)
+h4_ema   = request.security(syminfo.tickerid, "240", ta.ema(close, htf_ema_len), lookahead=barmerge.lookahead_off)
+htf_bull = close > h1_ema and close > h4_ema
+htf_bear = close < h1_ema and close < h4_ema
+
+// ─── DISTANCES ───────────────────────────────────────────────────────────────
+// Attraction: measured to FAR side (= TP target)
+// Reversal proximity: absolute distance from zone edge
+dist_to_tp_long  = (zone_top    - close) * 10000
+dist_to_tp_short = (close - zone_bottom) * 10000
+dist_rev_long    = math.abs(close - zone_bottom) * 10000
+dist_rev_short   = math.abs(zone_top - close)    * 10000
 
 // ─── TRADE CONDITIONS ─────────────────────────────────────────────────────────
 // Attraction requires zone to be BOTH body-clean AND still pristine.
@@ -153,12 +167,9 @@ attr_long  = attr_enabled and zone_body_clean and zone_pristine and not japan_bu
 attr_short = attr_enabled and zone_body_clean and zone_pristine and japan_bull and in_sess and bear_sig
              and dist_to_tp_short >= attr_min_pts and dist_to_tp_short <= attr_max_pts
 
-// Reversals: entry AT or near zone edge after price returns to zone following an
-// impulse. Restricted to morning London session (in_rev_sess, default 12:00 GMT).
-// HTF alignment required — check 1H + 4H manually before entry.
-// rev_min_sl is enforced as the minimum SL floor in the exit logic below.
-rev_long   = rev_enabled and not zone_pristine and in_rev_sess and bull_sig
-rev_short  = rev_enabled and not zone_pristine and in_rev_sess and bear_sig
+// Reversals: three coded gates — session window, HTF bias, proximity to zone.
+rev_long   = rev_enabled and not zone_pristine and in_rev_sess and bull_sig and htf_bull and dist_rev_long  <= rev_max_dist
+rev_short  = rev_enabled and not zone_pristine and in_rev_sess and bear_sig and htf_bear and dist_rev_short <= rev_max_dist
 
 // ─── STRATEGY ENTRIES ─────────────────────────────────────────────────────────
 // Only enter if:

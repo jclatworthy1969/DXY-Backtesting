@@ -73,13 +73,13 @@
     "reversal": {
       "description": "Momentum-continuation trade off a broken zone. The Open Zone has been broken (pristine lost), turning the zone edge into temporary support or resistance. Price makes an impulse away from the zone, then retraces BACK to it. Entry is taken AT or very close to the zone edge on a valid signal. HTF alignment is REQUIRED — no alignment, no trade.",
       "required_zone_state": "BROKEN — zone pristine status has been lost (a Japan session candle closed beyond the far edge of the zone).",
-      "htf_bias_requirement": "REQUIRED — mandatory hard gate, not a suggestion. Before entering any reversal trade, check the 1H and 4H MTFTI bias. If both point in the trade direction: take the trade. If either does not align: walk away. This is a rule, not guidance.",
+      "htf_bias_requirement": "REQUIRED — coded hard gate in the indicator. The reversal signal will NOT fire unless close is above both the 1H EMA and 4H EMA (for longs) or below both (for shorts). EMA length is configurable (default 50). This replicates the MTFTI 1H/4H alignment check in code.",
       "session_window": {
         "indicator_default_end_gmt": "12:00",
         "instructor_rule_end_gmt": "~17:00 (noon New York / noon Eastern time)",
         "note": "The strategy instructor explicitly allows reversal and continuation trades 'throughout the remainder of the London session or up until noon or so in the New York session' (~17:00 GMT). The indicator default is capped at 12:00 GMT based on backtesting evidence from 302 trades (no winning reversals after 12:00 GMT in the last 60-trade sample). Adjust rev_end_h if trading later in the session."
       },
-      "entry_proximity": "Entry should be AT or very close to the zone edge — price must return to the zone after the impulse. 'Barely nicking the Dixie level' is acceptable; ideally price interacts more clearly with the level. There is no minimum distance requirement from the zone for entry.",
+      "entry_proximity": "Entry must be within rev_max_dist pts of the zone edge (default 500 pts = 50 DXY points). This is coded into the indicator — signals more than 500 pts from the zone edge are suppressed. 'Barely nicking the Dixie level' is the ideal setup; the indicator allows up to 50 DXY points of tolerance either side of the zone edge.",
       "structural_sl": {
         "placement": "SL behind the most recent structural swing high (short) or swing low (long) — the swing formed during the impulse away from the zone.",
         "minimum_pts": 3000,
@@ -245,6 +245,8 @@
     "attr_max_pts": 5000,
     "zone_min_gap": 30,
     "rev_min_sl": 3000,
+    "rev_max_dist": 500,
+    "htf_ema_len": 50,
     "entry_start_h": 7,
     "entry_start_m": 30,
     "entry_end_h": 19,
