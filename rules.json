@@ -66,36 +66,43 @@
         "long_sl": "Entry price minus the distance from entry to zone_top.",
         "short_sl": "Entry price plus the distance from entry to zone_bottom."
       },
-      "momentum_check": "Verify Japan session momentum was not strong. If there is strong directional momentum in the Japan session, consider skipping the attraction trade."
+      "momentum_check": "Verify Japan session momentum was not strong. If there is strong directional momentum in the Japan session, consider skipping the attraction trade.",
+      "muddy_water_rule": "When the zone is NOT clean (price bridged it, many closes inside it, or price ran through the entire level), REVERSE the process: check HTF alignment FIRST. If the 1H and 4H MTFTI bias aligns with the intended trade direction, the attraction trade may still be valid. If HTF does not align, walk away — do not take the trade. A clean zone needs no HTF gate; a messy zone requires one."
     },
 
     "reversal": {
-      "description": "Momentum-continuation trade off a broken zone. The Open Zone has been broken (pristine lost), turning the zone into a temporary support or resistance level. A valid entry signal must fire during the morning London session, and price must have bounced a minimum distance from the zone edge before entry (proving the zone is holding as S/R).",
+      "description": "Momentum-continuation trade off a broken zone. The Open Zone has been broken (pristine lost), turning the zone edge into temporary support or resistance. Price makes an impulse away from the zone, then retraces BACK to it. Entry is taken AT or very close to the zone edge on a valid signal. HTF alignment is REQUIRED — no alignment, no trade.",
       "required_zone_state": "BROKEN — zone pristine status has been lost (a Japan session candle closed beyond the far edge of the zone).",
-      "htf_bias_requirement": "RECOMMENDED. Reversal trades are strongest when the 1H and 4H MTFTI bias aligns with the trade direction. Review bias before entry but it is not a hard filter in the indicator.",
-      "session_window": "06:45–12:00 GMT only (morning London session). Analysis of 302 backtested trades shows zero winning reversals entered after 12:00 GMT. Attraction trades may continue until 19:30 GMT, but reversal signals are suppressed from 12:00 GMT onward.",
-      "min_bounce_from_zone": {
-        "default_pts": 3000,
-        "description": "After the zone breaks, price must bounce at least rev_min_pts from the zone edge before a reversal signal fires. This confirms the zone is acting as new S/R rather than allowing premature entries while price is still clinging to the level.",
+      "htf_bias_requirement": "REQUIRED — mandatory hard gate, not a suggestion. Before entering any reversal trade, check the 1H and 4H MTFTI bias. If both point in the trade direction: take the trade. If either does not align: walk away. This is a rule, not guidance.",
+      "session_window": {
+        "indicator_default_end_gmt": "12:00",
+        "instructor_rule_end_gmt": "~17:00 (noon New York / noon Eastern time)",
+        "note": "The strategy instructor explicitly allows reversal and continuation trades 'throughout the remainder of the London session or up until noon or so in the New York session' (~17:00 GMT). The indicator default is capped at 12:00 GMT based on backtesting evidence from 302 trades (no winning reversals after 12:00 GMT in the last 60-trade sample). Adjust rev_end_h if trading later in the session."
+      },
+      "entry_proximity": "Entry should be AT or very close to the zone edge — price must return to the zone after the impulse. 'Barely nicking the Dixie level' is acceptable; ideally price interacts more clearly with the level. There is no minimum distance requirement from the zone for entry.",
+      "structural_sl": {
+        "placement": "SL behind the most recent structural swing high (short) or swing low (long) — the swing formed during the impulse away from the zone.",
+        "minimum_pts": 3000,
         "win_rate_by_bucket": {
-          "below_3000_pts": "67% win rate (8W/4L across full dataset)",
-          "3000_to_5000_pts": "77% win rate (17W/5L across full dataset)",
-          "above_5000_pts": "100% win rate (6W/0L across full dataset)"
+          "below_3000_pts": "67% WR (8W/4L, 302-trade dataset)",
+          "3000_to_5000_pts": "77% WR (17W/5L, 302-trade dataset)",
+          "above_5000_pts": "100% WR (6W/0L, 302-trade dataset)"
         },
-        "rationale": "A larger bounce distance indicates the zone has demonstrated it can hold as support or resistance. Tiny bounces (<2000 pts) often indicate premature entries before the zone has proven itself."
+        "note": "The strategy script enforces a minimum SL of rev_min_sl pts (default 3000). If the nearest structural swing is closer than 3000 pts, the SL is pushed out to 3000 pts minimum. The larger the structural SL, the higher the historical win rate."
       },
       "setup_sequence": [
         "1. Zone pristine is broken during Japan session (candle closes on the opposing side of the zone).",
-        "2. During morning London session (06:45–12:00 GMT), price bounces at least 3000 pts from the zone edge.",
-        "3. A valid entry signal fires (Engulfing, Pin Bar, or 3-Bar Reversal).",
-        "4. The broken zone acts as the structural reference for Stop Loss placement (behind zone_top for longs, zone_bottom for shorts).",
-        "5. Minimum TP: 1:1 with SL (minimum 3000 pts by default). Check HTF bias for potential runners."
+        "2. PRE-ENTRY: Check 1H AND 4H MTFTI bias. If not aligned with trade direction, no trade.",
+        "3. During London session (07:30–12:00 GMT standard, 06:30 Monday), price returns to the zone edge after an impulse away.",
+        "4. A valid entry signal fires AT or very close to the zone edge (Engulfing, Pin Bar, or 3-Bar Reversal).",
+        "5. Place SL behind the structural swing from the prior impulse (minimum 150 DXY pts / 3000 pts recommended).",
+        "6. TP = 1:1 minimum with SL. Check HTF context for runner potential."
       ],
       "direction_logic": {
-        "long_setup": "Zone broken bearishly (close below zone_bottom). During London, price bounces back above zone_bottom by at least rev_min_pts. Bullish signal fires. SL ref: zone_bottom. TP: 1:1.",
-        "short_setup": "Zone broken bullishly (close above zone_top). During London, price falls back below zone_top by at least rev_min_pts. Bearish signal fires. SL ref: zone_top. TP: 1:1."
+        "long_setup": "Zone broken bearishly (close below zone_bottom). During London, price returns to zone_bottom area. Bullish signal fires. SL: below swing low from the prior impulse. TP: 1:1.",
+        "short_setup": "Zone broken bullishly (close above zone_top). During London, price returns to zone_top area. Bearish signal fires. SL: above swing high from the prior impulse. TP: 1:1."
       },
-      "note_on_sideways": "If price action is sideways around the zone with no impulsive move early in the London session, classify as MANUAL_CHECK — not a trade signal."
+      "note_on_sideways": "If price is oscillating around the zone with no clear impulse, classify as MANUAL_CHECK — not a trade signal."
     }
   },
 
@@ -145,12 +152,14 @@
 
   "session_rules": {
     "london_entry_window": {
-      "standard_start_gmt": "06:45",
+      "standard_start_gmt": "07:30",
+      "standard_start_eastern": "2:30 AM Eastern",
       "attraction_end_gmt": "19:30",
-      "reversal_end_gmt": "12:00",
-      "monday_start_gmt": "06:45",
-      "rationale": "Attraction entry window runs 06:45–19:30 GMT. Reversal entry window is restricted to 06:45–12:00 GMT (morning London session only). Analysis of 302 Ash Mall backtested trades found zero winning reversal entries after 12:00 GMT.",
-      "pre_london_note": "The 06:45 GMT start is the earliest permissible entry. Entries before 06:45 GMT are not taken."
+      "reversal_end_gmt": "12:00 (indicator default) — instructor allows until ~17:00 GMT",
+      "monday_start_gmt": "06:30",
+      "monday_start_eastern": "1:30 AM Eastern",
+      "rationale": "Entry window starts at 07:30 GMT (2:30 AM Eastern) on standard days. Monday starts earlier at 06:30 GMT (1:30 AM Eastern) due to weekend gap volatility. Reversal indicator default ends 12:00 GMT based on backtesting evidence; instructor teaches until noon Eastern (~17:00 GMT).",
+      "pre_entry_note": "Do not enter trades before 07:30 GMT (06:30 Monday). Entries prior to these times have poor win rate — volume and London momentum have not yet established."
     },
     "japan_session": {
       "start": "23:45 GMT",
@@ -180,8 +189,9 @@
     "JAPAN SESSION: Monitor for zone pristine status. Note if any candle closes beyond the far zone edge.",
     "PRE-LONDON: Assess Japan session momentum. Check MTFTI 1H and 4H bias.",
     "LONDON SESSION: Wait for price to expand away from zone (min 150 pts). Identify trade type (Attraction or Reversal).",
-    "ATTRACTION (pristine zone): Confirm 150–500 pt distance. Look for entry signal. No HTF bias required.",
-    "REVERSAL (broken zone): Confirm price has returned to zone edge with bounce. Confirm 1H AND 4H MTFTI bias aligns. Look for entry signal.",
+    "ATTRACTION (clean pristine zone): Confirm 150–500 pt distance from zone. Look for entry signal. No HTF bias required.",
+    "ATTRACTION (muddy zone — bridged or messy): Check HTF FIRST. If 1H + 4H align with trade direction, take the setup. If not, walk away.",
+    "REVERSAL (broken zone): Check 1H AND 4H MTFTI bias FIRST — this is MANDATORY. If aligned: wait for price to return to zone edge, look for entry signal. If not aligned: no trade.",
     "PRE-ENTRY: Check news calendar. Confirm SL placement at recent swing high/low (min 150 pts). Confirm 1:1 RR is achievable.",
     "ENTRY: Place trade with defined SL and TP. Risk ≤ 1% account.",
     "MANAGEMENT: At target, take partial profits (½ to ⅔). Reevaluate runner based on HTF context. If DXY zone is hit, manually exit all correlated FX pair trades."
@@ -234,9 +244,9 @@
     "attr_min_pts": 1500,
     "attr_max_pts": 5000,
     "zone_min_gap": 30,
-    "rev_min_pts": 3000,
-    "entry_start_h": 6,
-    "entry_start_m": 45,
+    "rev_min_sl": 3000,
+    "entry_start_h": 7,
+    "entry_start_m": 30,
     "entry_end_h": 19,
     "entry_end_m": 30,
     "rev_end_h": 12,

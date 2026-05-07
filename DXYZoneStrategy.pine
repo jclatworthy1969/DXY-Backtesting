@@ -42,10 +42,10 @@ attr_min_pts  = input.int(1500,   "Attraction — Min Distance (pts)",     group
 attr_max_pts  = input.int(5000,   "Attraction — Max Distance (pts)",     group=grp_zone, minval=500, step=100, tooltip="500 DXY points = 5000 pts")
 zone_min_gap  = input.int(30,     "Zone — Min Gap to use open gap (pts)",group=grp_zone, minval=5,   step=5)
 rev_enabled   = input.bool(true,  "Enable Reversal Trades",              group=grp_zone)
-rev_min_pts   = input.int(3000,   "Reversal — Min Bounce from Zone (pts)",group=grp_zone, minval=500, step=500, tooltip="Minimum distance between entry and zone edge (= minimum structural SL). <3000 pts = 67% WR, 3000-5000 pts = 77% WR, 5000+ pts = 100% WR across 302 trades.")
+rev_min_sl    = input.int(3000,   "Reversal — Min Structural SL (pts)", group=grp_zone, minval=500, step=500, tooltip="Minimum SL size enforced for reversal entries. Backtest finding: reversals with structural SL ≥3000 pts = 77%+ WR; ≥5000 pts = 100% WR across 302 trades. Entry is AT the zone; this floor pushes the SL to at least rev_min_sl pts below/above entry.")
 
-entry_start_h = input.int(6,  "Entry Start Hour (GMT)",          group=grp_sess)
-entry_start_m = input.int(45, "Entry Start Min  (GMT)",          group=grp_sess)
+entry_start_h = input.int(7,  "Entry Start Hour (GMT)",          group=grp_sess)
+entry_start_m = input.int(30, "Entry Start Min  (GMT)",          group=grp_sess)
 entry_end_h   = input.int(19, "Entry End Hour   (GMT)",          group=grp_sess)
 entry_end_m   = input.int(30, "Entry End Min    (GMT)",          group=grp_sess)
 rev_end_h     = input.int(12, "Reversal — Entry End Hour (GMT)", group=grp_sess, minval=8, maxval=19, tooltip="Reversals fire only during the morning London session. All winning reversals in sample entered before 12:00 GMT.")
@@ -139,13 +139,9 @@ bear_3bar   = use_3bar and close[2] > open[2] and indecision and is_bear and clo
 bull_sig    = bull_engulf or bull_pin or bull_3bar
 bear_sig    = bear_engulf or bear_pin or bear_3bar
 
-// ─── DISTANCES ───────────────────────────────────────────────────────────────
-// Attraction: measured to the FAR side (= TP target)
+// ─── DISTANCES (attraction — measured to FAR side = TP target) ───────────────
 dist_to_tp_long  = (zone_top    - close) * 10000   // long:  TP = zone_top
 dist_to_tp_short = (close - zone_bottom) * 10000   // short: TP = zone_bottom
-// Reversal: measured to the NEAR side (= zone edge / SL reference)
-dist_rev_long    = (close - zone_bottom) * 10000   // how far price has bounced above zone_bottom
-dist_rev_short   = (zone_top - close)    * 10000   // how far price has bounced below zone_top
 
 // ─── TRADE CONDITIONS ─────────────────────────────────────────────────────────
 // Attraction requires zone to be BOTH body-clean AND still pristine.
@@ -157,11 +153,12 @@ attr_long  = attr_enabled and zone_body_clean and zone_pristine and not japan_bu
 attr_short = attr_enabled and zone_body_clean and zone_pristine and japan_bull and in_sess and bear_sig
              and dist_to_tp_short >= attr_min_pts and dist_to_tp_short <= attr_max_pts
 
-// Reversals: price must have bounced rev_min_pts from zone edge (proves zone is holding).
-// Also restricted to morning London session (in_rev_sess) — all backtested winning
-// reversals entered before 12:00 GMT.
-rev_long   = rev_enabled and not zone_pristine and in_rev_sess and bull_sig and dist_rev_long  >= rev_min_pts
-rev_short  = rev_enabled and not zone_pristine and in_rev_sess and bear_sig and dist_rev_short >= rev_min_pts
+// Reversals: entry AT or near zone edge after price returns to zone following an
+// impulse. Restricted to morning London session (in_rev_sess, default 12:00 GMT).
+// HTF alignment required — check 1H + 4H manually before entry.
+// rev_min_sl is enforced as the minimum SL floor in the exit logic below.
+rev_long   = rev_enabled and not zone_pristine and in_rev_sess and bull_sig
+rev_short  = rev_enabled and not zone_pristine and in_rev_sess and bear_sig
 
 // ─── STRATEGY ENTRIES ─────────────────────────────────────────────────────────
 // Only enter if:
@@ -197,7 +194,7 @@ else if can_enter and attr_short
     zone_traded := true
 
 else if can_enter and rev_long
-    float min_dist = rev_min_pts / 10000.0
+    float min_dist = rev_min_sl / 10000.0
     float sl_dist  = math.max(close - zone_bottom, min_dist)
     float tp       = close + sl_dist
     float sl       = close - sl_dist
@@ -207,7 +204,7 @@ else if can_enter and rev_long
     zone_traded := true
 
 else if can_enter and rev_short
-    float min_dist = rev_min_pts / 10000.0
+    float min_dist = rev_min_sl / 10000.0
     float sl_dist  = math.max(zone_top - close, min_dist)
     float tp       = close - sl_dist
     float sl       = close + sl_dist
