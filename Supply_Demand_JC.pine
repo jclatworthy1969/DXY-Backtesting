@@ -136,16 +136,20 @@ twz_bull = low  <= low[1]  * 1.0001 and bull(0) and wick_dn / (body_sz + wick_dn
 if barstate.isconfirmed and i_sigs
     if (at_sup or at_sup_flip) and (pin_bear or eng_bear or twz_bear)
         sig  = pin_bear ? "PIN" : eng_bear ? "ENG" : "TWZ"
+        zone = at_sup_flip ? "Flip Zone" : "Supply Zone"
         risk = at_sup_flip ? " FZ 1%" : " 0.5%"
         label.new(bar_index, high + atr * 0.3, "v " + sig + risk,
                   color=at_sup_flip ? i_fz_col : i_sup_col,
                   textcolor=color.white, style=label.style_label_down, size=size.small)
+        alert("SHORT | " + sig + " | " + zone + " | " + syminfo.ticker + " " + timeframe.period + "m | Risk " + (at_sup_flip ? "1%" : "0.5%"), alert.freq_once_per_bar_close)
     if (at_dem or at_dem_flip) and (pin_bull or eng_bull or twz_bull)
         sig  = pin_bull ? "PIN" : eng_bull ? "ENG" : "TWZ"
+        zone = at_dem_flip ? "Flip Zone" : "Demand Zone"
         risk = at_dem_flip ? " FZ 1%" : " 0.5%"
         label.new(bar_index, low - atr * 0.3, "^ " + sig + risk,
                   color=at_dem_flip ? i_fz_col : i_dem_col,
                   textcolor=color.white, style=label.style_label_up, size=size.small)
+        alert("LONG | " + sig + " | " + zone + " | " + syminfo.ticker + " " + timeframe.period + "m | Risk " + (at_dem_flip ? "1%" : "0.5%"), alert.freq_once_per_bar_close)
 
 if barstate.isconfirmed and array.size(st) > 0
     for i = array.size(st) - 1 to 0
