@@ -1,25 +1,49 @@
 //@version=6
-indicator("Supply & Demand JC", overlay=true, max_boxes_count=500, max_labels_count=300)
+strategy("Supply & Demand JC Strategy",
+         shorttitle="S&D JC",
+         overlay=true,
+         max_boxes_count=500,
+         max_labels_count=300,
+         default_qty_type=strategy.percent_of_equity,
+         default_qty_value=2,
+         initial_capital=10000,
+         commission_type=strategy.commission.percent,
+         commission_value=0.02,
+         slippage=2)
 
+// ─── GROUPS ───────────────────────────────────────────────────────────────────
 var g_z = "Zone Detection"
 var g_v = "Display"
 var g_s = "Entry Signals"
-var g_t = "Session"
+var g_t = "Session Filter"
+var g_r = "Risk Management"
 
-i_consol    = input.int(4,   "Min Consolidation Bars",        minval=2, maxval=10, group=g_z, tooltip="Minimum consecutive non-breakout bars required before the breakout. Zone is drawn on the nearest candle in this sequence with opposite colour to the breakout candle.")
-i_bk        = input.float(1.0, "Breakout Strength (x ATR 14)", minval=0.3, step=0.1, group=g_z, tooltip="A bar must have body > ATR × this value to qualify as a breakout. Bars below this threshold count as consolidation.")
-i_look      = input.int(10,  "Consolidation Lookback",        minval=4, maxval=20, group=g_z)
-i_maxz      = input.int(30,  "Max Active Zones Per Side",     minval=5, maxval=50, group=g_z)
-i_show_con  = input.bool(true, "Show Consumed Zones",         group=g_v)
-i_sup_col   = input.color(color.new(#FF5252, 72), "Supply Zone",  group=g_v)
-i_dem_col   = input.color(color.new(#00C853, 72), "Demand Zone",  group=g_v)
-i_fz_col    = input.color(color.new(#CC00FF, 65), "Flip Zone",    group=g_v)
-i_con_col   = input.color(color.new(color.gray, 88), "Consumed",  group=g_v)
-i_sigs      = input.bool(true,  "Show Entry Signals",         group=g_s)
-i_show_sess = input.bool(true,  "Highlight Session Windows",  group=g_t)
-i_peak_only = input.bool(false, "Peak Window Only (13-16 UTC)", group=g_t)
+// ─── ZONE DETECTION ───────────────────────────────────────────────────────────
+i_consol = input.int(4,    "Min Consolidation Bars",       minval=2, maxval=10, group=g_z, tooltip="Minimum consecutive non-breakout bars required before the breakout. Zone is drawn on the nearest candle in this sequence with opposite colour to the breakout candle.")
+i_bk     = input.float(1.0,"Breakout Strength (x ATR 14)", minval=0.3, step=0.1, group=g_z, tooltip="A bar must have body > ATR × this value to qualify as a breakout. Bars below this threshold count as consolidation.")
+i_look   = input.int(10,   "Consolidation Lookback",       minval=4, maxval=20, group=g_z)
+i_maxz   = input.int(30,   "Max Active Zones Per Side",    minval=5, maxval=50, group=g_z)
 
-atr     = ta.atr(14)
+// ─── DISPLAY ──────────────────────────────────────────────────────────────────
+i_show_con = input.bool(true,  "Show Consumed Zones",  group=g_v)
+i_sup_col  = input.color(color.new(#FF5252, 72), "Supply Zone",  group=g_v)
+i_dem_col  = input.color(color.new(#00C853, 72), "Demand Zone",  group=g_v)
+i_fz_col   = input.color(color.new(#CC00FF, 65), "Flip Zone",    group=g_v)
+i_con_col  = input.color(color.new(color.gray, 88), "Consumed",  group=g_v)
+i_sigs     = input.bool(true,  "Show Signal Labels",   group=g_v)
+
+// ─── SESSION FILTER ───────────────────────────────────────────────────────────
+i_show_sess  = input.bool(true,  "Highlight Session Windows",   group=g_t)
+i_peak_only  = input.bool(false, "Peak Window Only (13-16 UTC)", group=g_t)
+i_sess_filt  = input.bool(false, "Only Trade in Session Window", group=g_t, tooltip="When on, entries are restricted to the broad session (08-17 UTC) or peak window if that is selected")
+
+// ─── RISK MANAGEMENT ──────────────────────────────────────────────────────────
+i_rr        = input.float(2.0, "Risk:Reward Ratio",    minval=0.5, step=0.5, group=g_r, tooltip="TP is placed at this multiple of the SL distance. Default 2.0 = 2:1")
+i_sl_buf    = input.float(0.5, "SL Buffer (x ATR 14)", minval=0.1, step=0.1, group=g_r, tooltip="Stop loss is placed this many ATRs beyond the zone boundary")
+i_one_trade = input.bool(true, "One Trade at a Time",  group=g_r, tooltip="Block new entries while a trade is open")
+
+// ─── CORE ─────────────────────────────────────────────────────────────────────
+atr    = ta.atr(14)
 body(i) => math.abs(close[i] - open[i])
 bull(i) => close[i] > open[i]
 bear(i) => close[i] < open[i]
@@ -29,22 +53,26 @@ blo(i)  => math.min(open[i], close[i])
 h        = hour(time, "UTC")
 in_peak  = h >= 13 and h < 16
 in_broad = h >= 8  and h < 17
-bgcolor(i_show_sess and (i_peak_only ? in_peak : in_broad) ? color.new(color.yellow, 94) : na, title="Session Window")
+in_sess  = i_peak_only ? in_peak : in_broad
+bgcolor(i_show_sess and in_sess ? color.new(color.yellow, 94) : na, title="Session Window")
 
+// ─── SUPPLY ZONE ARRAYS ───────────────────────────────────────────────────────
 var float[] st = array.new_float(0)
 var float[] sb = array.new_float(0)
 var box[]   sx = array.new_box(0)
 var bool[]  su = array.new_bool(0)
 var bool[]  sf = array.new_bool(0)
-var bool[]  sp = array.new_bool(0)  // pending flip
+var bool[]  sp = array.new_bool(0)
 
+// ─── DEMAND ZONE ARRAYS ───────────────────────────────────────────────────────
 var float[] dt = array.new_float(0)
 var float[] db = array.new_float(0)
 var box[]   dx = array.new_box(0)
 var bool[]  du = array.new_bool(0)
 var bool[]  df = array.new_bool(0)
-var bool[]  dp = array.new_bool(0)  // pending flip
+var bool[]  dp = array.new_bool(0)
 
+// ─── CREATE SUPPLY ZONES ──────────────────────────────────────────────────────
 if barstate.isconfirmed and body(0) > atr * i_bk and bear(0) and array.size(st) < i_maxz
     n_consol = 0
     for k = 1 to i_look
@@ -79,6 +107,7 @@ if barstate.isconfirmed and body(0) > atr * i_bk and bear(0) and array.size(st) 
                     array.push(sf, false)
                     array.push(sp, false)
 
+// ─── CREATE DEMAND ZONES ──────────────────────────────────────────────────────
 if barstate.isconfirmed and body(0) > atr * i_bk and bull(0) and array.size(dt) < i_maxz
     n_consol = 0
     for k = 1 to i_look
@@ -113,12 +142,22 @@ if barstate.isconfirmed and body(0) > atr * i_bk and bull(0) and array.size(dt) 
                     array.push(df, false)
                     array.push(dp, false)
 
-at_sup = false
-at_dem = false
+// ─── DETECT ZONE TOUCHES ──────────────────────────────────────────────────────
+var float touch_sup_zt = na
+var float touch_sup_zb = na
+var float touch_dem_zt = na
+var float touch_dem_zb = na
+
+at_sup      = false
+at_dem      = false
 at_sup_flip = false
 at_dem_flip = false
+touch_sup_zt := na
+touch_sup_zb := na
+touch_dem_zt := na
+touch_dem_zb := na
 
-if i_sigs and array.size(st) > 0
+if array.size(st) > 0
     for i = 0 to array.size(st) - 1
         if not array.get(su, i)
             if high >= array.get(sb, i) and low <= array.get(st, i)
@@ -126,8 +165,10 @@ if i_sigs and array.size(st) > 0
                     at_sup_flip := true
                 else
                     at_sup := true
+                touch_sup_zt := array.get(st, i)
+                touch_sup_zb := array.get(sb, i)
 
-if i_sigs and array.size(dt) > 0
+if array.size(dt) > 0
     for i = 0 to array.size(dt) - 1
         if not array.get(du, i)
             if high >= array.get(db, i) and low <= array.get(dt, i)
@@ -135,7 +176,10 @@ if i_sigs and array.size(dt) > 0
                     at_dem_flip := true
                 else
                     at_dem := true
+                touch_dem_zt := array.get(dt, i)
+                touch_dem_zb := array.get(db, i)
 
+// ─── CANDLE PATTERNS ──────────────────────────────────────────────────────────
 wick_up  = high - math.max(open, close)
 wick_dn  = math.min(open, close) - low
 body_sz  = body(0)
@@ -148,26 +192,48 @@ eng_bull = bull(0) and bear(1) and close >= open[1] and open <= close[1] and bod
 scs_bear = bull(2) and body(1) <= body(2) * 0.5 and bear(0) and close < open[2]
 scs_bull = bear(2) and body(1) <= body(2) * 0.5 and bull(0) and close > open[2]
 
-short_sig = i_sigs and (at_sup or at_sup_flip) and (pin_bear or eng_bear or scs_bear)
-long_sig  = i_sigs and (at_dem or at_dem_flip) and (pin_bull or eng_bull or scs_bull)
+// ─── COMPOSITE SIGNALS ────────────────────────────────────────────────────────
+sess_ok   = not i_sess_filt or in_sess
+short_sig = (at_sup or at_sup_flip) and (pin_bear or eng_bear or scs_bear) and sess_ok
+long_sig  = (at_dem or at_dem_flip) and (pin_bull or eng_bull or scs_bull) and sess_ok
+can_trade = not i_one_trade or strategy.opentrades == 0
 
-alertcondition(short_sig, "SHORT Entry Signal", "Supply & Demand JC: SHORT entry signal")
-alertcondition(long_sig,  "LONG Entry Signal",  "Supply & Demand JC: LONG entry signal")
+// ─── ENTRIES & EXITS ──────────────────────────────────────────────────────────
+if barstate.isconfirmed
+    if short_sig and can_trade and not na(touch_sup_zt)
+        sl_price = touch_sup_zt + atr * i_sl_buf
+        sl_dist  = math.abs(sl_price - close)
+        tp_price = close - sl_dist * i_rr
+        pat_lbl  = pin_bear ? "PIN" : eng_bear ? "ENG" : "3CS"
+        zn_lbl   = at_sup_flip ? "FZ" : "SUP"
+        strategy.entry("Short", strategy.short, comment=pat_lbl + " " + zn_lbl)
+        strategy.exit("Short Exit", "Short", stop=sl_price, limit=tp_price, comment_loss="SL", comment_profit="TP")
 
+    if long_sig and can_trade and not na(touch_dem_zb)
+        sl_price = touch_dem_zb - atr * i_sl_buf
+        sl_dist  = math.abs(close - sl_price)
+        tp_price = close + sl_dist * i_rr
+        pat_lbl  = pin_bull ? "PIN" : eng_bull ? "ENG" : "3CS"
+        zn_lbl   = at_dem_flip ? "FZ" : "DEM"
+        strategy.entry("Long", strategy.long, comment=pat_lbl + " " + zn_lbl)
+        strategy.exit("Long Exit", "Long", stop=sl_price, limit=tp_price, comment_loss="SL", comment_profit="TP")
+
+// ─── SIGNAL LABELS ────────────────────────────────────────────────────────────
 if barstate.isconfirmed and i_sigs
-    if (at_sup or at_sup_flip) and (pin_bear or eng_bear or scs_bear)
-        sig  = pin_bear ? "PIN" : eng_bear ? "ENG" : "3CS"
+    if short_sig
+        pat  = pin_bear ? "PIN" : eng_bear ? "ENG" : "3CS"
         risk = at_sup_flip ? " FZ 1%" : " 0.5%"
-        label.new(bar_index, high + atr * 0.3, "v " + sig + risk,
+        label.new(bar_index, high + atr * 0.3, "v " + pat + risk,
                   color=at_sup_flip ? i_fz_col : i_sup_col,
                   textcolor=color.white, style=label.style_label_down, size=size.small)
-    if (at_dem or at_dem_flip) and (pin_bull or eng_bull or scs_bull)
-        sig  = pin_bull ? "PIN" : eng_bull ? "ENG" : "3CS"
+    if long_sig
+        pat  = pin_bull ? "PIN" : eng_bull ? "ENG" : "3CS"
         risk = at_dem_flip ? " FZ 1%" : " 0.5%"
-        label.new(bar_index, low - atr * 0.3, "^ " + sig + risk,
+        label.new(bar_index, low - atr * 0.3, "^ " + pat + risk,
                   color=at_dem_flip ? i_fz_col : i_dem_col,
                   textcolor=color.white, style=label.style_label_up, size=size.small)
 
+// ─── SUPPLY ZONE MANAGEMENT ───────────────────────────────────────────────────
 if barstate.isconfirmed and array.size(st) > 0
     for i = array.size(st) - 1 to 0
         if not array.get(su, i)
@@ -176,7 +242,6 @@ if barstate.isconfirmed and array.size(st) > 0
             bx = array.get(sx, i)
             if array.get(sp, i)
                 if close > zt
-                    // Gap confirmed — complete flip to demand
                     lb = math.max(box.get_left(bx), bar_index - 499)
                     box.delete(bx)
                     nb = box.new(lb, zt, bar_index, zb,
@@ -195,7 +260,6 @@ if barstate.isconfirmed and array.size(st) > 0
                     array.remove(sf, i)
                     array.remove(sp, i)
                 else
-                    // Gap failed — consume the zone
                     if i_show_con
                         orig_col = array.get(sf, i) ? i_fz_col : i_sup_col
                         lb = math.max(box.get_left(bx), bar_index - 499)
@@ -212,10 +276,8 @@ if barstate.isconfirmed and array.size(st) > 0
                     array.remove(sf, i)
                     array.remove(sp, i)
             else if close > zt
-                // First close above zone — mark as pending flip
                 array.set(sp, i, true)
             else if high >= zb and box.get_right(bx) != bar_index
-                // Touch — consume zone
                 if i_show_con
                     orig_col = array.get(sf, i) ? i_fz_col : i_sup_col
                     lb = math.max(box.get_left(bx), bar_index - 499)
@@ -232,6 +294,7 @@ if barstate.isconfirmed and array.size(st) > 0
                 array.remove(sf, i)
                 array.remove(sp, i)
 
+// ─── DEMAND ZONE MANAGEMENT ───────────────────────────────────────────────────
 if barstate.isconfirmed and array.size(dt) > 0
     for i = array.size(dt) - 1 to 0
         if not array.get(du, i)
@@ -240,7 +303,6 @@ if barstate.isconfirmed and array.size(dt) > 0
             bx = array.get(dx, i)
             if array.get(dp, i)
                 if close < zb
-                    // Gap confirmed — complete flip to supply
                     lb = math.max(box.get_left(bx), bar_index - 499)
                     box.delete(bx)
                     nb = box.new(lb, zt, bar_index, zb,
@@ -259,7 +321,6 @@ if barstate.isconfirmed and array.size(dt) > 0
                     array.remove(df, i)
                     array.remove(dp, i)
                 else
-                    // Gap failed — consume the zone
                     if i_show_con
                         orig_col = array.get(df, i) ? i_fz_col : i_dem_col
                         lb = math.max(box.get_left(bx), bar_index - 499)
@@ -276,10 +337,8 @@ if barstate.isconfirmed and array.size(dt) > 0
                     array.remove(df, i)
                     array.remove(dp, i)
             else if close < zb
-                // First close below zone — mark as pending flip
                 array.set(dp, i, true)
             else if low <= zt and box.get_right(bx) != bar_index
-                // Touch — consume zone
                 if i_show_con
                     orig_col = array.get(df, i) ? i_fz_col : i_dem_col
                     lb = math.max(box.get_left(bx), bar_index - 499)
