@@ -130,24 +130,25 @@ pin_bear = wick_up / denom >= 0.5
 pin_bull = wick_dn / denom >= 0.5
 eng_bear = bear(0) and bull(1) and close <= open[1] and open >= close[1] and body_sz >= body(1) * 0.8
 eng_bull = bull(0) and bear(1) and close >= open[1] and open <= close[1] and body_sz >= body(1) * 0.8
-twz_bear = high >= high[1] * 0.9999 and bear(0) and wick_up / (body_sz + wick_up + 0.000001) >= 0.4
-twz_bull = low  <= low[1]  * 1.0001 and bull(0) and wick_dn / (body_sz + wick_dn + 0.000001) >= 0.4
+// 3-Candle Swing: strong candle → indecision (body ≤ 50% of bar[2]) → confirming close
+scs_bear = bull(2) and body(1) <= body(2) * 0.5 and bear(0) and close < open[2]
+scs_bull = bear(2) and body(1) <= body(2) * 0.5 and bull(0) and close > open[2]
 
-short_sig = i_sigs and (at_sup or at_sup_flip) and (pin_bear or eng_bear or twz_bear)
-long_sig  = i_sigs and (at_dem or at_dem_flip) and (pin_bull or eng_bull or twz_bull)
+short_sig = i_sigs and (at_sup or at_sup_flip) and (pin_bear or eng_bear or scs_bear)
+long_sig  = i_sigs and (at_dem or at_dem_flip) and (pin_bull or eng_bull or scs_bull)
 
 alertcondition(short_sig, "SHORT Entry Signal", "Supply & Demand JC: SHORT entry signal")
 alertcondition(long_sig,  "LONG Entry Signal",  "Supply & Demand JC: LONG entry signal")
 
 if barstate.isconfirmed and i_sigs
-    if (at_sup or at_sup_flip) and (pin_bear or eng_bear or twz_bear)
-        sig  = pin_bear ? "PIN" : eng_bear ? "ENG" : "TWZ"
+    if (at_sup or at_sup_flip) and (pin_bear or eng_bear or scs_bear)
+        sig  = pin_bear ? "PIN" : eng_bear ? "ENG" : "3CS"
         risk = at_sup_flip ? " FZ 1%" : " 0.5%"
         label.new(bar_index, high + atr * 0.3, "v " + sig + risk,
                   color=at_sup_flip ? i_fz_col : i_sup_col,
                   textcolor=color.white, style=label.style_label_down, size=size.small)
-    if (at_dem or at_dem_flip) and (pin_bull or eng_bull or twz_bull)
-        sig  = pin_bull ? "PIN" : eng_bull ? "ENG" : "TWZ"
+    if (at_dem or at_dem_flip) and (pin_bull or eng_bull or scs_bull)
+        sig  = pin_bull ? "PIN" : eng_bull ? "ENG" : "3CS"
         risk = at_dem_flip ? " FZ 1%" : " 0.5%"
         label.new(bar_index, low - atr * 0.3, "^ " + sig + risk,
                   color=at_dem_flip ? i_fz_col : i_dem_col,
