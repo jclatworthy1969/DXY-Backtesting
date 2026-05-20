@@ -1,5 +1,5 @@
 //@version=6
-indicator("DXY Trade Alert", overlay=true, max_labels_count=500)
+indicator("DXY Trade Alert", overlay=true, max_labels_count=500, max_lines_count=500)
 
 // ─── INPUTS ──────────────────────────────────────────────────────────────────
 grp_zone = "Signal Zones"
@@ -226,6 +226,11 @@ fill(p_top, p_bot, color=zone_fill_col, title="Open Zone Fill")
 
 bgcolor(show_session and in_sess ? color.new(color.blue, 93) : na, title="London Session")
 
+// ─── TP / SL LINE REFERENCES ─────────────────────────────────────────────────
+// One pair of lines at a time. Drawn at entry, deleted when exit fires.
+var line tp_line = na
+var line sl_line = na
+
 // ─── LABELS ──────────────────────────────────────────────────────────────────
 lbl_pad = math.max(cndl_range, nz(zone_top, close) * 0.0003)
 
@@ -239,6 +244,14 @@ if attr_long
         "Approach: " + str.tostring(math.round(approach_long)) + " pts",
         color=color.new(color.green, 5), textcolor=color.white,
         style=label.style_label_up, size=size.normal)
+    line.delete(tp_line)
+    line.delete(sl_line)
+    tp_line := line.new(bar_index, attr_tp_long, bar_index + 1, attr_tp_long,
+                        extend=extend.right, color=color.new(color.lime, 0),
+                        style=line.style_dashed, width=2)
+    sl_line := line.new(bar_index, attr_sl_long, bar_index + 1, attr_sl_long,
+                        extend=extend.right, color=color.new(color.red, 0),
+                        style=line.style_dashed, width=2)
     last_attr_long_bar := bar_index
 
 if attr_short
@@ -251,6 +264,14 @@ if attr_short
         "Approach: " + str.tostring(math.round(approach_short)) + " pts",
         color=color.new(color.red, 5), textcolor=color.white,
         style=label.style_label_down, size=size.normal)
+    line.delete(tp_line)
+    line.delete(sl_line)
+    tp_line := line.new(bar_index, attr_tp_short, bar_index + 1, attr_tp_short,
+                        extend=extend.right, color=color.new(color.lime, 0),
+                        style=line.style_dashed, width=2)
+    sl_line := line.new(bar_index, attr_sl_short, bar_index + 1, attr_sl_short,
+                        extend=extend.right, color=color.new(color.red, 0),
+                        style=line.style_dashed, width=2)
     last_attr_short_bar := bar_index
 
 if rev_long
@@ -264,6 +285,14 @@ if rev_long
         "1H/4H EMA bias: bullish",
         color=color.new(color.teal, 5), textcolor=color.white,
         style=label.style_label_up, size=size.normal)
+    line.delete(tp_line)
+    line.delete(sl_line)
+    tp_line := line.new(bar_index, tp_lvl, bar_index + 1, tp_lvl,
+                        extend=extend.right, color=color.new(color.lime, 0),
+                        style=line.style_dashed, width=2)
+    sl_line := line.new(bar_index, sl_lvl, bar_index + 1, sl_lvl,
+                        extend=extend.right, color=color.new(color.red, 0),
+                        style=line.style_dashed, width=2)
     last_rev_long_bar := bar_index
 
 if rev_short
@@ -277,6 +306,14 @@ if rev_short
         "1H/4H EMA bias: bearish",
         color=color.new(color.purple, 5), textcolor=color.white,
         style=label.style_label_down, size=size.normal)
+    line.delete(tp_line)
+    line.delete(sl_line)
+    tp_line := line.new(bar_index, tp_lvl, bar_index + 1, tp_lvl,
+                        extend=extend.right, color=color.new(color.lime, 0),
+                        style=line.style_dashed, width=2)
+    sl_line := line.new(bar_index, sl_lvl, bar_index + 1, sl_lvl,
+                        extend=extend.right, color=color.new(color.red, 0),
+                        style=line.style_dashed, width=2)
     last_rev_short_bar := bar_index
 
 // ─── ENTRY ALERTS ────────────────────────────────────────────────────────────
@@ -298,6 +335,13 @@ var float exit_sl_lvl    = na
 var bool  exit_tracking  = false
 var bool  exit_is_long   = true
 var int   exit_entry_bar = -1
+
+// Reset when a new zone forms at 23:45 — prevents stale TP/SL levels from a
+// prior zone's unresolved trade firing spurious exit alerts on a new day.
+if is_2345
+    exit_tracking := false
+    line.delete(tp_line)
+    line.delete(sl_line)
 
 // Register TP/SL when an entry signal fires
 if attr_long
@@ -337,6 +381,8 @@ bool dxy_sl_hit  = _can_exit and (exit_is_long ? low  <= exit_sl_lvl : high >= e
 
 if dxy_tp_hit or dxy_sl_hit
     exit_tracking := false
+    line.delete(tp_line)
+    line.delete(sl_line)
 
 // Plot live TP and SL lines while tracking (disappear once hit)
 plot(show_exit_lvls and exit_tracking and not na(exit_tp_lvl) ? exit_tp_lvl : na,
