@@ -233,40 +233,40 @@ float dxy_al_reward = not na(dxy_al_sl_d) ? dxy_al_sl_d * 10000 : 0.0
 float dxy_as_reward = not na(dxy_as_sl_d) ? dxy_as_sl_d * 10000 : 0.0
 
 // ─── REVERSAL CONDITIONS (DXY) ────────────────────────────────────────────────
-bool rev_long_cond  = rev_enabled and not na(dxy_london_open) and not rev_traded
-    and in_rev_sess and not in_japan
-    and dxy_max_move_down >= rev_min_move
-    and dxy_at_open_level
-    and dxy_bull_sig
-    and dxy_bb_1h == 1 and dxy_bb_4h == 1
-    and not na(dxy_pd_low) and dxy_rl_sl_d > 0
+bool rev_long_cond  = (rev_enabled and not na(dxy_london_open) and not rev_traded and
+    in_rev_sess and not in_japan and
+    dxy_max_move_down >= rev_min_move and
+    dxy_at_open_level and
+    dxy_bull_sig and
+    dxy_bb_1h == 1 and dxy_bb_4h == 1 and
+    not na(dxy_pd_low) and dxy_rl_sl_d > 0)
 
-bool rev_short_cond = rev_enabled and not na(dxy_london_open) and not rev_traded
-    and in_rev_sess and not in_japan
-    and dxy_max_move_up >= rev_min_move
-    and dxy_at_open_level
-    and dxy_bear_sig
-    and dxy_bb_1h == -1 and dxy_bb_4h == -1
-    and not na(dxy_pd_high) and dxy_rs_sl_d > 0
+bool rev_short_cond = (rev_enabled and not na(dxy_london_open) and not rev_traded and
+    in_rev_sess and not in_japan and
+    dxy_max_move_up >= rev_min_move and
+    dxy_at_open_level and
+    dxy_bear_sig and
+    dxy_bb_1h == -1 and dxy_bb_4h == -1 and
+    not na(dxy_pd_high) and dxy_rs_sl_d > 0)
 
 // ─── ATTRACTION CONDITIONS (DXY) ─────────────────────────────────────────────
-bool attr_long_cond  = attr_enabled and not na(dxy_london_open) and not attr_traded
-    and in_sess and not in_japan
-    and dxy_attr_gap_pts < -attr_min_gap         // gap down on DXY
-    and dxy_pd_range <= attr_max_prev_range
-    and dxy_bb_4h == 0                            // DXY 4H BB flat
-    and dxy_bull_sig
-    and dxy_al_reward >= attr_min_reward
-    and not na(dxy_al_sl_d) and dxy_al_sl_d > 0
+bool attr_long_cond  = (attr_enabled and not na(dxy_london_open) and not attr_traded and
+    in_sess and not in_japan and
+    dxy_attr_gap_pts < -attr_min_gap and
+    dxy_pd_range <= attr_max_prev_range and
+    dxy_bb_4h == 0 and
+    dxy_bull_sig and
+    dxy_al_reward >= attr_min_reward and
+    not na(dxy_al_sl_d) and dxy_al_sl_d > 0)
 
-bool attr_short_cond = attr_enabled and not na(dxy_london_open) and not attr_traded
-    and in_sess and not in_japan
-    and dxy_attr_gap_pts > attr_min_gap           // gap up on DXY
-    and dxy_pd_range <= attr_max_prev_range
-    and dxy_bb_4h == 0
-    and dxy_bear_sig
-    and dxy_as_reward >= attr_min_reward
-    and not na(dxy_as_sl_d) and dxy_as_sl_d > 0
+bool attr_short_cond = (attr_enabled and not na(dxy_london_open) and not attr_traded and
+    in_sess and not in_japan and
+    dxy_attr_gap_pts > attr_min_gap and
+    dxy_pd_range <= attr_max_prev_range and
+    dxy_bb_4h == 0 and
+    dxy_bear_sig and
+    dxy_as_reward >= attr_min_reward and
+    not na(dxy_as_sl_d) and dxy_as_sl_d > 0)
 
 // Block further signals once traded this session
 if rev_long_cond or rev_short_cond
@@ -349,5 +349,4 @@ bgcolor(show_session and in_sess ? color.new(color.blue, 93) : na, title="London
 // DXY opening level plotted on pair chart (visual reference only — not a pair price level)
 plot(show_dxy_lvl and not na(dxy_london_open) ? dxy_london_open : na,
     "DXY Opening Level (reference)", color=color.new(color.yellow, 40), linewidth=1,
-    style=plot.style_linebr,
-    tooltip="DXY London open price. Shown for reference — this is DXY price, not pair price.")
+    style=plot.style_linebr)

@@ -219,42 +219,42 @@ float attr_long_sl      = not na(attr_long_sl_d)  ? close - attr_long_sl_d  : na
 float attr_short_sl     = not na(attr_short_sl_d) ? close + attr_short_sl_d : na
 
 // ─── REVERSAL CONDITIONS ─────────────────────────────────────────────────────
-rev_long  = rev_enabled  and not na(london_open_price) and not rev_traded
-    and in_rev_sess and not in_japan
-    and max_move_down >= rev_min_move
-    and at_open_level
-    and bull_sig
-    and bb_1h == 1 and bb_4h == 1
-    and not na(pd_low)
-    and rev_long_sl_d > 0
+rev_long  = (rev_enabled and not na(london_open_price) and not rev_traded and
+    in_rev_sess and not in_japan and
+    max_move_down >= rev_min_move and
+    at_open_level and
+    bull_sig and
+    bb_1h == 1 and bb_4h == 1 and
+    not na(pd_low) and
+    rev_long_sl_d > 0)
 
-rev_short = rev_enabled  and not na(london_open_price) and not rev_traded
-    and in_rev_sess and not in_japan
-    and max_move_up >= rev_min_move
-    and at_open_level
-    and bear_sig
-    and bb_1h == -1 and bb_4h == -1
-    and not na(pd_high)
-    and rev_short_sl_d > 0
+rev_short = (rev_enabled and not na(london_open_price) and not rev_traded and
+    in_rev_sess and not in_japan and
+    max_move_up >= rev_min_move and
+    at_open_level and
+    bear_sig and
+    bb_1h == -1 and bb_4h == -1 and
+    not na(pd_high) and
+    rev_short_sl_d > 0)
 
 // ─── ATTRACTION CONDITIONS ───────────────────────────────────────────────────
-attr_long  = attr_enabled and not na(london_open_price) and not attr_traded
-    and in_sess and not in_japan
-    and attr_gap_pts < -attr_min_gap
-    and pd_range <= attr_max_prev_range
-    and bb_4h == 0
-    and bull_sig
-    and attr_long_reward >= attr_min_reward
-    and not na(attr_long_sl_d) and attr_long_sl_d > 0
+attr_long  = (attr_enabled and not na(london_open_price) and not attr_traded and
+    in_sess and not in_japan and
+    attr_gap_pts < -attr_min_gap and
+    pd_range <= attr_max_prev_range and
+    bb_4h == 0 and
+    bull_sig and
+    attr_long_reward >= attr_min_reward and
+    not na(attr_long_sl_d) and attr_long_sl_d > 0)
 
-attr_short = attr_enabled and not na(london_open_price) and not attr_traded
-    and in_sess and not in_japan
-    and attr_gap_pts > attr_min_gap
-    and pd_range <= attr_max_prev_range
-    and bb_4h == 0
-    and bear_sig
-    and attr_short_reward >= attr_min_reward
-    and not na(attr_short_sl_d) and attr_short_sl_d > 0
+attr_short = (attr_enabled and not na(london_open_price) and not attr_traded and
+    in_sess and not in_japan and
+    attr_gap_pts > attr_min_gap and
+    pd_range <= attr_max_prev_range and
+    bb_4h == 0 and
+    bear_sig and
+    attr_short_reward >= attr_min_reward and
+    not na(attr_short_sl_d) and attr_short_sl_d > 0)
 
 // Block further signals once traded this session
 if rev_long or rev_short

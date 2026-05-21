@@ -199,44 +199,44 @@ float attr_short_sl     = not na(attr_short_sl_d) ? close + attr_short_sl_d : na
 // Price moved away from London open then RETURNED to it.
 // BB expanding in trade direction on BOTH 1H and 4H.
 // Confirmation candle AT the opening level.
-rev_long  = rev_enabled and not na(london_open_price) and not rev_traded
-    and in_rev_sess and not in_japan
-    and max_move_down >= rev_min_move      // price moved DOWN from opening
-    and at_open_level                      // returned to opening level
-    and bull_sig                           // bullish confirmation candle
-    and bb_1h == 1 and bb_4h == 1         // BB expanding UP on both TFs
-    and not na(pd_low)
-    and rev_long_sl_d > 0
+rev_long  = (rev_enabled and not na(london_open_price) and not rev_traded and
+    in_rev_sess and not in_japan and
+    max_move_down >= rev_min_move and
+    at_open_level and
+    bull_sig and
+    bb_1h == 1 and bb_4h == 1 and
+    not na(pd_low) and
+    rev_long_sl_d > 0)
 
-rev_short = rev_enabled and not na(london_open_price) and not rev_traded
-    and in_rev_sess and not in_japan
-    and max_move_up >= rev_min_move        // price moved UP from opening
-    and at_open_level                      // returned to opening level
-    and bear_sig                           // bearish confirmation candle
-    and bb_1h == -1 and bb_4h == -1       // BB expanding DOWN on both TFs
-    and not na(pd_high)
-    and rev_short_sl_d > 0
+rev_short = (rev_enabled and not na(london_open_price) and not rev_traded and
+    in_rev_sess and not in_japan and
+    max_move_up >= rev_min_move and
+    at_open_level and
+    bear_sig and
+    bb_1h == -1 and bb_4h == -1 and
+    not na(pd_high) and
+    rev_short_sl_d > 0)
 
 // ─── ATTRACTION CONDITIONS ───────────────────────────────────────────────────
 // London opened with a gap. 4H BB must be FLAT (consolidating market).
 // Prior session range must be modest. Confirmation candle in gap-fill direction.
-attr_long  = attr_enabled and not na(london_open_price) and not attr_traded
-    and in_sess and not in_japan
-    and attr_gap_pts < -attr_min_gap       // gap DOWN: opened below prior close
-    and pd_range <= attr_max_prev_range    // prior session not a huge momentum day
-    and bb_4h == 0                         // 4H BB FLAT (consolidating — key filter)
-    and bull_sig                           // bullish confirmation candle (gap fill up)
-    and attr_long_reward >= attr_min_reward
-    and not na(attr_long_sl_d) and attr_long_sl_d > 0
+attr_long  = (attr_enabled and not na(london_open_price) and not attr_traded and
+    in_sess and not in_japan and
+    attr_gap_pts < -attr_min_gap and
+    pd_range <= attr_max_prev_range and
+    bb_4h == 0 and
+    bull_sig and
+    attr_long_reward >= attr_min_reward and
+    not na(attr_long_sl_d) and attr_long_sl_d > 0)
 
-attr_short = attr_enabled and not na(london_open_price) and not attr_traded
-    and in_sess and not in_japan
-    and attr_gap_pts > attr_min_gap        // gap UP: opened above prior close
-    and pd_range <= attr_max_prev_range
-    and bb_4h == 0                         // 4H BB FLAT
-    and bear_sig                           // bearish confirmation candle (gap fill down)
-    and attr_short_reward >= attr_min_reward
-    and not na(attr_short_sl_d) and attr_short_sl_d > 0
+attr_short = (attr_enabled and not na(london_open_price) and not attr_traded and
+    in_sess and not in_japan and
+    attr_gap_pts > attr_min_gap and
+    pd_range <= attr_max_prev_range and
+    bb_4h == 0 and
+    bear_sig and
+    attr_short_reward >= attr_min_reward and
+    not na(attr_short_sl_d) and attr_short_sl_d > 0)
 
 // Block further signals once traded
 if rev_long or rev_short
