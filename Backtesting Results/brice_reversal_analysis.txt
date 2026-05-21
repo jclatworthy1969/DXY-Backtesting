@@ -1,0 +1,632 @@
+================================================================================
+BRICE STREBLER DXY NON-ATTRACTION TRADE ANALYSIS
+Deep-dive: Setup criteria, sub-type classification, and comparison to Python REV
+Date of analysis: 2026-05-21
+================================================================================
+
+SOURCE DATA
+-----------
+File:    Brice Strebler DXY - Strategy Results.xlsx  (sheet: Forex)
+Filter:  TICKER == DXY, Date Entered >= 2023-08-01
+Method:  Attraction trades identified by "attraction" keyword in Notes column.
+         Non-attraction = all remaining DXY trades.
+
+DATASET SUMMARY
+---------------
+Post Aug-2023 DXY rows total : 196
+Attraction trades (annotated): 15
+Non-attraction trades         : 181
+
+Non-attraction overall stats:
+  Wins   : 151
+  Losses :  30
+  WR     : 83.4%
+  Avg Win:  1.072R
+  Avg Loss: -0.979R
+  Net R  : +132.4R
+  PF     :  5.509
+
+
+================================================================================
+SECTION 1: TRADE SUB-TYPE CLASSIFICATION
+================================================================================
+
+Method: keyword search on Notes text. Only 36 of 181 non-attraction trades have
+any notes text at all. The remaining 145 (80%) are taken with no annotation,
+representing Brice's "routine" setup which he takes without comment.
+
+Because 80% of trades have no notes, keyword-based sub-typing captures only a
+small fraction of the total. The statistics below must be read in that context.
+
+SUB-TYPE DEFINITIONS USED
+  Reversal    = notes contain: reversal, bounce, rejection, engulf, engulg,
+                retest, turned back, returning to MA, pristine opening, bands flat
+  Continuation= notes contain: continuation, following trend, 3bar, expanding bands,
+                same direction, long bias, demand zone on engulfing
+  Rev+Cont    = notes match BOTH reversal AND continuation keywords simultaneously
+  Unclassified= no notes, or notes that don't contain any of the above keywords
+
+SUB-TYPE PERFORMANCE TABLE
+---------------------------
+Sub-type        N    Wins  Losses  WR%    Net R    AvgWin   AvgLoss   PF
+---------------------------------------------------------------------------
+Reversal        5      2      3   40.0%   -0.4R    1.313R  -1.000R  0.875
+Continuation    2      2      0  100.0%   +2.2R    1.087R      n/a    inf
+Rev+Cont        5      4      1   80.0%   +3.3R    1.079R  -1.000R  4.314
+Unclassified  169    143     26   84.6%  +127.5R   1.068R  -0.947R  6.200
+---------------------------------------------------------------------------
+TOTAL         181    151     30   83.4%  +132.4R   1.072R  -0.979R  5.509
+
+INTERPRETATION:
+The 5 explicitly-labelled "Reversal" trades actually have a 40% WR — worse than
+our backtest REV (53.2%). These are all EXCEPTION cases: Brice annotated them
+precisely because they were unusual or problematic. This means the Note-labelled
+"reversals" are NOT representative of his primary setup.
+
+The 169 "Unclassified" trades (which include all 145 with no notes) deliver 84.6%
+WR — almost identical to the overall 83.4%. These ARE the core of his system.
+
+
+================================================================================
+SECTION 2: DETAILED NOTES BY SUB-TYPE
+================================================================================
+
+--- REVERSAL (N=5) ---
+
+[2023-08-17] Long  LOSS  RR=-1.000
+Notes: "I guess didn't wait for confirmation of retesting just saw large engulging
+which told me to go long but was wrong."
+>>> LESSON: Entry on raw engulfing without waiting for retest = loss. Confirmation
+    of the retest is required, not just the candle pattern itself.
+
+[2024-03-21] Long  WIN   RR=1.000
+Notes: "Dodgy entry as no clear obvious HTF direction other than perfect retest of
+opening and large price move day before on news which generally wants to retrace
+at least 50%"
+>>> LESSON: Even without clear HTF bias, a PERFECT retest of opening + 50% retrace
+    rule (large news day wants to give back >=50%) can justify a trade.
+    He flags it as "dodgy" — meaning he knows the HTF filter was weak.
+
+[2024-10-07] Short LOSS  RR=-1.000
+Notes: "Trend was up but thought there was room to return to MA on 4hr. Reality
+should have never taken trade as it looked like a correction."
+>>> LESSON: Do NOT fade the trend expecting a return to MA if price structure
+    looks like a continuation correction. The key filter: does it "look like a
+    correction" or a genuine reversal? If unclear, skip.
+
+[2024-11-21] Long  LOSS  RR=-1.000
+Notes: "Got wicked out but got back in then went to target"
+>>> CONTEXT: Initial entry wicked out (stop hit), re-entered, went to target.
+    Counted as -1R loss in log because first entry was stopped. In practice the
+    trade setup was correct; execution cost 1R.
+
+[2024-11-27] Short WIN   RR=1.626
+Notes: "Went over this a few times to understand why didn't work first time then
+really looking at bands and remembering there was a pristine opening below finally
+understood potentially"
+>>> LESSON: The PRISTINE OPENING concept is critical. A prior day's opening level
+    that hasn't been tested acts as strong support/resistance. Combined with band
+    confirmation, this gave the highest reversal win in the dataset at 1.626R.
+
+--- CONTINUATION (N=2) ---
+
+[2023-10-10] Short WIN   RR=1.179
+Notes: "Went in again same day following trend on 3bar, could have just held
+previous trade?"
+>>> CONTEXT: 3-bar entry pattern, same-direction as existing trend, same day as
+    earlier trade. Shows he uses a 3-bar confirmation pattern for continuation entries.
+
+[2024-03-22] Long  WIN   RR=0.995
+Notes: "Caught in swing trade following continuation entry"
+>>> CONTEXT: Standard continuation after initial swing established.
+
+--- REV+CONT (N=5) ---
+
+[2024-09-19] Short LOSS  RR=-1.000
+Notes: "took continuation with expanding bands but it just turned right around
+for a loss"
+>>> LESSON: Expanding bands alone as continuation signal is insufficient — the
+    market can reverse even with bands expanding. Need additional confluence.
+
+[2024-10-15] Long  WIN   RR=1.315
+Notes: "OK dodgy trade possibly was looking for long with htf trend but it went
+through to downside then turned back and did it again I took second rejection as
+a long on engulfing candle (coincidentally turned out to be a W pattern)"
+>>> LESSON: W-PATTERN / double-bottom structure. Price failed at support once,
+    came back, formed second low, engulfing at second rejection = strong entry.
+    Brice calls this "coincidentally" a W pattern but it is his best explicit
+    reversal setup in the dataset.
+
+[2024-10-18] Short WIN   RR=1.011
+Notes: "Going against previous trend but 1hr bands expanding MA turning over so
+looked for continuation entry"
+>>> LESSON: Trend change setup: 1H Bollinger bands expanding + MA (presumably
+    on 1H or 4H) turning over in new direction = valid counter-trend entry.
+    This is the "trend change" variant of continuation.
+
+[2024-11-20] Long  WIN   RR=0.995
+Notes: "probably not valid took continuation due to previous demand zone on
+engulfing risky"
+>>> LESSON: Previous DEMAND ZONE + engulfing candle at zone = valid even for
+    continuation. He doubts it but it works.
+
+[2024-12-12] Long  WIN   RR=0.994
+Notes: "Late in day but three bar entry with long bias off opening would have
+held into next day for swing"
+>>> LESSON: THREE-BAR ENTRY is an explicit confirmation pattern. Long bias is
+    anchored to the opening level. Late-in-day adds swing risk.
+
+--- NOTABLE UNCLASSIFIED WINS (with notes) ---
+
+[2024-10-29] Long  WIN  RR=1.010
+Notes: "Really helpful placing trend lines and using Fib on previous wave to get
+a better picture of what is happening especially in sideway consolidation price action"
+>>> LESSON: In consolidation, FIBONACCI retracements + TREND LINES help identify
+    resolution direction. This is a tool Brice developed during 2024.
+
+[2024-10-31] Short WIN  RR=1.005
+Notes: "LOL moment had an ahaa moment with fibs/trendlines along with DXY open in
+helping with consolidation areas then this trade tested out aha and almost got
+stopped out"
+>>> LESSON: DXY opening level + Fibs + trend lines converging = strong setup
+    signal in consolidation. Almost failed — showing even good setups carry risk.
+
+[2024-08-08] Long  WIN  RR=0.996
+Notes: "Not pristine but took it as attraction trade 4hr ma flat"
+>>> NOTE: Flags that 4H MA flat = "not pristine" setup. He takes it but knows
+    it is below standard. This is a risk flag he acknowledges.
+
+
+================================================================================
+SECTION 3: SETUP CRITERIA EXTRACTED FROM REVERSAL NOTES
+================================================================================
+
+3.1 CANDLE PATTERNS (explicit in notes)
+----------------------------------------
+a) Engulfing candle at key level
+   - Required as ENTRY confirmation, NOT as the signal itself
+   - [2023-08-17 LOSS]: "just saw large engulging" without waiting for retest = fail
+   - [2024-11-20 WIN]:  "previous demand zone on engulfing" = works
+   - [2024-10-15 WIN]:  "engulfing candle on second rejection" in W-pattern = works
+   RULE IMPLICATION: Engulfing alone is not enough. It must be AT a structural level
+   AND preceded by a valid retest of that level.
+
+b) Three-bar / 3-bar entry
+   - [2023-10-10]: "following trend on 3bar"
+   - [2024-12-12]: "three bar entry with long bias off opening"
+   RULE IMPLICATION: 3-bar pattern (presumably: bar 1 sets high/low, bar 2 pulls back,
+   bar 3 enters in trend direction) is used for both reversals and continuations.
+
+c) W-pattern / double bottom/top
+   - [2024-10-15]: first touch failed, second touch + engulfing = entry
+   RULE IMPLICATION: Do not enter on first test of a level. Wait for second test
+   with engulfing confirmation = higher-probability entry.
+
+3.2 ZONE/LEVEL REFERENCES (explicit in notes)
+----------------------------------------------
+a) DXY Opening Level / "Pristine Opening"
+   - Most frequently referenced level
+   - [2024-11-27]: "pristine opening below finally understood" — the day's or prior
+     session's opening price acted as support
+   - [2024-10-31]: "DXY open in helping with consolidation areas"
+   - [2024-12-12]: "long bias off opening"
+   - [2024-03-21]: "perfect retest of opening"
+   RULE IMPLICATION: The DXY daily open (or London session open) is the PRIMARY
+   support/resistance level. "Pristine" = a clean, untested opening level.
+
+b) 4-Hour Moving Average (as structural zone)
+   - [2024-10-07 LOSS]: "room to return to MA on 4hr" — tried to fade trend to MA = fail
+   - [2024-08-08]: "4hr ma flat" = caution, not pristine
+   - [2024-08-28 LOSS]: "HTF was above MA on both" — consolidation around MA = ambiguous
+   RULE IMPLICATION: 4H MA is used as a support/resistance level, but ONLY when
+   price has momentum away from it and is clearly above/below (not flat/consolidating).
+
+c) Previous Demand Zone
+   - [2024-11-20]: "previous demand zone on engulfing"
+   RULE IMPLICATION: Historical demand/supply zones from prior price action are valid
+   level references, especially when engulfing confirmation occurs at the zone.
+
+d) Fibonacci Retracement Levels
+   - [2024-10-29, 2024-10-31]: Fibs added to toolkit in Oct 2024
+   - Used specifically in CONSOLIDATION to identify breakout direction
+   - Also used with trend lines for structure mapping
+
+3.3 HTF CONTEXT AND BIAS (explicit in notes)
+--------------------------------------------
+a) 4H price vs MA
+   - "HTF was above MA on both [timeframes]" = bullish bias
+   - 4H MA flat = neutral/no-trade signal
+   - 4H MA turning over = trend change signal
+   RULE: Both 1H and 4H must have price clearly on same side of MA for strong bias.
+
+b) 1H Bollinger Bands
+   - "1hr bands expanding MA turning over" [2024-10-18] = trend change confirmation
+   - "took continuation with expanding bands" [2024-09-19 LOSS] — bands alone insufficient
+   - "pristine opening below" combined with bands [2024-11-27 WIN]
+   RULE: 1H Bollinger bands expanding = momentum confirmation, but requires level confluence.
+   Bands expanding in direction of trade + price at structural level = valid entry.
+   Bands expanding alone (without level reference) = insufficient for reversal entry.
+
+c) HTF trend direction
+   - "with htf trend" [2024-10-15]
+   - "Going against previous trend but 1hr bands expanding MA turning over" [2024-10-18]
+   RULE: Preferred trades are WITH HTF trend. Counter-trend entries require bands +
+   MA turn as additional evidence of genuine trend change.
+
+3.4 TIME OF DAY (from entry time data)
+---------------------------------------
+Entry time distribution across all 181 non-attraction trades:
+  06:00 UTC (pre-London): N=5,  WR=100%
+  07:00 UTC:              N=64, WR=86%  <- PRIMARY WINDOW
+  08:00 UTC:              N=35, WR=77%
+  09:00 UTC:              N=15, WR=80%
+  10:00 UTC:              N=5,  WR=100%
+  11:00 UTC:              N=5,  WR=100%
+  12:00 UTC:              N=7,  WR=100%
+  13:00 UTC (NY open):    N=21, WR=71%  <- Lower WR
+  14:00 UTC:              N=6,  WR=67%  <- Lowest WR
+  15:00+ UTC:             N=14, WR=~83%
+
+Time window grouping:
+  Early London 06-08 UTC: N=104, WR=83.7%
+  Mid London   09-12 UTC: N=32,  WR=90.6%  <- Best window
+  NY session   13-17 UTC: N=41,  WR=75.6%  <- Weakest window
+
+Key notes on timing:
+  [2024-07-22 LOSS]: "wasn't confident in direction and it was late in the day"
+  [2024-04-15 WIN]:  "If I take too late in the day it tend to become a swing trade"
+  [2024-11-14 WIN]:  "a bit late in the day" (flagged as suboptimal)
+  [2024-12-12 WIN]:  "Late in day but three bar entry with long bias"
+
+RULE IMPLICATION: Primary entry window is 07:00-09:00 UTC (first 2 hours of London).
+Mid-London (09-12) performs best but has fewer opportunities. NY session (13+) shows
+lower WR and late-day entries carry swing risk. Our backtest's 07:30-12:00 window
+captures his primary zone. Notably, 41 trades (23%) are outside our coded window —
+but their WR (82.5%) is nearly identical to inside our window (83.9%).
+
+3.5 DISTANCE FROM ZONE (explicit mentions)
+------------------------------------------
+[2023-11-23 WIN]: "was less than 1 pip away think I can take this"
+  -> He checks proximity to the opening level. <1 pip away = valid entry.
+  -> This implies he has a maximum distance filter (probably <5-10 pips / 50-100 pts)
+
+[2024-03-21 WIN]: "perfect retest of opening" = direct touch of opening level
+
+RULE IMPLICATION: He wants price to be AT or within a very tight range of the opening
+level. Not within 500 pts like our algo — within essentially 0-10 pips (0-100 pts).
+This is the TIGHTEST possible filter and probably explains much of the WR difference.
+
+
+================================================================================
+SECTION 4: TRADES WHERE BRICE NOTED POOR SETUP / SHOULD HAVE SKIPPED
+================================================================================
+
+These are the most instructive notes for understanding his filter criteria:
+
+[2024-07-25 LOSS] "Terrible entry at the time did think it was going down but with
+hindsight price action was just going sideways so was no way of any certainty"
+>>> FILTER: SIDEWAYS / CONSOLIDATING MARKET = DO NOT TRADE
+
+[2024-10-07 LOSS] "Trend was up but thought there was room to return to MA on 4hr.
+Reality should have never taken trade as it looked like a correction."
+>>> FILTER: If price is in a CORRECTION PHASE (pullback against trend), do not
+    take reversal trades expecting return to MA. Wait for continuation signal instead.
+
+[2024-07-22 LOSS] "wasn't confident in the direction and it was late in the day so
+probably would have been better to leave it"
+>>> FILTERS: (1) Low confidence = skip. (2) Late in day = swing risk = skip.
+    BOTH flags were present = should have been a definite skip.
+
+[2024-08-28 LOSS -1.743R] "tricky but HTF was above MA on both so though bullish
+rather than bearish coming out of consolidation area"
+>>> FILTER: When price is in a CONSOLIDATION AREA (not at a clear level), even if
+    HTF appears bullish, the trade is low-quality. The -1.743R loss (oversized stop)
+    adds to the damage. He acknowledges "tricky" = caution signal.
+
+[2023-12-01 LOSS] "So all evidence said going up and went completely the other
+direction no idea why no news or anything"
+>>> CONTEXT: Not a filter failure — genuinely no signal this would fail. These
+    losses exist in any system. Interestingly, this type of note appears only ONCE,
+    suggesting most losses are ones he could have filtered.
+
+[2023-08-17 LOSS] "I guess didn't wait for confirmation of retesting"
+>>> FILTER: Entry confirmation is REQUIRED. Raw candle pattern without retest = fail.
+
+[2023-10-26 LOSS] "Probably wouldn't have held into news but this is what stopped
+out after what looked like consolidation"
+>>> FILTER: (1) News events override setups. (2) Consolidation before continuation
+    = ambiguous, reduce position size or skip.
+
+[2024-09-19 LOSS] "took continuation with expanding bands but it just turned right
+around for a loss"
+>>> FILTER: Expanding bands alone (without a clear level/opening reference) is not
+    a standalone entry signal for continuation.
+
+[2024-10-25 LOSS] "Totally misread this one just went opposite direction"
+>>> CONTEXT: No structural filter failed — he acknowledges misread. Inherent noise.
+
+[2024-12-02 LOSS] "Just short of take profit by 2 pips but let it run turned into
+swing eventually stopped out"
+>>> FILTER: Do NOT convert a near-complete 1R trade into a swing position. Take
+    the 1R exit. He flags this as a recurring mistake ("did exactly the same thing previously").
+
+
+================================================================================
+SECTION 5: COMPARISON TO PYTHON BACKTEST REV RULES
+================================================================================
+
+OUR REV BACKTEST PARAMETERS
+  Entry trigger : London has tested zone + big candle (body >= 200 pts, range >= 300 pts)
+  Zone filter   : Price within 500 pts of zone edge
+  HTF filter    : 1H + 4H EMA20 > EMA50 (long) or < (short)
+  Time window   : 07:30-12:00 UTC only
+  Stop           : Most recent 20-bar swing pivot
+  Target         : Entry + (Entry - SL), 1:1 R:R
+  News filter    : NONE
+  REV results    : N=206, WR=53.2%, NetR=+37.1R, PF=1.395
+
+BRICE NON-ATTRACTION RESULTS
+  N=181, WR=83.4%, NetR=+132.4R, PF=5.509
+
+
+CRITERION-BY-CRITERION COMPARISON
+-----------------------------------
+
+1. ENTRY SIGNAL
+   Our algo : Big candle (body >= 200 pts, range >= 300 pts) fires the signal
+   Brice    : Engulfing candle at the opening level, OR 3-bar pattern, OR W-pattern
+              (second rejection with engulfing at same level)
+   Gap      : Our big-candle trigger fires on momentum INTO a level, not ON the level.
+              Brice waits for the reversal confirmation AFTER price reaches the level.
+              He explicitly notes [2023-08-17] that taking the big candle BEFORE the
+              retest confirmation is a mistake.
+
+2. ZONE / LEVEL REFERENCE
+   Our algo : Supply/demand zone library, price within 500 pts
+   Brice    : Primarily uses the DXY SESSION OPENING LEVEL (London or daily open)
+              Also uses 4H MA and historical demand zones as secondary levels.
+   Gap      : Our zones are static supply/demand boxes. His primary reference is the
+              DAILY/LONDON OPEN — a dynamic, session-specific level. The "pristine
+              opening" concept means an untouched opening level is the strongest setup.
+              His entries appear to be within 0-10 pips (0-100 pts) of the opening,
+              far tighter than our 500-pt zone proximity filter.
+
+3. HTF FILTER
+   Our algo : 1H + 4H EMA20 vs EMA50 simple crossover
+   Brice    : 4H price above/below MA + 1H Bollinger bands (direction + expansion)
+              + MA slope (turning over = trend change)
+   Gap      : Our EMA cross is binary. Brice's band system distinguishes between:
+              - Trending market (bands expanding, MA sloping) = trade continuation
+              - Consolidating market (bands flat, MA flat) = do NOT trade
+              - Trend change (bands starting to expand in new direction, MA turning) = valid
+              His flat-MA caution flag [2024-08-08: "4hr ma flat = not pristine"] directly
+              filters out consolidation trades that our algo takes blindly.
+
+4. ENTRY CONFIRMATION / CANDLE PATTERN
+   Our algo : No bar-by-bar confirmation — big candle IS the entry trigger
+   Brice    : REQUIRES retest confirmation after level touch:
+              a) Engulfing at the level (body closes convincingly)
+              b) 3-bar entry (pullback-confirm pattern)
+              c) Second rejection (W-pattern — first touch fails, second confirms)
+              He explicitly loses on [2023-08-17] for skipping this confirmation step.
+   Gap      : This is likely the SINGLE BIGGEST contributor to the WR gap. Our algo
+              can fire on a big candle that merely APPROACHES a zone. Brice waits for
+              price to ARRIVE at the opening level, PULL BACK OR CONSOLIDATE there,
+              then confirm with an engulfing or 3-bar pattern.
+
+5. NEWS / MACRO EVENT FILTER
+   Our algo : No news filter at all
+   Brice    : Actively avoids and exits around:
+              - NFP (Non-Farm Payrolls) — exits before or does not enter
+              - CPI / Core Inflation rate releases
+              - ISM Manufacturing/Services
+              - Job openings
+              - Interest rate decisions
+              [2023-10-26 LOSS]: "Probably wouldn't have held into news but this is
+              what stopped out after what looked like consolidation"
+              [2024-04-04 LOSS]: "Got out for a loss on second day before Non farm payrolls"
+   Gap      : Our algo takes trades right through high-impact news events. These add
+              random stops and artificially inflate our loss count and depress WR.
+
+6. CONSOLIDATION / SIDEWAYS MARKET FILTER
+   Our algo : No filter for market regime
+   Brice    : Explicitly skips sideways markets:
+              "price action was just going sideways so was no way of any certainty" [2024-07-25]
+              "HTF above MA on both [but] coming out of consolidation area" [2024-08-28]
+              "what looked like consolidation" before continuation stop [2023-10-26]
+   Gap      : Our algo fires freely in consolidation. Brice would skip these entirely.
+              The Bollinger band width (flat vs expanding) is his mechanical proxy for
+              this discretionary judgment.
+
+7. STOP PLACEMENT
+   Our algo : Most recent 20-bar swing pivot (typically 100-500 pts)
+   Brice    : Structural stop averaging ~2800 pts (range 430-8580 pts)
+              Median stop = 2605 pts
+   Gap      : This is COUNTERINTUITIVE. Brice uses MUCH WIDER stops. However, his
+              WR is dramatically higher — he is not being stopped out by noise.
+              Our algo's tight 20-bar pivot stops may cause premature exits on legitimate
+              setups that then reach target without us. This relationship deserves testing:
+              does widening SL from 20-bar pivot to a structural level (e.g. prior day's
+              high/low) improve our WR?
+
+   Stop size vs WR in Brice's data:
+     < 1500 pts : N=3,  WR=100%
+     1500-2500  : N=76, WR=87%
+     2500-3500  : N=68, WR=79%
+     3500-5000  : N=27, WR=85%
+     > 5000     : N=7,  WR=71%
+   Wider stops (>3500) still achieve 85% WR, suggesting the level choice matters more
+   than the exact stop width.
+
+8. TRADE MANAGEMENT / EXITS
+   Our algo : Fixed 1:1 R:R exit
+   Brice    : Primarily 1:1 but with discretion to hold for swings
+              Most wins cluster at 0.96-1.08R (141/151 wins are in 0.9-1.2R range)
+              Outliers: one 9.047R trade, two >1.5R trades
+   Gap      : Minimal — both systems primarily target ~1R.
+
+9. DIRECTIONALITY / BIAS
+   Our algo : Fires both long and short based on zone + EMA filter
+   Brice    : 100 Long vs 81 Short — slight long bias
+              Long WR  = 82.0%, Short WR = 85.2% (shorts marginally better)
+   Gap      : No significant difference. Both approaches take both directions.
+
+10. TRADE FREQUENCY
+    Our algo : ~6.2 REV trades/month (206 over 33 months)
+    Brice    : ~11.0 non-attr trades/month (181 over 16.4 months)
+    Gap      : Brice trades ~1.77x more frequently yet maintains higher WR.
+               This suggests he is NOT cherry-picking — he trades actively but each
+               trade meets his criteria. Our algo may be MISSING valid setups that
+               occur at the opening level but don't match our zone/candle rules.
+
+
+================================================================================
+SECTION 6: MOST LIKELY REASONS FOR THE 30-POINT WR GAP (83.4% vs 53.2%)
+================================================================================
+
+Ranked by estimated impact on the WR gap:
+
+REASON 1: ENTRY CONFIRMATION FILTER (estimated impact: ~10-15 percentage points)
+  Our algo fires on the big candle itself. Brice waits for:
+    - Price to reach the opening level
+    - A confirming engulfing/3-bar/W-pattern on that level
+  Our algo is entering ON momentum candles that may overshoot and reverse. Brice
+  enters AFTER the momentum has completed and price is consolidating or bouncing
+  at the level. The extra confirmation step filters out overshoot entries.
+
+  Evidence: [2023-08-17] Brice explicitly loses when he skips this step. His note
+  makes clear this is a RULE he violates, not a preference.
+
+REASON 2: ZONE REFERENCE — OPENING LEVEL vs SUPPLY/DEMAND ZONES (~8-12 pts)
+  Brice's primary reference is the DXY SESSION OPEN — a precise, session-specific
+  price. Our algo uses static supply/demand boxes that are wider and more subjective.
+  The opening level provides a single unambiguous reference price that the market
+  regularly respects. Our zones may be misaligned or too wide.
+
+  Evidence: "pristine opening", "perfect retest of opening", "long bias off opening"
+  appear across multiple win trades. The opening level is a consistent anchor.
+
+REASON 3: CONSOLIDATION / SIDEWAYS MARKET FILTER (~6-8 pts)
+  Our algo fires in consolidating conditions. Brice explicitly skips them.
+  In sideways markets, reversals are low-probability because there is no clear
+  structural support for a directional move. Bollinger band width provides a
+  mechanical way to detect these conditions.
+
+  Evidence: [2024-07-25 LOSS], [2024-08-28 LOSS]. Both losses explicitly flagged
+  as consolidation entries.
+
+REASON 4: NEWS EVENT FILTER (~4-6 pts)
+  Our algo takes trades right through NFP, CPI, ISM, etc. These events cause
+  outside-normal-range moves that stop positions with no technical justification.
+  Brice avoids or exits before scheduled events.
+
+  Evidence: [2023-10-26 LOSS], [2024-04-04 LOSS], [2024-07-11] "risky!"
+
+REASON 5: BOLLINGER BAND REGIME FILTER vs EMA CROSS (~3-5 pts)
+  Bollinger bands provide regime information that simple EMA crossovers miss:
+  - Flat/narrow bands = consolidation = skip
+  - Expanding bands in trend direction = valid entry
+  - MA turning + bands starting to expand = trend change valid entry
+  EMA crossovers can give the "right" direction in a flat market with no momentum.
+  Bands require actual price movement to expand, acting as a momentum gate.
+
+REASON 6: STOP PLACEMENT STYLE (~2-4 pts)
+  Our tight 20-bar swing pivot stops likely get hit by noise on otherwise-valid
+  setups. Brice uses wider structural stops (~2600 pts median). This may increase
+  the number of trades that survive initial volatility and reach target.
+  The wider stop does NOT hurt his WR — it appears to help it.
+
+REASON 7: LATE-DAY / CONFIDENCE FILTER (~2-3 pts)
+  Brice skips trades when:
+    - "Wasn't confident in the direction" [2024-07-22]
+    - "Late in the day" (multiple mentions)
+  Our algo has no such filter. It fires at any time within 07:30-12:00 UTC
+  regardless of how clean the setup looks contextually.
+
+SUMMARY OF RECOMMENDED ALGO IMPROVEMENTS
+------------------------------------------
+Priority 1 (HIGH IMPACT): Replace big-candle trigger with opening-level proximity
+  + waiting for confirming bar (engulfing or 3-bar) after level touch.
+  Rule: entry only when price is within X pts of session open AND next bar confirms
+  direction (close past open of prior bar in trade direction).
+
+Priority 2 (HIGH IMPACT): Use session opening price (London open, ~07:00 UTC) as
+  primary level reference instead of or in addition to static supply/demand zones.
+
+Priority 3 (MEDIUM IMPACT): Add Bollinger band width filter. Do not fire when 1H
+  BB width < threshold (flat/consolidating market). Only fire when bands are
+  expanding in the direction of the trade.
+
+Priority 4 (MEDIUM IMPACT): Add news event filter. Skip trades within 1 hour of
+  scheduled high-impact events (NFP, CPI, ISM, interest rate decisions).
+
+Priority 5 (MEDIUM IMPACT): Replace 20-bar swing pivot SL with structural stop
+  (prior session high/low, or prior day's high/low). Test whether wider structural
+  stops improve WR by reducing noise-based exits.
+
+Priority 6 (LOW-MEDIUM IMPACT): Add consolidation detection: if 4H Bollinger bands
+  are flat/narrow (e.g. BB width < 20-period average), suppress signal.
+
+Priority 7 (LOW IMPACT): Add W-pattern validation: if first touch of level resulted
+  in stop-out or failed, the second touch with engulfing is a higher-quality entry.
+
+
+================================================================================
+APPENDIX: MONTHLY PERFORMANCE TABLE
+================================================================================
+
+Month     N   Wins  Losses  WR%
+2023-08  12    11      1    92%
+2023-09   5     3      2    60%
+2023-10  14    12      2    86%
+2023-11  11    10      1    91%
+2023-12   6     4      2    67%
+2024-01   8     6      2    75%
+2024-02   7     7      0   100%
+2024-03   9     9      0   100%
+2024-04  11     9      2    82%
+2024-05  14    11      3    79%
+2024-06  11     9      2    82%
+2024-07   9     7      2    78%
+2024-08  13    12      1    92%
+2024-09  13     9      4    69%  <- Weakest month (consolidation period)
+2024-10  14    12      2    86%
+2024-11  19    16      3    84%
+2024-12   5     4      1    80%
+
+
+================================================================================
+APPENDIX: DIRECTION AND STOP SIZE BREAKDOWN
+================================================================================
+
+Direction:
+  Long  : N=100, Wins=82, Losses=18, WR=82.0%, NetR=+72.6R, PF=4.875
+  Short : N=81,  Wins=69, Losses=12, WR=85.2%, NetR=+59.8R, PF=6.627
+
+Stop size (pip risk in pts):
+  Mean stop   : 2827 pts  (wins: 2776 pts, losses: 3082 pts)
+  Median stop : 2605 pts
+  Min stop    :  430 pts
+  Max stop    : 8580 pts
+
+  By bucket:
+  < 1500 pts : N=3,  WR=100%
+  1500-2500  : N=76, WR=87%
+  2500-3500  : N=68, WR=79%
+  3500-5000  : N=27, WR=85%
+  > 5000 pts : N=7,  WR=71%
+
+Win RR distribution:
+  Min   : 0.000R (held through news, exited tiny)
+  Max   : 9.047R (outlier swing hold)
+  Mean  : 1.072R
+  141/151 wins (93%) are in the 0.9-1.2R range = near-perfect 1:1 exits
+  Only 5 wins > 1.5R
+
+
+================================================================================
+END OF ANALYSIS
+================================================================================
+File saved: 2026-05-21
+Source: Brice Strebler DXY - Strategy Results.xlsx, Forex sheet
+Analyst: Claude Code automated analysis

@@ -2,420 +2,433 @@
 indicator("DXY Trade Alert", overlay=true, max_labels_count=500, max_lines_count=500)
 
 // ─── INPUTS ──────────────────────────────────────────────────────────────────
-grp_zone = "Signal Zones"
+grp_zone = "Signal Parameters"
 grp_sess = "Session Window (GMT)"
 grp_sig  = "Entry Signals"
-grp_htf  = "HTF Bias (EMA)"
+grp_htf  = "HTF Bias (BB Regime)"
 grp_disp = "Display"
 
 // Attraction
-attr_enabled     = input.bool(true,  "Enable Attraction Trade Alerts",           group=grp_zone)
-attr_min_gap     = input.int(150,    "Attraction — Min Gap at London Open (pts)", group=grp_zone, minval=50,  step=25,  tooltip="Zone must be at least this many pts away from near edge at London open (07:30). Confirms Tokyo left the zone pristine with meaningful separation before the London retracement. Backtest: 150 pts.")
-attr_approach    = input.int(150,    "Attraction — Min 3-Bar Approach (pts)",    group=grp_zone, minval=50,  step=25,  tooltip="Minimum net move toward the zone over the prior 3 bars. Confirms impulsive retracement momentum. Backtest: 150 pts.")
-attr_min_reward  = input.int(150,    "Attraction — Min Reward to TP (pts)",      group=grp_zone, minval=50,  step=25,  tooltip="Minimum distance from entry close to TP. Ensures worthwhile trade. Backtest: 150 pts.")
-attr_near_buffer = input.int(50,     "Attraction — TP Buffer Past Near Edge (pts)", group=grp_zone, minval=0, step=10, tooltip="TP is placed this many pts past the near zone edge (zone_bottom for long, zone_top for short). 50 pts gives the trade a little room to confirm zone interaction. Backtest winner: 50 pts vs full gap fill.")
-zone_min_gap     = input.int(30,     "Zone — Min Gap to use open gap (pts)",     group=grp_zone, minval=5,  step=5,   tooltip="If gap between prior close and 23:45 open is smaller than this, the 23:45 candle body is used as the zone instead.")
-zone_min_width   = input.int(150,    "Zone — Min Width (pts)",                   group=grp_zone, minval=50, step=25,  tooltip="Minimum zone width (zone_top - zone_bottom). Filters out trivially narrow zones.")
-cooldown_bars    = input.int(8,      "Signal Cooldown (bars per zone)",           group=grp_zone, minval=1, maxval=50, tooltip="Suppresses repeat signals of the same type from the same zone for this many bars. 8 bars = 2 hours on 15m chart.")
+attr_enabled        = input.bool(true,  "Enable Attraction Trade Alerts",                    group=grp_zone)
+attr_min_gap        = input.int(150,    "Attraction — Min Gap at London Open (pts)",          group=grp_zone, minval=50,  step=25,  tooltip="London open price must differ from the prior bar's close by at least this many pts. Confirms a meaningful overnight gap exists to fill. Brice/Ash: ~150 pts minimum.")
+attr_min_reward     = input.int(100,    "Attraction — Min Reward to TP (pts)",                group=grp_zone, minval=50,  step=25,  tooltip="Minimum distance (pts) from entry close to TP at the time of the signal.")
+attr_near_buf       = input.int(50,     "Attraction — Near-Edge TP Buffer (pts)",             group=grp_zone, minval=0,   step=10,  tooltip="When near-edge TP mode is on, TP is set just past the London open price by this many pts. Reduces exposure to full gap-fill failure.")
+attr_use_near_tp    = input.bool(true,  "Attraction — Use Near-Edge TP (vs full gap fill)",   group=grp_zone,                      tooltip="On: TP = London open ± near buffer. Off: TP = prior session close (full gap fill).")
+attr_max_prev_range = input.int(2000,   "Attraction — Max Prior Session Range (pts)",         group=grp_zone, minval=500, step=250, tooltip="Skip attraction trades if the prior session had a very large range. Prevents trading into strong momentum from the previous day. Brice: skip when 'so much momentum from previous day'.")
 
 // Reversal
-rev_enabled   = input.bool(true, "Enable Reversal Trade Alerts",              group=grp_zone)
-rev_max_dist  = input.int(500,   "Reversal — Max Distance from Zone (pts)",   group=grp_zone, minval=50,  step=50,  tooltip="Reversal signal only fires when price is within this many pts of the zone edge.")
-rev_min_body  = input.int(200,   "Reversal — Min Signal Candle Body (pts)",   group=grp_zone, minval=0,  step=25,  tooltip="Filters weak reversal candles. Backtest: body >= 200 pts. Set 0 to disable.")
-rev_min_range = input.int(400,   "Reversal — Min Signal Candle Range (pts)",  group=grp_zone, minval=0,  step=25,  tooltip="Filters narrow-range reversal candles. Backtest: range >= 400 pts. Set 0 to disable.")
-rev_min_sl    = input.int(3000,  "Reversal — Min Structural SL (pts)",        group=grp_zone, minval=500, step=500, tooltip="Minimum SL distance for reversal entries. Backtest: structural SL >= 3000 pts = 77%+ WR.")
+rev_enabled    = input.bool(true, "Enable Reversal Trade Alerts",                             group=grp_zone)
+rev_proximity  = input.int(150,   "Reversal — Max Distance from Opening Level (pts)",         group=grp_zone, minval=25,  step=25,  tooltip="Reversal entry fires when price is within this many pts of the London session opening price. Brice/Ash: entries within ~10 pips (100 pts) of the opening level.")
+rev_min_move   = input.int(100,   "Reversal — Min Move Away from Opening (pts)",              group=grp_zone, minval=25,  step=25,  tooltip="Price must have moved at least this many pts away from the London open before a reversal is valid. Ensures there is a real move to reverse.")
+struct_sl_buf  = input.int(50,    "Reversal — Structural SL Buffer (pts)",                    group=grp_zone, minval=0,   step=10,  tooltip="Buffer added beyond the prior session high/low for the structural stop. Prevents stop being triggered by identical price touching the prior extreme.")
+max_sl_pts     = input.int(3000,  "Reversal — Max SL Distance (pts)",                         group=grp_zone, minval=500, step=250, tooltip="Hard cap on SL distance. If prior session range is very large, SL is capped at this distance from entry. Brice/Ash sweet spot: 1500–2600 pts.")
 
 // Session
-entry_start_h = input.int(7,  "Entry Start Hour (GMT)",              group=grp_sess, minval=0, maxval=23)
-entry_start_m = input.int(30, "Entry Start Minute (GMT)",            group=grp_sess, minval=0, maxval=59)
-entry_end_h   = input.int(19, "Entry End Hour (GMT)",                group=grp_sess, minval=0, maxval=23)
-entry_end_m   = input.int(30, "Entry End Minute (GMT)",              group=grp_sess, minval=0, maxval=59)
-rev_end_h     = input.int(12, "Reversal — Entry End Hour (GMT)",     group=grp_sess, minval=8, maxval=19, tooltip="Reversals fire only during London morning. All winning reversals in backtest entered before 12:00 GMT.")
-rev_end_m     = input.int(0,  "Reversal — Entry End Min (GMT)",      group=grp_sess, minval=0, maxval=59)
-monday_start  = input.int(6,  "Monday Start Hour (GMT)",             group=grp_sess, minval=0, maxval=23, tooltip="Monday session starts at 06:30 GMT due to weekend gap dynamics.")
-japan_end_h   = input.int(6,  "Japan Session End Hour (GMT)",        group=grp_sess, minval=1, maxval=8)
+entry_start_h = input.int(7,  "Entry Start Hour (GMT)",             group=grp_sess, minval=0, maxval=23)
+entry_start_m = input.int(0,  "Entry Start Minute (GMT)",           group=grp_sess, minval=0, maxval=59)
+entry_end_h   = input.int(19, "Entry End Hour (GMT)",               group=grp_sess, minval=0, maxval=23)
+entry_end_m   = input.int(30, "Entry End Minute (GMT)",             group=grp_sess, minval=0, maxval=59)
+rev_end_h     = input.int(12, "Reversal — Entry End Hour (GMT)",    group=grp_sess, minval=6, maxval=19, tooltip="Reversals fire only during London morning session. Brice/Ash: primary window 07:00–12:00 GMT.")
+rev_end_m     = input.int(0,  "Reversal — Entry End Min (GMT)",     group=grp_sess, minval=0, maxval=59)
+monday_start  = input.int(6,  "Monday Start Hour (GMT)",            group=grp_sess, minval=0, maxval=23, tooltip="Monday session starts at 06:30 GMT.")
+japan_end_h   = input.int(6,  "Japan Session End Hour (GMT)",       group=grp_sess, minval=1, maxval=8)
 
 // Candle patterns
-use_engulf    = input.bool(true,  "Engulfing Candle",        group=grp_sig)
-use_pin       = input.bool(true,  "Pin Bar",                 group=grp_sig)
-use_3bar      = input.bool(true,  "3-Bar Reversal",          group=grp_sig)
-pin_wick_mult = input.float(2.0,  "Pin Bar — Min Wick:Body", group=grp_sig, minval=1.0, step=0.25)
+use_engulf    = input.bool(true,  "Engulfing Candle",                group=grp_sig)
+use_pin       = input.bool(true,  "Pin Bar (directional)",           group=grp_sig, tooltip="Bullish pin bar (long lower wick) only for LONG entries. Bearish pin bar (long upper wick) only for SHORT entries. Direction comes from the wick, not candle colour.")
+use_3bar      = input.bool(true,  "3-Bar Reversal",                  group=grp_sig)
+pin_wick_mult = input.float(2.0,  "Pin Bar — Min Wick:Body",         group=grp_sig, minval=1.0, step=0.25)
 
-// HTF bias — EMA for reversal gate
-ema_fast_len  = input.int(20, "EMA Fast Length (1H + 4H)",           group=grp_htf, minval=5,  maxval=100, tooltip="Fast EMA length for 1H and 4H bias. Reversal LONG requires fast > slow on both timeframes. Backtest: EMA20.")
-ema_slow_len  = input.int(50, "EMA Slow Length (1H + 4H)",           group=grp_htf, minval=10, maxval=200, tooltip="Slow EMA length for 1H and 4H bias. Backtest: EMA50.")
+// HTF BB Regime (replaces EMA cross)
+bb_period     = input.int(20,    "BB Period",                        group=grp_htf, minval=5,  maxval=50,  tooltip="Bollinger Band MA period. Used on 1H and 4H timeframes. Standard: 20.")
+bb_std_mult   = input.float(2.0, "BB Std Dev Multiplier",           group=grp_htf, minval=0.5, step=0.25, tooltip="Standard deviations for BB width. Standard: 2.0.")
+bb_lookback   = input.int(20,    "BB Width Lookback (flat detection)", group=grp_htf, minval=5, maxval=50, tooltip="Bars to average BB width over for expansion detection. If current width > this average → expanding (trending). If below → flat (consolidating).")
 
 // Display
-show_zone_box  = input.bool(true, "Show Open Zone (shaded box)",    group=grp_disp)
-show_session   = input.bool(true, "Show London Session Background", group=grp_disp)
-show_exit_lvls = input.bool(true, "Show Exit TP/SL Lines",          group=grp_disp, tooltip="Plots the DXY TP and SL levels after an entry signal fires. Lines disappear once the level is hit.")
+show_open_lvl  = input.bool(true, "Show London Opening Level",       group=grp_disp, tooltip="Horizontal line at today's London session open price. Primary reference level for entries.")
+show_prev_hl   = input.bool(true, "Show Prior Day High/Low",         group=grp_disp, tooltip="Dashed lines at prior calendar day's high and low. These are used as structural SL reference levels.")
+show_session   = input.bool(true, "Show London Session Background",  group=grp_disp)
+show_exit_lvls = input.bool(true, "Show Exit TP/SL Lines",           group=grp_disp)
 
 // ─── SESSION TIMING ──────────────────────────────────────────────────────────
 h        = hour(time, "UTC")
 m        = minute(time, "UTC")
 is_mon   = dayofweek(time, "UTC") == dayofweek.monday
-start_min = (is_mon ? monday_start : entry_start_h) * 60 + entry_start_m
-curr_min  = h * 60 + m
-end_min   = entry_end_h * 60 + entry_end_m
+start_min  = (is_mon ? monday_start : entry_start_h) * 60 + (is_mon ? 30 : entry_start_m)
+curr_min   = h * 60 + m
+end_min    = entry_end_h   * 60 + entry_end_m
+rev_end_min= rev_end_h     * 60 + rev_end_m
 in_sess     = curr_min >= start_min and curr_min <= end_min
-rev_end_min = rev_end_h * 60 + rev_end_m
 in_rev_sess = curr_min >= start_min and curr_min <= rev_end_min
-in_japan = (h == 23 and m >= 45) or (h >= 0 and h < japan_end_h)
-is_2345  = h == 23 and m == 45
+in_japan    = (h == 23 and m >= 45) or (h >= 0 and h < japan_end_h)
 
-// ─── DXY OPEN ZONE ───────────────────────────────────────────────────────────
-// Zone forms at 23:45 from the gap between prior close and Japan open.
-// If gap < zone_min_gap pts, the 23:45 candle body is used instead.
-//
-// attr_pristine : set ONCE at London open — True if price is >= attr_min_gap pts
-//                 outside the near zone edge, confirming Tokyo left the zone intact.
-// london_touched: True once any London bar's range touches the near zone edge.
-//                 ATTR fires only while london_touched = false (approach phase).
-//                 REV fires once london_touched = true (zone has been tested).
+// London open bar: 07:00 UTC (Tue–Fri) or 06:30 UTC (Monday)
+is_london_open_bar = not in_japan and
+     ((not is_mon and curr_min == entry_start_h * 60 + entry_start_m) or
+      (is_mon      and curr_min == monday_start  * 60 + 30))
 
-var float zone_top      = na
-var float zone_bottom   = na
-var bool  japan_bull    = false
-var bool  zone_pristine = false   // used only for zone colour display
-var bool  attr_pristine = false   // set at London open; price >= attr_min_gap from near edge
-var bool  london_touched = false  // True once London bar touches near zone edge
+// ─── PRIOR DAY HIGH / LOW (structural SL reference) ─────────────────────────
+// Tracks rolling intraday H/L and hands off to pd_high/pd_low at each new UTC day.
+var float today_high = na
+var float today_low  = na
+var float pd_high    = na   // prior calendar day high
+var float pd_low     = na   // prior calendar day low
+var float pd_range   = 0.0  // prior calendar day range (pts)
 
-// Cooldown tracking
-var int last_attr_long_bar  = na
-var int last_attr_short_bar = na
-var int last_rev_long_bar   = na
-var int last_rev_short_bar  = na
+bool is_new_day = not na(time) and ta.change(dayofmonth(time, "UTC")) != 0
 
-if is_2345
-    bool  prior_is_line      = math.abs(close[1] - open[1]) * 10000 < 10
-    float prior_candle_close = prior_is_line ? close[2] : close[1]
-    float japan_open         = open
-    float gap_size           = math.abs(prior_candle_close - japan_open) * 10000
-    if gap_size >= zone_min_gap
-        zone_top    := math.max(prior_candle_close, japan_open)
-        zone_bottom := math.min(prior_candle_close, japan_open)
-        japan_bull  := japan_open > prior_candle_close
-    else
-        zone_top    := math.max(japan_open, close)
-        zone_bottom := math.min(japan_open, close)
-        japan_bull  := close > japan_open
-    zone_pristine   := true
-    attr_pristine   := false   // evaluated fresh at London open
-    london_touched  := false
-    last_attr_long_bar  := na
-    last_attr_short_bar := na
-    last_rev_long_bar   := na
-    last_rev_short_bar  := na
+if is_new_day
+    if not na(today_high)
+        pd_high  := today_high
+        pd_low   := today_low
+        pd_range := (today_high - today_low) * 10000
+    today_high := high
+    today_low  := low
+else
+    today_high := na(today_high) ? high : math.max(today_high, high)
+    today_low  := na(today_low)  ? low  : math.min(today_low,  low)
 
-// ─── ZONE STATE: attr_pristine at London open, london_touched each bar ────────
-london_open_bar = not in_japan and not na(zone_top) and curr_min == start_min
+// ─── LONDON OPEN LEVEL + ATTR GAP ────────────────────────────────────────────
+// london_open_price : OPEN of the first London bar each day (primary REV/ATTR level)
+// attr_gap_target   : close of the bar before London opened (ATTR gap-fill TP)
+// attr_gap_pts      : signed gap — +ve = London opened ABOVE prior close (gap up → ATTR SHORT)
+//                                   -ve = London opened BELOW prior close (gap down → ATTR LONG)
 
-if london_open_bar
-    // Set attr_pristine: True if price is >= attr_min_gap pts from near zone edge
-    if not japan_bull
-        attr_pristine := (zone_bottom - close) * 10000 >= attr_min_gap
-    else
-        attr_pristine := (close - zone_top) * 10000 >= attr_min_gap
-    london_touched := false   // reset: no London touch yet today
+var float london_open_price  = na
+var float attr_gap_target    = na
+var float attr_gap_pts       = 0.0   // signed, in pts
+var float max_move_up        = 0.0   // max pts ABOVE london_open_price this session
+var float max_move_down      = 0.0   // max pts BELOW london_open_price this session
+var bool  rev_traded         = false
+var bool  attr_traded        = false
 
-// Update london_touched: any London bar whose range reaches the near zone edge
-if not in_japan and not london_touched and not na(zone_top)
-    if (not japan_bull and high >= zone_bottom) or (japan_bull and low <= zone_top)
-        london_touched := true
+if is_london_open_bar
+    london_open_price := open
+    attr_gap_target   := close[1]                             // last bar before London open
+    attr_gap_pts      := (open - close[1]) * 10000            // +ve = gap up, -ve = gap down
+    max_move_up       := 0.0
+    max_move_down     := 0.0
+    rev_traded        := false
+    attr_traded       := false
 
-// zone_pristine: for display only (orange = untouched, grey = tested)
-if zone_pristine and not na(zone_top) and not is_2345
-    if japan_bull
-        if close < zone_bottom
-            zone_pristine := false
-    else
-        if close > zone_top
-            zone_pristine := false
+// Update max move from opening each bar
+if not na(london_open_price) and not in_japan
+    float above = (close - london_open_price) * 10000
+    if above > 0
+        max_move_up   := math.max(max_move_up,    above)
+    else if above < 0
+        max_move_down := math.max(max_move_down, -above)
 
-// ─── 3-BAR IMPULSIVE APPROACH ────────────────────────────────────────────────
-// Net move toward zone over the prior 3 bars. Confirms retracement has momentum.
-approach_long  = (close - close[3]) * 10000   // upward toward zone_bottom (not japan_bull)
-approach_short = (close[3] - close) * 10000   // downward toward zone_top  (japan_bull)
-impulsive_l    = not japan_bull and approach_long  >= attr_approach
-impulsive_s    = japan_bull     and approach_short >= attr_approach
+// ─── HTF BB REGIME (replaces EMA20/50 cross) ─────────────────────────────────
+// Regime values:  +1 = bands EXPANDING, MA sloping UP   → valid for REV LONG
+//                 -1 = bands EXPANDING, MA sloping DOWN  → valid for REV SHORT
+//                  0 = bands FLAT / contracting          → skip REV; ATTR allowed
 
-// ─── HTF EMA BIAS (1H + 4H) ─ Reversal gate ─────────────────────────────────
-// Both 1H and 4H EMA fast > slow required for REV LONG.
-// Both 1H and 4H EMA fast < slow required for REV SHORT.
-// Attraction trades do NOT use the EMA gate (backtest: no filter needed for ATTR).
-_1h_ema_fast = request.security(syminfo.tickerid, "60",  ta.ema(close, ema_fast_len), lookahead=barmerge.lookahead_off)
-_1h_ema_slow = request.security(syminfo.tickerid, "60",  ta.ema(close, ema_slow_len), lookahead=barmerge.lookahead_off)
-_4h_ema_fast = request.security(syminfo.tickerid, "240", ta.ema(close, ema_fast_len), lookahead=barmerge.lookahead_off)
-_4h_ema_slow = request.security(syminfo.tickerid, "240", ta.ema(close, ema_slow_len), lookahead=barmerge.lookahead_off)
-rev_bias_bull = _1h_ema_fast > _1h_ema_slow and _4h_ema_fast > _4h_ema_slow
-rev_bias_bear = _1h_ema_fast < _1h_ema_slow and _4h_ema_fast < _4h_ema_slow
+// 1H Bollinger Band regime
+_1h_bb_basis  = request.security(syminfo.tickerid, "60",  ta.sma(close, bb_period),                                         lookahead=barmerge.lookahead_off)
+_1h_bb_basis3 = request.security(syminfo.tickerid, "60",  ta.sma(close, bb_period)[3],                                      lookahead=barmerge.lookahead_off)
+_1h_bb_width  = request.security(syminfo.tickerid, "60",  ta.stdev(close, bb_period) * bb_std_mult * 2.0,                   lookahead=barmerge.lookahead_off)
+_1h_width_avg = request.security(syminfo.tickerid, "60",  ta.sma(ta.stdev(close, bb_period) * bb_std_mult * 2.0, bb_lookback), lookahead=barmerge.lookahead_off)
+_1h_expanding = _1h_bb_width > _1h_width_avg
+_1h_slope_up  = _1h_bb_basis > _1h_bb_basis3
+bb_1h = _1h_expanding ? (_1h_slope_up ? 1 : -1) : 0
+
+// 4H Bollinger Band regime
+_4h_bb_basis  = request.security(syminfo.tickerid, "240", ta.sma(close, bb_period),                                         lookahead=barmerge.lookahead_off)
+_4h_bb_basis3 = request.security(syminfo.tickerid, "240", ta.sma(close, bb_period)[3],                                      lookahead=barmerge.lookahead_off)
+_4h_bb_width  = request.security(syminfo.tickerid, "240", ta.stdev(close, bb_period) * bb_std_mult * 2.0,                   lookahead=barmerge.lookahead_off)
+_4h_width_avg = request.security(syminfo.tickerid, "240", ta.sma(ta.stdev(close, bb_period) * bb_std_mult * 2.0, bb_lookback), lookahead=barmerge.lookahead_off)
+_4h_expanding = _4h_bb_width > _4h_width_avg
+_4h_slope_up  = _4h_bb_basis > _4h_bb_basis3
+bb_4h = _4h_expanding ? (_4h_slope_up ? 1 : -1) : 0
 
 // ─── CANDLE MEASUREMENTS ─────────────────────────────────────────────────────
 body_sz    = math.abs(close - open)
-upper_wick = high - math.max(open, close)
-lower_wick = math.min(open, close) - low
+body_top   = math.max(open, close)
+body_bot   = math.min(open, close)
+upper_wick = high - body_top
+lower_wick = body_bot - low
 cndl_range = high - low
-is_bull    = close > open
-is_bear    = close < open
-rev_candle_ok = (body_sz * 10000 >= rev_min_body) and (cndl_range * 10000 >= rev_min_range)
 
-// ─── ENTRY SIGNALS ───────────────────────────────────────────────────────────
-bull_engulf   = use_engulf and is_bull and not is_bull[1] and close > open[1] and open < close[1] and body_sz >= body_sz[1] * 0.8
-bear_engulf   = use_engulf and is_bear and not is_bear[1] and close < open[1] and open > close[1] and body_sz >= body_sz[1] * 0.8
-bull_pin      = use_pin and lower_wick >= body_sz * pin_wick_mult and upper_wick <= body_sz * 1.5 and cndl_range > 0
-bear_pin      = use_pin and upper_wick >= body_sz * pin_wick_mult and lower_wick <= body_sz * 1.5 and cndl_range > 0
-bar2_range    = math.abs(close[2] - open[2])
-indecision    = body_sz[1] <= bar2_range * 0.5
-bull_3bar     = use_3bar and close[2] < open[2] and indecision and is_bull and close > open[2]
-bear_3bar     = use_3bar and close[2] > open[2] and indecision and is_bear and close < open[2]
-bull_sig      = bull_engulf or bull_pin or bull_3bar
-bear_sig      = bear_engulf or bear_pin or bear_3bar
-bull_sig_name = bull_engulf ? "Engulfing" : bull_pin ? "Pin Bar" : bull_3bar ? "3-Bar Reversal" : "Signal"
-bear_sig_name = bear_engulf ? "Engulfing" : bear_pin ? "Pin Bar" : bear_3bar ? "3-Bar Reversal" : "Signal"
+// ─── ENTRY SIGNALS (improved directional pin bars) ───────────────────────────
+// Pin bars are SHAPE-based, not colour-based:
+//   Bullish pin : long LOWER wick (price rejected lows)  → valid for LONG entries only
+//   Bearish pin : long UPPER wick (price rejected highs) → valid for SHORT entries only
+bull_engulf = use_engulf and close > open and not (close[1] > open[1]) and close > open[1] and open < close[1] and body_sz >= body_sz[1] * 0.8
+bear_engulf = use_engulf and close < open and not (close[1] < open[1]) and close < open[1] and open > close[1] and body_sz >= body_sz[1] * 0.8
+bull_pin    = use_pin and lower_wick >= body_sz * pin_wick_mult and lower_wick >= upper_wick * 1.5 and cndl_range > 0
+bear_pin    = use_pin and upper_wick >= body_sz * pin_wick_mult and upper_wick >= lower_wick * 1.5 and cndl_range > 0
+bar2_range  = math.abs(close[2] - open[2])
+indecision  = body_sz[1] <= bar2_range * 0.5
+bull_3bar   = use_3bar and close[2] < open[2] and indecision and close > open and close > open[2]
+bear_3bar   = use_3bar and close[2] > open[2] and indecision and close < open and close < open[2]
+bull_sig    = bull_engulf or bull_pin or bull_3bar
+bear_sig    = bear_engulf or bear_pin or bear_3bar
+bull_sig_name = bull_engulf ? "Engulfing" : bull_pin ? "Bull Pin Bar" : bull_3bar ? "3-Bar Reversal" : "Signal"
+bear_sig_name = bear_engulf ? "Engulfing" : bear_pin ? "Bear Pin Bar" : bear_3bar ? "3-Bar Reversal" : "Signal"
 
-// ─── ZONE WIDTH ──────────────────────────────────────────────────────────────
-zone_width_pts = not na(zone_top) ? (zone_top - zone_bottom) * 10000 : 0.0
+// ─── DISTANCE FROM OPENING LEVEL ─────────────────────────────────────────────
+float dist_from_open = not na(london_open_price) ? (close - london_open_price) * 10000 : na
+bool  at_open_level  = not na(dist_from_open) and math.abs(dist_from_open) <= rev_proximity
 
-// ─── ATTRACTION TP / REWARD / SL ─────────────────────────────────────────────
-// TP = near zone edge + attr_near_buffer (e.g. zone_bottom + 50 pts for long)
-// SL = mirrored 1:1 below entry (sl_dist = tp_dist)
-// Min reward: TP must be >= attr_min_reward pts above entry close.
-float attr_tp_long  = not na(zone_bottom) ? zone_bottom + attr_near_buffer / 10000.0 : na
-float attr_tp_short = not na(zone_top)    ? zone_top    - attr_near_buffer / 10000.0 : na
+// ─── REVERSAL TP / SL (structural) ───────────────────────────────────────────
+// SL = prior day low − buffer (long) or prior day high + buffer (short), capped at max_sl_pts
+float rev_long_raw_sl  = na(pd_low)  ? close - max_sl_pts / 10000.0 : pd_low  - struct_sl_buf / 10000.0
+float rev_long_sl      = math.max(rev_long_raw_sl,  close - max_sl_pts / 10000.0)
+float rev_long_sl_d    = close - rev_long_sl
+float rev_long_tp      = close + rev_long_sl_d
 
-float reward_long   = not na(attr_tp_long)  ? (attr_tp_long  - close) * 10000 : 0.0
-float reward_short  = not na(attr_tp_short) ? (close - attr_tp_short) * 10000 : 0.0
+float rev_short_raw_sl = na(pd_high) ? close + max_sl_pts / 10000.0 : pd_high + struct_sl_buf / 10000.0
+float rev_short_sl     = math.min(rev_short_raw_sl, close + max_sl_pts / 10000.0)
+float rev_short_sl_d   = rev_short_sl - close
+float rev_short_tp     = close - rev_short_sl_d
 
-float attr_sl_long  = not na(attr_tp_long)  ? close - (attr_tp_long  - close) : na   // 1:1 mirror
-float attr_sl_short = not na(attr_tp_short) ? close + (close - attr_tp_short)  : na   // 1:1 mirror
-
-// ─── DISTANCES FOR REVERSAL ───────────────────────────────────────────────────
-dist_rev_long  = not na(zone_bottom) ? math.abs(close - zone_bottom) * 10000 : 9999.0
-dist_rev_short = not na(zone_top)    ? math.abs(zone_top - close)    * 10000 : 9999.0
-
-// ─── COOLDOWN GATES ──────────────────────────────────────────────────────────
-cool_attr_long  = na(last_attr_long_bar)  or bar_index - last_attr_long_bar  >= cooldown_bars
-cool_attr_short = na(last_attr_short_bar) or bar_index - last_attr_short_bar >= cooldown_bars
-cool_rev_long   = na(last_rev_long_bar)   or bar_index - last_rev_long_bar   >= cooldown_bars
-cool_rev_short  = na(last_rev_short_bar)  or bar_index - last_rev_short_bar  >= cooldown_bars
-
-// ─── ATTRACTION CONDITIONS ───────────────────────────────────────────────────
-// Fires DURING the London approach, BEFORE the zone is first touched.
-//   attr_pristine    : zone survived Tokyo with >= attr_min_gap pts separation
-//   not london_touched: zone not yet touched this session
-//   impulsive approach: net 3-bar move toward zone >= attr_approach pts
-//   reward_ok        : >= attr_min_reward pts to TP
-//   zone width       : >= zone_min_width pts
-attr_long  = attr_enabled and attr_pristine and not london_touched and in_sess and not in_japan and not japan_bull and bull_sig and impulsive_l and reward_long  >= attr_min_reward and zone_width_pts >= zone_min_width and cool_attr_long
-attr_short = attr_enabled and attr_pristine and not london_touched and in_sess and not in_japan and japan_bull     and bear_sig and impulsive_s and reward_short >= attr_min_reward and zone_width_pts >= zone_min_width and cool_attr_short
+// ─── ATTRACTION TP / SL ───────────────────────────────────────────────────────
+// ATTR LONG : gap down → fill up → TP = prior session close (or near London open)
+// ATTR SHORT: gap up   → fill dn → TP = prior session close (or near London open)
+float attr_long_tp  = attr_use_near_tp ? london_open_price + attr_near_buf / 10000.0 : attr_gap_target
+float attr_short_tp = attr_use_near_tp ? london_open_price - attr_near_buf / 10000.0 : attr_gap_target
+float attr_long_reward  = not na(attr_long_tp)  ? (attr_long_tp  - close) * 10000 : 0.0
+float attr_short_reward = not na(attr_short_tp) ? (close - attr_short_tp) * 10000 : 0.0
+float attr_long_sl_d    = not na(attr_long_tp)  ? attr_long_tp  - close : na
+float attr_short_sl_d   = not na(attr_short_tp) ? close - attr_short_tp : na
+float attr_long_sl      = not na(attr_long_sl_d)  ? close - attr_long_sl_d  : na   // 1:1 mirror
+float attr_short_sl     = not na(attr_short_sl_d) ? close + attr_short_sl_d : na   // 1:1 mirror
 
 // ─── REVERSAL CONDITIONS ─────────────────────────────────────────────────────
-// Fires AFTER London has touched the zone (london_touched = true).
-// 1H + 4H EMA20 > EMA50 bias aligned with direction.
-// Impulsive candle required (body + range thresholds).
-rev_long  = rev_enabled and london_touched and in_rev_sess and not in_japan and bull_sig and rev_bias_bull and dist_rev_long  <= rev_max_dist and rev_candle_ok and cool_rev_long
-rev_short = rev_enabled and london_touched and in_rev_sess and not in_japan and bear_sig and rev_bias_bear and dist_rev_short <= rev_max_dist and rev_candle_ok and cool_rev_short
+// Price moved away from London open then RETURNED to it.
+// BB expanding in trade direction on BOTH 1H and 4H.
+// Confirmation candle AT the opening level.
+rev_long  = rev_enabled and not na(london_open_price) and not rev_traded
+    and in_rev_sess and not in_japan
+    and max_move_down >= rev_min_move      // price moved DOWN from opening
+    and at_open_level                      // returned to opening level
+    and bull_sig                           // bullish confirmation candle
+    and bb_1h == 1 and bb_4h == 1         // BB expanding UP on both TFs
+    and not na(pd_low)
+    and rev_long_sl_d > 0
+
+rev_short = rev_enabled and not na(london_open_price) and not rev_traded
+    and in_rev_sess and not in_japan
+    and max_move_up >= rev_min_move        // price moved UP from opening
+    and at_open_level                      // returned to opening level
+    and bear_sig                           // bearish confirmation candle
+    and bb_1h == -1 and bb_4h == -1       // BB expanding DOWN on both TFs
+    and not na(pd_high)
+    and rev_short_sl_d > 0
+
+// ─── ATTRACTION CONDITIONS ───────────────────────────────────────────────────
+// London opened with a gap. 4H BB must be FLAT (consolidating market).
+// Prior session range must be modest. Confirmation candle in gap-fill direction.
+attr_long  = attr_enabled and not na(london_open_price) and not attr_traded
+    and in_sess and not in_japan
+    and attr_gap_pts < -attr_min_gap       // gap DOWN: opened below prior close
+    and pd_range <= attr_max_prev_range    // prior session not a huge momentum day
+    and bb_4h == 0                         // 4H BB FLAT (consolidating — key filter)
+    and bull_sig                           // bullish confirmation candle (gap fill up)
+    and attr_long_reward >= attr_min_reward
+    and not na(attr_long_sl_d) and attr_long_sl_d > 0
+
+attr_short = attr_enabled and not na(london_open_price) and not attr_traded
+    and in_sess and not in_japan
+    and attr_gap_pts > attr_min_gap        // gap UP: opened above prior close
+    and pd_range <= attr_max_prev_range
+    and bb_4h == 0                         // 4H BB FLAT
+    and bear_sig                           // bearish confirmation candle (gap fill down)
+    and attr_short_reward >= attr_min_reward
+    and not na(attr_short_sl_d) and attr_short_sl_d > 0
+
+// Block further signals once traded
+if rev_long or rev_short
+    rev_traded := true
+if attr_long or attr_short
+    attr_traded := true
 
 // ─── PLOTS ───────────────────────────────────────────────────────────────────
-zone_edge_col = zone_pristine ? color.new(color.orange, 20) : color.new(color.gray, 40)
-zone_fill_col = zone_pristine ? color.new(color.orange, 80) : color.new(color.gray, 85)
+// London opening level (horizontal line, resets each day at London open)
+plot(show_open_lvl and not na(london_open_price) ? london_open_price : na,
+    "London Open Level", color=color.new(color.yellow, 20), linewidth=2, style=plot.style_linebr)
 
-p_top = plot(not na(zone_top)    and show_zone_box ? zone_top    : na, "Zone Top",    color=zone_edge_col, linewidth=2)
-p_bot = plot(not na(zone_bottom) and show_zone_box ? zone_bottom : na, "Zone Bottom", color=zone_edge_col, linewidth=2)
-fill(p_top, p_bot, color=zone_fill_col, title="Open Zone Fill")
+// Prior day high/low reference lines
+plot(show_prev_hl and not na(pd_high) ? pd_high : na,
+    "Prior Day High", color=color.new(color.red, 40), linewidth=1, style=plot.style_linebr)
+plot(show_prev_hl and not na(pd_low) ? pd_low : na,
+    "Prior Day Low",  color=color.new(color.green, 40), linewidth=1, style=plot.style_linebr)
 
 bgcolor(show_session and in_sess ? color.new(color.blue, 93) : na, title="London Session")
 
+// BB regime background hint (subtle)
+bgcolor(bb_4h == 0 ? color.new(color.orange, 97) : na, title="4H BB Flat (ATTR zone)")
+
 // ─── TP / SL LINE REFERENCES ─────────────────────────────────────────────────
-// One pair of lines at a time. Drawn at entry, deleted when exit fires.
 var line tp_line = na
 var line sl_line = na
 
 // ─── LABELS ──────────────────────────────────────────────────────────────────
-lbl_pad = math.max(cndl_range, nz(zone_top, close) * 0.0003)
+lbl_pad = math.max(cndl_range, nz(london_open_price, close) * 0.0003)
 
 if attr_long
-    float rr_pts = reward_long
     label.new(bar_index, low - lbl_pad,
         "ATTRACTION LONG\n" + bull_sig_name +
-        "  |  " + str.tostring(math.round(rr_pts)) + " pts to TP\n" +
-        "TP: " + str.tostring(attr_tp_long, "#.####") + " (zone near edge +50 pts)\n" +
-        "SL: " + str.tostring(attr_sl_long, "#.####") + " (1:1 mirror)\n" +
-        "Approach: " + str.tostring(math.round(approach_long)) + " pts",
+        "  |  Gap down: " + str.tostring(math.round(math.abs(attr_gap_pts))) + " pts\n" +
+        "TP: " + str.tostring(attr_long_tp, "#.####") +
+            (attr_use_near_tp ? " (London open + buf)" : " (prior session close)") + "\n" +
+        "SL: " + str.tostring(attr_long_sl, "#.####") + " (1:1 mirror)\n" +
+        "4H BB: flat  |  Prev range: " + str.tostring(math.round(pd_range)) + " pts",
         color=color.new(color.green, 5), textcolor=color.white,
         style=label.style_label_up, size=size.normal)
     line.delete(tp_line)
     line.delete(sl_line)
-    tp_line := line.new(bar_index, attr_tp_long, bar_index + 1, attr_tp_long,
+    tp_line := line.new(bar_index, attr_long_tp, bar_index + 1, attr_long_tp,
                         extend=extend.right, color=color.new(color.lime, 0),
                         style=line.style_dashed, width=2)
-    sl_line := line.new(bar_index, attr_sl_long, bar_index + 1, attr_sl_long,
+    sl_line := line.new(bar_index, attr_long_sl, bar_index + 1, attr_long_sl,
                         extend=extend.right, color=color.new(color.red, 0),
                         style=line.style_dashed, width=2)
-    last_attr_long_bar := bar_index
 
 if attr_short
-    float rr_pts = reward_short
     label.new(bar_index, high + lbl_pad,
         "ATTRACTION SHORT\n" + bear_sig_name +
-        "  |  " + str.tostring(math.round(rr_pts)) + " pts to TP\n" +
-        "TP: " + str.tostring(attr_tp_short, "#.####") + " (zone near edge -50 pts)\n" +
-        "SL: " + str.tostring(attr_sl_short, "#.####") + " (1:1 mirror)\n" +
-        "Approach: " + str.tostring(math.round(approach_short)) + " pts",
+        "  |  Gap up: " + str.tostring(math.round(attr_gap_pts)) + " pts\n" +
+        "TP: " + str.tostring(attr_short_tp, "#.####") +
+            (attr_use_near_tp ? " (London open - buf)" : " (prior session close)") + "\n" +
+        "SL: " + str.tostring(attr_short_sl, "#.####") + " (1:1 mirror)\n" +
+        "4H BB: flat  |  Prev range: " + str.tostring(math.round(pd_range)) + " pts",
         color=color.new(color.red, 5), textcolor=color.white,
         style=label.style_label_down, size=size.normal)
     line.delete(tp_line)
     line.delete(sl_line)
-    tp_line := line.new(bar_index, attr_tp_short, bar_index + 1, attr_tp_short,
+    tp_line := line.new(bar_index, attr_short_tp, bar_index + 1, attr_short_tp,
                         extend=extend.right, color=color.new(color.lime, 0),
                         style=line.style_dashed, width=2)
-    sl_line := line.new(bar_index, attr_sl_short, bar_index + 1, attr_sl_short,
+    sl_line := line.new(bar_index, attr_short_sl, bar_index + 1, attr_short_sl,
                         extend=extend.right, color=color.new(color.red, 0),
                         style=line.style_dashed, width=2)
-    last_attr_short_bar := bar_index
 
 if rev_long
-    float sl_dist = math.max(close - zone_bottom, rev_min_sl / 10000.0)
-    float tp_lvl  = close + sl_dist
-    float sl_lvl  = close - sl_dist
     label.new(bar_index, low - lbl_pad,
-        "REVERSAL LONG\n" + bull_sig_name + "  |  Zone tested — acts as support\n" +
-        "Zone: " + str.tostring(zone_bottom, "#.####") + " – " + str.tostring(zone_top, "#.####") + "\n" +
-        "TP: " + str.tostring(tp_lvl, "#.####") + "  SL: " + str.tostring(sl_lvl, "#.####") + " (1:1)\n" +
-        "1H/4H EMA bias: bullish",
+        "REVERSAL LONG\n" + bull_sig_name +
+        "  |  Returned to London open after " + str.tostring(math.round(max_move_down)) + " pts down\n" +
+        "Opening level: " + str.tostring(london_open_price, "#.####") + "\n" +
+        "TP: " + str.tostring(rev_long_tp, "#.####") +
+            "  SL: " + str.tostring(rev_long_sl, "#.####") +
+            " (" + str.tostring(math.round(rev_long_sl_d * 10000)) + " pts)\n" +
+        "1H/4H BB: expanding bullish",
         color=color.new(color.teal, 5), textcolor=color.white,
         style=label.style_label_up, size=size.normal)
     line.delete(tp_line)
     line.delete(sl_line)
-    tp_line := line.new(bar_index, tp_lvl, bar_index + 1, tp_lvl,
+    tp_line := line.new(bar_index, rev_long_tp, bar_index + 1, rev_long_tp,
                         extend=extend.right, color=color.new(color.lime, 0),
                         style=line.style_dashed, width=2)
-    sl_line := line.new(bar_index, sl_lvl, bar_index + 1, sl_lvl,
+    sl_line := line.new(bar_index, rev_long_sl, bar_index + 1, rev_long_sl,
                         extend=extend.right, color=color.new(color.red, 0),
                         style=line.style_dashed, width=2)
-    last_rev_long_bar := bar_index
 
 if rev_short
-    float sl_dist = math.max(zone_top - close, rev_min_sl / 10000.0)
-    float tp_lvl  = close - sl_dist
-    float sl_lvl  = close + sl_dist
     label.new(bar_index, high + lbl_pad,
-        "REVERSAL SHORT\n" + bear_sig_name + "  |  Zone tested — acts as resistance\n" +
-        "Zone: " + str.tostring(zone_bottom, "#.####") + " – " + str.tostring(zone_top, "#.####") + "\n" +
-        "TP: " + str.tostring(tp_lvl, "#.####") + "  SL: " + str.tostring(sl_lvl, "#.####") + " (1:1)\n" +
-        "1H/4H EMA bias: bearish",
+        "REVERSAL SHORT\n" + bear_sig_name +
+        "  |  Returned to London open after " + str.tostring(math.round(max_move_up)) + " pts up\n" +
+        "Opening level: " + str.tostring(london_open_price, "#.####") + "\n" +
+        "TP: " + str.tostring(rev_short_tp, "#.####") +
+            "  SL: " + str.tostring(rev_short_sl, "#.####") +
+            " (" + str.tostring(math.round(rev_short_sl_d * 10000)) + " pts)\n" +
+        "1H/4H BB: expanding bearish",
         color=color.new(color.purple, 5), textcolor=color.white,
         style=label.style_label_down, size=size.normal)
     line.delete(tp_line)
     line.delete(sl_line)
-    tp_line := line.new(bar_index, tp_lvl, bar_index + 1, tp_lvl,
+    tp_line := line.new(bar_index, rev_short_tp, bar_index + 1, rev_short_tp,
                         extend=extend.right, color=color.new(color.lime, 0),
                         style=line.style_dashed, width=2)
-    sl_line := line.new(bar_index, sl_lvl, bar_index + 1, sl_lvl,
+    sl_line := line.new(bar_index, rev_short_sl, bar_index + 1, rev_short_sl,
                         extend=extend.right, color=color.new(color.red, 0),
                         style=line.style_dashed, width=2)
-    last_rev_short_bar := bar_index
 
 // ─── ENTRY ALERTS ────────────────────────────────────────────────────────────
-alertcondition(attr_long,  title="DXY Attraction LONG",  message="DXY ATTRACTION LONG\nZone pristine at London open. Impulsive approach in progress.\nTP: zone_bottom + 50 pts (near edge) | SL: 1:1 mirror\nGo LONG: USDCAD, USDJPY | Go SHORT: EURUSD, XAUUSD\nZone bottom: {{plot_1}} | Price: {{close}} | {{time}}")
-alertcondition(attr_short, title="DXY Attraction SHORT", message="DXY ATTRACTION SHORT\nZone pristine at London open. Impulsive approach in progress.\nTP: zone_top - 50 pts (near edge) | SL: 1:1 mirror\nGo SHORT: USDCAD, USDJPY | Go LONG: EURUSD, XAUUSD\nZone top: {{plot_0}} | Price: {{close}} | {{time}}")
-alertcondition(rev_long,   title="DXY Reversal LONG",   message="DXY REVERSAL LONG\nZone tested — acting as support. 1H + 4H EMA bullish.\nGo LONG: USDCAD, USDJPY | Go SHORT: EURUSD, XAUUSD\nZone bottom: {{plot_1}} | Price: {{close}} | {{time}}")
-alertcondition(rev_short,  title="DXY Reversal SHORT",  message="DXY REVERSAL SHORT\nZone tested — acting as resistance. 1H + 4H EMA bearish.\nGo SHORT: USDCAD, USDJPY | Go LONG: EURUSD, XAUUSD\nZone top: {{plot_0}} | Price: {{close}} | {{time}}")
-alertcondition(attr_long or attr_short or rev_long or rev_short, title="DXY Trade Alert - Any Setup", message="DXY TRADE ALERT — Setup detected. Check zone status and direction.\nPrice: {{close}} | {{time}}")
+alertcondition(attr_long,  title="DXY Attraction LONG",  message="DXY ATTRACTION LONG\nGap down at London open. 4H BB flat. Bullish confirmation candle.\nTP: London open + buffer (near-edge) | SL: 1:1 mirror\nGo LONG: USDCAD, USDJPY | Go SHORT: EURUSD, XAUUSD\nLondon open: {{plot_0}} | Price: {{close}} | {{time}}")
+alertcondition(attr_short, title="DXY Attraction SHORT", message="DXY ATTRACTION SHORT\nGap up at London open. 4H BB flat. Bearish confirmation candle.\nTP: London open - buffer (near-edge) | SL: 1:1 mirror\nGo SHORT: USDCAD, USDJPY | Go LONG: EURUSD, XAUUSD\nLondon open: {{plot_0}} | Price: {{close}} | {{time}}")
+alertcondition(rev_long,   title="DXY Reversal LONG",   message="DXY REVERSAL LONG\nPrice returned to London open level. 1H+4H BB expanding bullish.\nStructural SL at prior day low.\nGo LONG: USDCAD, USDJPY | Go SHORT: EURUSD, XAUUSD\nOpening level: {{plot_0}} | Price: {{close}} | {{time}}")
+alertcondition(rev_short,  title="DXY Reversal SHORT",  message="DXY REVERSAL SHORT\nPrice returned to London open level. 1H+4H BB expanding bearish.\nStructural SL at prior day high.\nGo SHORT: USDCAD, USDJPY | Go LONG: EURUSD, XAUUSD\nOpening level: {{plot_0}} | Price: {{close}} | {{time}}")
+alertcondition(attr_long or attr_short or rev_long or rev_short, title="DXY Trade Alert - Any Setup", message="DXY TRADE ALERT — Setup detected. Check direction and levels.\nPrice: {{close}} | {{time}}")
 
 // ─── EXIT TRACKING ────────────────────────────────────────────────────────────
-// Stores DXY TP and SL at the moment each entry signal fires.
-// Monitors price on every subsequent bar and alerts when either level is crossed.
-// Exit all open pair positions (EURUSD, USDJPY, USDCAD, XAUUSD) when alerted.
-// If a new entry fires before the previous trade resolves, levels are updated
-// to the newest signal — in practice only one zone trade is open at a time.
-
 var float exit_tp_lvl    = na
 var float exit_sl_lvl    = na
 var bool  exit_tracking  = false
 var bool  exit_is_long   = true
 var int   exit_entry_bar = -1
 
-// Reset when a new zone forms at 23:45 — prevents stale TP/SL levels from a
-// prior zone's unresolved trade firing spurious exit alerts on a new day.
-if is_2345
+// Reset at London open each day
+if is_london_open_bar
     exit_tracking := false
     line.delete(tp_line)
     line.delete(sl_line)
 
-// Register TP/SL when an entry signal fires
+// Register TP/SL when entry fires
 if attr_long
-    exit_tp_lvl    := attr_tp_long
-    exit_sl_lvl    := attr_sl_long
-    exit_tracking  := true
-    exit_is_long   := true
+    exit_tp_lvl   := attr_long_tp
+    exit_sl_lvl   := attr_long_sl
+    exit_tracking := true
+    exit_is_long  := true
     exit_entry_bar := bar_index
 
 if attr_short
-    exit_tp_lvl    := attr_tp_short
-    exit_sl_lvl    := attr_sl_short
-    exit_tracking  := true
-    exit_is_long   := false
+    exit_tp_lvl   := attr_short_tp
+    exit_sl_lvl   := attr_short_sl
+    exit_tracking := true
+    exit_is_long  := false
     exit_entry_bar := bar_index
 
 if rev_long
-    float _rsd    = math.max(close - zone_bottom, rev_min_sl / 10000.0)
-    exit_tp_lvl   := close + _rsd
-    exit_sl_lvl   := close - _rsd
+    exit_tp_lvl   := rev_long_tp
+    exit_sl_lvl   := rev_long_sl
     exit_tracking := true
     exit_is_long  := true
     exit_entry_bar := bar_index
 
 if rev_short
-    float _rsd    = math.max(zone_top - close, rev_min_sl / 10000.0)
-    exit_tp_lvl   := close - _rsd
-    exit_sl_lvl   := close + _rsd
+    exit_tp_lvl   := rev_short_tp
+    exit_sl_lvl   := rev_short_sl
     exit_tracking := true
     exit_is_long  := false
     exit_entry_bar := bar_index
 
-// Detect TP/SL cross — only on bars after the entry bar
-bool _can_exit   = exit_tracking and bar_index > exit_entry_bar
-bool dxy_tp_hit  = _can_exit and (exit_is_long ? high >= exit_tp_lvl : low  <= exit_tp_lvl)
-bool dxy_sl_hit  = _can_exit and (exit_is_long ? low  <= exit_sl_lvl : high >= exit_sl_lvl)
+// Detect TP/SL cross
+bool _can_exit  = exit_tracking and bar_index > exit_entry_bar
+bool dxy_tp_hit = _can_exit and (exit_is_long ? high >= exit_tp_lvl : low  <= exit_tp_lvl)
+bool dxy_sl_hit = _can_exit and (exit_is_long ? low  <= exit_sl_lvl : high >= exit_sl_lvl)
 
 if dxy_tp_hit or dxy_sl_hit
     exit_tracking := false
     line.delete(tp_line)
     line.delete(sl_line)
 
-// Plot live TP and SL lines while tracking (disappear once hit)
+// Live TP/SL lines
 plot(show_exit_lvls and exit_tracking and not na(exit_tp_lvl) ? exit_tp_lvl : na,
     "DXY Exit TP", color=color.new(color.lime, 20), linewidth=1, style=plot.style_linebr)
 plot(show_exit_lvls and exit_tracking and not na(exit_sl_lvl) ? exit_sl_lvl : na,
     "DXY Exit SL", color=color.new(color.red,  20), linewidth=1, style=plot.style_linebr)
 
-// Exit labels on chart
 if dxy_tp_hit
-    label.new(bar_index,
-        exit_is_long ? high + lbl_pad : low - lbl_pad,
+    label.new(bar_index, exit_is_long ? high + lbl_pad : low - lbl_pad,
         "▲ DXY TP HIT\nExit pair positions",
         color=color.new(color.lime, 10), textcolor=color.black,
-        style=exit_is_long ? label.style_label_down : label.style_label_up,
-        size=size.normal)
+        style=exit_is_long ? label.style_label_down : label.style_label_up, size=size.normal)
 
 if dxy_sl_hit
-    label.new(bar_index,
-        exit_is_long ? low - lbl_pad : high + lbl_pad,
+    label.new(bar_index, exit_is_long ? low - lbl_pad : high + lbl_pad,
         "▼ DXY SL HIT\nExit pair positions",
         color=color.new(color.red, 10), textcolor=color.white,
-        style=exit_is_long ? label.style_label_up : label.style_label_down,
-        size=size.normal)
+        style=exit_is_long ? label.style_label_up : label.style_label_down, size=size.normal)
 
 // ─── EXIT ALERTS ─────────────────────────────────────────────────────────────
 alertcondition(dxy_tp_hit,
     title   = "DXY TP Hit — Exit Pairs",
-    message = "DXY TP HIT — Exit all pair positions now.\nAttr/Rev LONG signal: close USDJPY / USDCAD longs and EURUSD / XAUUSD shorts.\nAttr/Rev SHORT signal: reverse above.\nDXY: {{close}} | TP was: {{plot_3}} | {{time}}")
-
+    message = "DXY TP HIT — Exit all pair positions now.\nLONG signal: close USDJPY/USDCAD longs and EURUSD/XAUUSD shorts.\nSHORT signal: reverse above.\nDXY: {{close}} | {{time}}")
 alertcondition(dxy_sl_hit,
     title   = "DXY SL Hit — Exit Pairs",
-    message = "DXY SL HIT — Exit all pair positions now.\nAttr/Rev LONG signal: close USDJPY / USDCAD longs and EURUSD / XAUUSD shorts.\nAttr/Rev SHORT signal: reverse above.\nDXY: {{close}} | SL was: {{plot_4}} | {{time}}")
-
+    message = "DXY SL HIT — Exit all pair positions now.\nLONG signal: close USDJPY/USDCAD longs and EURUSD/XAUUSD shorts.\nSHORT signal: reverse above.\nDXY: {{close}} | {{time}}")
 alertcondition(dxy_tp_hit or dxy_sl_hit,
     title   = "DXY Exit — TP or SL",
     message = "DXY EXIT — Close all pair positions now.\nDXY has hit its TP or SL level. Exit EURUSD, USDJPY, USDCAD, XAUUSD.\nDXY: {{close}} | {{time}}")

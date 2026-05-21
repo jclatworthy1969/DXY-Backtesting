@@ -3,197 +3,187 @@
     "name": "DXY Trade Alert",
     "file": "DXYTradeAlert.pine",
     "strategy_file": "DXYZoneStrategy.pine",
+    "pair_strategy_file": "DXYPairStrategy.pine",
     "version": "6",
     "platform": "TradingView Pine Script v6",
     "overlay": true,
-    "description": "Detects two trade setups (Attraction and Reversal) on the DXY during the London session. Uses the 23:45 GMT Open Zone as the structural reference level. Signals fire only when confirmed by a candlestick entry pattern within the correct session window.",
+    "description": "Detects two trade setups (Attraction and Reversal) on the DXY during the London session. The London session opening price (07:00 UTC) is the primary structural reference level. REV fires when price returns to the opening level after a meaningful move, confirmed by BB expansion on 1H + 4H. ATTR fires when London opens with a gap, the 4H BB is flat, and a confirmation candle fires in the gap-fill direction.",
+    "last_updated": "2026-05",
     "markets": ["DXY (signal source only — not directly tradeable)"],
     "correlated_pairs": {
       "long_USD_bias":  ["USDCHF", "USDCAD", "USDJPY"],
-      "short_USD_bias": ["EURUSD", "GBPUSD", "NZDUSD", "AUDUSD", "XAUUSD"],
-      "reversal_excluded": [],
-      "reversal_excluded_note": "No pairs excluded. All 8 pairs receive both attraction and reversal signals. Prior exclusions of USDJPY and GBPUSD (based on 10-month small-sample backtest) have been removed in favour of taking all trades consistently."
-    },
-    "timeframes": {
-      "context": ["Weekly", "Daily"],
-      "bias_confirmation": ["4H", "1H"],
-      "entry": ["15m", "5m (for early entry refinement)"]
+      "short_USD_bias": ["EURUSD", "GBPUSD", "NZDUSD", "AUDUSD", "XAUUSD"]
     }
   },
 
   "core_concept": {
-    "open_zone": {
-      "definition": "The structural reference zone formed at 23:45 GMT. Primary method: gap between the close of the prior candle and the 23:45 open. Fallback method: if no noticeable gap exists (gap < zone_min_gap threshold, default 30 pts / 0.003 DXY), the body of the 23:45 candle itself (open-to-close) is used as the zone. Monday exception: if the candle immediately before 23:45 is a line candle (body < 10 pts / 0.001 DXY — common on Monday when the weekend gap produces a flat/doji bar), that candle is skipped and the candle before it is used instead.",
-      "zone_top": "If gap >= threshold: math.max(prior_candle_close, japan_open). If no gap: math.max(23:45 open, 23:45 close).",
-      "zone_bottom": "If gap >= threshold: math.min(prior_candle_close, japan_open). If no gap: math.min(23:45 open, 23:45 close).",
-      "rationale": "The 23:45 GMT candle marks the start of the Japan session. The gap between the preceding candle's close and this open defines a structural reference zone that price is expected to interact with during London.",
-      "pristine_definition": "Zone is PRISTINE if all Japan session candle CLOSES remain on the same side of the zone they started on. A close inside the zone is acceptable. Pristine is broken only when a close crosses THROUGH to the opposite side (beyond the far edge). Wicks through the zone are acceptable — only closes matter.",
-      "pristine_broken": "If Japan is bullish (opened above zone), pristine breaks if any candle closes BELOW zone_bottom. If Japan is bearish (opened below zone), pristine breaks if any candle closes ABOVE zone_top.",
-      "visual": "Displayed as a shaded orange box (pristine) or grey box (broken) on the chart.",
-      "no_trade_condition": "If price is ranging tightly around the DXY Open Zone with no clear directional move, or if the zone has been bridged repeatedly during the Japan session, do not trade for that day.",
-      "zone_reset": "Zone top, bottom, pristine and body-clean status reset every night at 23:45 GMT. Only the most recently formed zone is used for signals — prior days' zones are discarded.",
-      "one_trade_per_zone": "Only one trade is taken per zone per day. Once a signal fires and a trade is entered, no further signals are taken for that zone until the next 23:45 reset."
+    "london_opening_level": {
+      "definition": "The OPEN price of the first 15m bar of the London session each trading day. Standard days: 07:00 UTC. Monday: 06:30 UTC. This is the primary structural reference for both REV and ATTR setups.",
+      "rationale": "Independent backtesting of two live traders (Brice Strebler and Ash Mall) over Aug 2023–Apr 2026 confirmed both use the session opening price as the primary reference level. This replaced the earlier 23:45 zone concept, which lacked sufficient precision and produced too many false signals.",
+      "prior_day_high_low": {
+        "definition": "The highest high and lowest low of the prior calendar day (UTC). Tracked via rolling intraday H/L that resets at midnight UTC.",
+        "use": "Structural stop-loss reference for REV trades. Prior day low − buffer = long SL; prior day high + buffer = short SL."
+      },
+      "attr_gap": {
+        "definition": "Signed gap in indicator points between the London open price and the close of the bar immediately preceding the London open bar. +ve = gap up (London opened above prior close). −ve = gap down (London opened below prior close).",
+        "formula": "(london_open_price − prior_bar_close) × 10000",
+        "significance": "The gap-fill target is the London open price itself (plus/minus a near-edge buffer). The motivation is that institutional flows frequently close overnight gaps during the London open."
+      },
+      "visual": "Yellow horizontal line at London open price, updated each trading day. Dashed red/green lines at prior day high/low. Orange background when 4H BB is flat (ATTR zone)."
     }
   },
 
   "htf_bias": {
-    "indicator": "MTFTI (Multi-Timeframe Trading Indicator — displayed on DXY Open layout in TradingView)",
-    "description": "MTFTI shows the directional bias on multiple timeframes. The 1H and 4H bias readings are used to filter Reversal trades. This indicator runs alongside DXY Trade Alert on the same chart layout.",
-    "weekly_daily_analysis": {
-      "method": "3 Simple Moving Averages: 50 / 100 / 200",
-      "uptrend": "200 SMA at bottom, 100 SMA in middle, 50 SMA at top",
-      "downtrend": "200 SMA at top, 100 SMA in middle, 50 SMA at bottom",
-      "additional": "Mark key Supply & Demand zones and Fibonacci levels (0.382 / 0.618) for confluence areas"
+    "method": "Bollinger Band regime on 1H and 4H DXY timeframes. Replaces the former EMA cross, ADX gate, and multi-oscillator divergence scorer.",
+    "regime_values": {
+      "+1": "BB width > rolling average AND MA sloping up → market expanding bullish → valid for REV LONG",
+      "-1": "BB width > rolling average AND MA sloping down → market expanding bearish → valid for REV SHORT",
+       "0": "BB width ≤ rolling average → market flat / contracting → skip REV; ATTR conditions allowed"
     },
-    "4h_analysis": "Confirm alignment with Daily bias. Assess momentum and MACD divergence. Identify whether price is in continuation or correction.",
-    "1h_analysis": "Momentum check. Is price returning to the moving average? Assess whether HTF direction supports the trade.",
-    "adx_gate": {
-      "applies_to": "REVERSAL signals only. Attraction signals are NOT gated by ADX.",
-      "threshold": "4H ADX must be >= 20.0 for a reversal signal to fire.",
-      "rationale": "Backtest finding: attraction trades thrive in LOW-ADX ranging markets (ADX<20: 75% WR PF 18.75 vs ADX>=20: 50% WR PF 0.438). Reversal trades require trending conditions (ADX>=20) to confirm momentum continuation. Applying ADX to attraction would HURT performance.",
-      "implementation": "4H ADX computed via ta.dmi(14,14) on the 4H timeframe using request.security(). ta.adx() does not exist in Pine Script v6 — use ta.dmi() which returns [diPlus, diMinus, adx]."
-    }
+    "calculation": {
+      "bb_period": 20,
+      "bb_std_mult": 2.0,
+      "bb_width": "ta.stdev(close, period) × std_mult × 2",
+      "bb_width_avg": "ta.sma(bb_width, lookback_period)",
+      "expanding": "bb_width > bb_width_avg",
+      "slope_detection": "MA now > MA 3 bars ago",
+      "lookback": 20
+    },
+    "timeframes_used": ["1H (60m)", "4H (240m)"],
+    "rev_requirement": "1H regime AND 4H regime must both equal +1 (long) or both −1 (short). Mixed signals = no REV.",
+    "attr_requirement": "4H regime must equal 0 (flat/consolidating market). A trending 4H market suppresses ATTR."
   },
 
   "trade_types": {
-    "attraction": {
-      "description": "Mean-reversion trade. Price has moved away from the zone during the Japan session and is expected to be attracted back toward the zone during London. Works best in low-ADX ranging markets.",
-      "required_zone_state": "BODY-CLEAN AND PRISTINE — both conditions must hold simultaneously. (1) BODY-CLEAN: no candle close inside the zone from the 4th Japan candle onward (grace period for candles 1–3). (2) PRISTINE: no candle close has crossed through to the opposite side of the zone at any point. A close beyond the far edge breaks PRISTINE but does NOT break BODY-CLEAN (because it is not inside the zone). Without the explicit PRISTINE check, attraction signals would incorrectly continue firing after a zone break. Rule: once zone_pristine is false, ALL attraction signals are suppressed regardless of body-clean state — only Reversal setups apply.",
-      "htf_bias_requirement": "NONE. Attraction trades do NOT require 1H or 4H MTFTI bias alignment, and are NOT gated by ADX. The pristine zone is sufficient context. The 4H trend gate (EMA-based) is applied as a soft directional filter but not as a hard block.",
-      "adx_gate": "NOT APPLIED. See htf_bias.adx_gate for rationale.",
-      "direction_logic": {
-        "long_setup": "Japan session is bearish (price opened below zone). Price is 0–400 indicator pts below zone_bottom during London. Bullish entry signal fires. Target: zone_TOP (far side of zone). SL: 1:1 with TP distance.",
-        "short_setup": "Japan session is bullish (price opened above zone). Price is 0–400 indicator pts above zone_top during London. Bearish entry signal fires. Target: zone_BOTTOM (far side of zone). SL: 1:1 with TP distance."
+    "reversal": {
+      "description": "Price moves meaningfully away from the London session opening level, then returns to it. A confirmation candle at the opening level fires, with both 1H and 4H BB expanding in the trade direction. Uses a wide structural stop behind the prior day's extreme.",
+      "setup_sequence": [
+        "1. London opens. Opening price recorded.",
+        "2. Price moves ≥ rev_min_move pts (default 100 pts) away from opening level — either up or down.",
+        "3. Price returns to within rev_proximity pts (default 150 pts) of the opening level.",
+        "4. At the opening level: a valid directional confirmation candle fires (engulfing, directional pin bar, or 3-bar reversal).",
+        "5. 1H BB regime = +1 (long) or −1 (short) — must match trade direction.",
+        "6. 4H BB regime = +1 (long) or −1 (short) — must match trade direction.",
+        "7. Prior day low (long) or prior day high (short) is available for structural SL placement.",
+        "8. SL distance must be > 0 after applying cap."
+      ],
+      "htf_bias_requirement": "REQUIRED. Both 1H and 4H BB must be expanding in the trade direction. No mixed signals.",
+      "session_window": {
+        "start_gmt": "07:00 (standard) / 06:30 (Monday)",
+        "end_gmt": "12:00 (default rev_end_h — adjustable)",
+        "rationale": "Brice/Ash primary entry window 07:00–12:00 GMT. Best WR observed in this morning block."
       },
-      "distance_requirement": {
-        "minimum_indicator_pts": 0,
-        "maximum_indicator_pts": 400,
-        "minimum_note": "No minimum distance required. Backtest finding: CLOSER to zone = BETTER return rate. Setting a minimum filter reduces trade count without improving win rate.",
-        "maximum_note": "Maximum 400 indicator pts (0.04 DXY / 4 DXY points from zone edge). Backtest finding across 10 months: price within 400 pts of zone = 97.9% return rate (46/47 days). Beyond 400 pts the return rate drops sharply.",
-        "dxy_point_definition": "1 DXY point (TradingView measuring tool) = 0.001 DXY price move = 10 indicator pts. 400 indicator pts = 40 DXY points = 0.040 DXY price move.",
-        "preferred_condition": "Slow, gradual movement away from the zone without strong momentum. Strong momentum away from the zone is a warning sign — reassess."
+      "entry_proximity": "Close must be within rev_proximity pts (default 150) of london_open_price at time of signal.",
+      "min_move_requirement": "Price must have moved ≥ rev_min_move pts (default 100) from opening before a return is valid. Prevents triggering on trivial oscillations around the level.",
+      "structural_sl": {
+        "long": "pd_low − struct_sl_buf/10000, capped at close − max_sl_pts/10000. Fallback (no pd_low): close − max_sl_pts.",
+        "short": "pd_high + struct_sl_buf/10000, capped at close + max_sl_pts/10000. Fallback (no pd_high): close + max_sl_pts.",
+        "struct_sl_buf_pts": 50,
+        "max_sl_pts": 3000,
+        "rationale": "Both Brice (median SL ~2,605 pts) and Ash (median SL ~1,600 pts, sweet spot 1,500–2,500 pts) use structural stops based on prior day extremes. This is 3–16× wider than the old 20-bar swing pivot approach and aligns with observed institutional stop placement."
       },
-      "stop_loss": {
-        "rule": "1:1 RR — SL distance equals TP distance.",
-        "long_sl": "Entry price minus the distance from entry to zone_top.",
-        "short_sl": "Entry price plus the distance from entry to zone_bottom."
-      },
-      "momentum_check": "Verify Japan session momentum was not strong. If there is strong directional momentum in the Japan session, consider skipping the attraction trade.",
-      "muddy_water_rule": "When the zone is NOT clean (price bridged it, many closes inside it, or price ran through the entire level), REVERSE the process: check HTF alignment FIRST. If the 1H and 4H MTFTI bias aligns with the intended trade direction, the attraction trade may still be valid. If HTF does not align, walk away — do not take the trade. A clean zone needs no HTF gate; a messy zone requires one."
+      "take_profit": "1:1 RR — TP = entry + SL_distance (long) or entry − SL_distance (short).",
+      "one_per_session": "rev_traded flag blocks further reversal signals for the remainder of the day's London session. Resets at next London open."
     },
 
-    "reversal": {
-      "description": "Momentum-continuation trade off a broken zone. The Open Zone has been broken (pristine lost), turning the zone edge into temporary support or resistance. Price makes an impulse away from the zone, then retraces BACK to it. Entry is taken AT or very close to the zone edge on a valid signal. HTF alignment and ADX gate are REQUIRED.",
-      "required_zone_state": "BROKEN — zone pristine status has been lost (a Japan session candle closed beyond the far edge of the zone).",
-      "htf_bias_requirement": "REQUIRED — coded hard gate via multi-oscillator divergence scorer. Minimum divergence score of 1/6 required (rev_min_div=1). Score checks 6 oscillators: RSI 14, MACD histogram 12/26/9, Stochastic %K 14, CCI 20, Williams %R 14, Momentum 10. Bullish divergence: price in bottom 30% of range but oscillator NOT in its own bottom 30%. Bearish divergence: price in top 30% of range but oscillator NOT in its own top 30%.",
-      "adx_gate": "REQUIRED. 4H ADX must be >= 20.0. Reversal trades require a trending/directional market. In ranging markets (ADX<20), reversal signals are suppressed.",
-      "candle_quality_filter": {
-        "min_body_pts": 200,
-        "min_range_pts": 400,
-        "rationale": "Filters out weak, indecisive signal candles at the reversal entry. Backtest findings: min body >= 200 pts = 70% WR PF 2.333 (vs 56% WR PF 1.286 unfiltered). Min range >= 400 pts = 75% WR PF 3.000. Both filters must pass simultaneously.",
-        "note": "An impulsive signal candle (large body, wide range) at the zone edge is required confirmation of momentum. A small doji or narrow-range candle at the zone should be skipped."
-      },
-      "session_window": {
-        "indicator_default_end_gmt": "12:00",
-        "instructor_rule_end_gmt": "~17:00 (noon New York / noon Eastern time)",
-        "note": "The strategy instructor explicitly allows reversal and continuation trades throughout the remainder of the London session or up until noon Eastern (~17:00 GMT). The indicator default is capped at 12:00 GMT based on backtesting evidence. Adjust rev_end_h if trading later in the session."
-      },
-      "entry_proximity": "Entry must be within rev_max_dist pts of the zone edge (default 500 pts = 50 DXY points).",
-      "structural_sl": {
-        "placement": "SL behind the most recent structural swing high (short) or swing low (long) — the swing formed during the impulse away from the zone.",
-        "minimum_pts": 3000,
-        "win_rate_by_bucket": {
-          "below_3000_pts": "67% WR (8W/4L, 302-trade dataset)",
-          "3000_to_5000_pts": "77% WR (17W/5L, 302-trade dataset)",
-          "above_5000_pts": "100% WR (6W/0L, 302-trade dataset)"
-        }
-      },
+    "attraction": {
+      "description": "London opens with a meaningful gap vs the prior bar's close. Price is expected to fill (be attracted back toward) that gap. Requires a flat/consolidating 4H BB regime and a modest prior session range. Confirmation candle fires in the gap-fill direction.",
       "setup_sequence": [
-        "1. Zone pristine is broken during Japan session (candle closes on the opposing side of the zone).",
-        "2. PRE-ENTRY: Check divergence score (indicator requires >= 1/6). Check 4H ADX >= 20. If either fails, no trade.",
-        "3. During London session (07:30–12:00 GMT standard, 06:30 Monday), price returns to the zone edge after an impulse away.",
-        "4. A valid IMPULSIVE entry signal fires AT or very close to the zone edge (Engulfing, Pin Bar, or 3-Bar Reversal) with body >= 200 pts AND range >= 400 pts.",
-        "5. Place SL behind the structural swing from the prior impulse (minimum 3000 pts / 300 DXY points recommended).",
-        "6. TP = 1:1 minimum with SL. Check HTF context for runner potential."
+        "1. London opens. Compute gap: (london_open_price − prior_bar_close) × 10000.",
+        "2. Gap must be ≥ attr_min_gap pts (default 150) in the gap-fill direction.",
+        "3. Prior session range (pd_range) must be ≤ attr_max_prev_range pts (default 2000). Large prior range indicates strong momentum — skip.",
+        "4. 4H BB regime must equal 0 (flat/consolidating). Trending 4H market suppresses ATTR.",
+        "5. A valid directional confirmation candle fires (engulfing, directional pin bar, or 3-bar reversal) in the gap-fill direction.",
+        "6. Reward to TP must be ≥ attr_min_reward pts (default 100).",
+        "7. attr_long_sl_d must be > 0."
       ],
-      "excluded_pairs_for_reversal": [],
-      "excluded_pairs_note": "No pairs excluded from reversal signals. All 8 pairs receive both attraction and reversal signals. The prior USDJPY/GBPUSD exclusion (10-month small-sample finding: USDJPY 27.3% WR PF 0.375, GBPUSD 45.5% WR PF 0.833) has been removed in favour of a consistent all-8-pairs approach. The sample (11 reversal signals) was too small to be statistically conclusive."
+      "htf_bias_requirement": "4H BB flat (regime = 0) REQUIRED. 1H BB not checked for ATTR.",
+      "direction_logic": {
+        "long_setup": "Gap DOWN (attr_gap_pts < −attr_min_gap): London opened below prior close. Bullish confirmation candle → go LONG (fill gap up toward London open).",
+        "short_setup": "Gap UP (attr_gap_pts > +attr_min_gap): London opened above prior close. Bearish confirmation candle → go SHORT (fill gap down toward London open)."
+      },
+      "tp_modes": {
+        "near_edge_tp": "TP = london_open_price ± attr_near_buf (default 50 pts). Recommended. Reduces exposure to full gap-fill failure.",
+        "full_gap_fill_tp": "TP = prior bar's close (attr_gap_target). Higher reward but lower probability."
+      },
+      "stop_loss": "1:1 RR — SL = entry − SL_distance (long) where SL_distance = TP − entry. Mirror for short.",
+      "prior_session_range_filter": {
+        "threshold_pts": 2000,
+        "rationale": "Brice's note: 'so much momentum from the previous day' = skip attraction. Large prior session range indicates carry-over directional momentum that may not allow a gap fill."
+      },
+      "one_per_session": "attr_traded flag blocks further attraction signals for the remainder of the day. Resets at next London open.",
+      "session_window": "Full London session (07:00–19:30 GMT default). ATTR can fire any time during the session as long as conditions hold."
     }
   },
 
   "entry_signals": {
-    "description": "At least one of these three candlestick patterns must form at the entry location during the session window for any alert to trigger. No signal = no trade.",
+    "description": "At least one of these three candlestick patterns must form at the entry location during the session window for any signal to trigger. No signal = no trade.",
     "engulfing_candle": {
       "bull": "Current bar bullish, prior bar bearish. Current close > prior open, current open < prior close. Current body >= 80% of prior body.",
       "bear": "Current bar bearish, prior bar bullish. Current close < prior open, current open > prior close. Current body >= 80% of prior body.",
       "enabled_by_default": true
     },
     "pin_bar": {
-      "bull": "Lower wick >= body × wick_multiplier (default 2.0). Upper wick <= body × 1.5.",
-      "bear": "Upper wick >= body × wick_multiplier (default 2.0). Lower wick <= body × 1.5.",
+      "directional_rule": "Pin bars are SHAPE-based, not colour-based. Direction is determined by which wick is dominant.",
+      "bull": "LONG entries only. Lower wick >= body × pin_wick_mult (default 2.0) AND lower_wick >= upper_wick × 1.5. Long lower wick = price rejected lows = bullish.",
+      "bear": "SHORT entries only. Upper wick >= body × pin_wick_mult (default 2.0) AND upper_wick >= lower_wick × 1.5. Long upper wick = price rejected highs = bearish.",
       "enabled_by_default": true,
-      "default_wick_multiplier": 2.0
+      "default_wick_multiplier": 2.0,
+      "note": "A pin bar with a long upper wick cannot be used for a long entry, and vice versa, regardless of the candle colour."
     },
     "3_bar_reversal": {
-      "bull": "Bar -2 is bearish. Bar -1 is indecision (body <= 50% of bar -2 body). Current bar is bullish and closes above bar -2 open.",
-      "bear": "Bar -2 is bullish. Bar -1 is indecision (body <= 50% of bar -2 body). Current bar is bearish and closes below bar -2 open.",
+      "bull": "Bar −2 is bearish. Bar −1 is indecision (body ≤ 50% of bar −2 body). Current bar is bullish and closes above bar −2 open.",
+      "bear": "Bar −2 is bullish. Bar −1 is indecision (body ≤ 50% of bar −2 body). Current bar is bearish and closes below bar −2 open.",
       "enabled_by_default": true
     },
-    "timeframe_note": "Entry signals assessed on the 15m chart. The 5m chart may be used for early entry refinement when the 15m structure is still forming."
-  },
-
-  "risk_management": {
-    "stop_loss": {
-      "placement": "Set at the most recent swing high (for SHORT trades) or swing low (for LONG trades) at the time of entry.",
-      "reversal_minimum_pts": 3000,
-      "reversal_minimum_note": "Reversal SL minimum 3000 indicator pts (300 DXY points / 0.300 DXY price move). Win rate increases significantly with larger structural SL."
-    },
-    "take_profit": {
-      "primary_target": "DXY Open Zone edge (zone_bottom for longs, zone_top for shorts) for attraction. 1:1 RR for reversals.",
-      "minimum_rr": "1:1 — Take Profit distance must be at least equal to the Stop Loss distance.",
-      "partial_profits": "At the primary target, close 1/2 to 2/3 of the position. Leave a runner if the HTF context supports continuation.",
-      "runner_management": "Check 4H and 1H bias. If initial trade direction aligns with 4H trend, consider leaving the remainder open."
-    },
-    "risk_per_trade": "Maximum 1% of account equity per DXY signal. Each correlated pair trade also risks 1% (they are treated as separate trades).",
-    "news_filter": {
-      "rule": "Check economic calendar before every trade. Avoid entering during high-impact news events (NFP, FOMC, CPI, PMI, retail sales, JOLTS, durable goods).",
-      "management": "If already in a trade and high-impact news is imminent, consider exiting before the release or waiting until the market settles."
-    }
+    "timeframe_note": "Entry signals assessed on the 15m chart."
   },
 
   "session_rules": {
     "london_entry_window": {
-      "standard_start_gmt": "07:30",
-      "attraction_end_gmt": "19:30",
-      "reversal_end_gmt": "12:00 (indicator default) — instructor allows until ~17:00 GMT",
+      "standard_start_gmt": "07:00",
       "monday_start_gmt": "06:30",
-      "rationale": "Entry window starts at 07:30 GMT on standard days. Monday starts earlier at 06:30 GMT due to weekend gap volatility."
+      "attraction_end_gmt": "19:30",
+      "reversal_end_gmt": "12:00 (default — adjustable via rev_end_h)",
+      "rationale": "Both Brice and Ash concentrate 58% of entries in the 07:00–08:00 GMT window. Best REV win rate observed 09:00–12:00 GMT (88% across both traders' datasets)."
     },
     "japan_session": {
-      "start": "23:45 GMT",
-      "end": "06:00 GMT (default)",
-      "purpose": "Defines the Open Zone and establishes directional bias. Zone pristine status monitored throughout.",
-      "no_trade_rule": "ABSOLUTE — No trade entries during the Japan session (23:45–06:00 GMT)."
+      "end": "06:00 GMT (default japan_end_h)",
+      "no_trade_rule": "ABSOLUTE — No entries during the Japan session. Observation only."
+    }
+  },
+
+  "risk_management": {
+    "stop_loss": {
+      "rev_placement": "Prior calendar day high (short) or low (long) ± struct_sl_buf (50 pts), hard-capped at max_sl_pts (3000 pts) from entry. Based on independent trader data: Brice median ~2,605 pts, Ash median ~1,600 pts, sweet spot 1,500–2,500 pts → 86% WR.",
+      "attr_placement": "1:1 RR mirror of TP distance. SL is placed the same distance below entry as TP is above (long), or same distance above entry as TP is below (short)."
+    },
+    "take_profit": {
+      "rev": "1:1 RR — TP = entry ± SL_distance.",
+      "attr": "TP = london_open_price ± attr_near_buf (default near-edge mode). Full gap-fill TP available as alternative.",
+      "minimum_rr": "1:1"
+    },
+    "risk_per_trade": "Maximum 1% of account equity per DXY signal. Each correlated pair trade also risks 1% (separate trades).",
+    "news_filter": {
+      "rule": "Check economic calendar before every trade. Avoid entering during high-impact news events (NFP, FOMC, CPI, PMI, retail sales, JOLTS, durable goods).",
+      "management": "Ash Mall note: 'Manual close b4 the news'. If already in a trade and high-impact news is imminent, consider exiting before the release."
     }
   },
 
   "correlated_pair_execution": {
-    "description": "DXY is the signal source. Trades are executed simultaneously on up to 8 correlated pairs. Begin with 2-3 pairs; experienced traders can take all pairs simultaneously.",
+    "description": "DXY is the signal source. Trades are executed on correlated pairs. The DXYPairStrategy.pine script sources all DXY logic via request.security('TVC:DXY', ...) and converts SL/TP distances using tick_factor.",
     "tick_conversion": {
-      "method": "Tick-based: same number of ticks as DXY for all pairs except XAUUSD which uses 10x.",
-      "dxy_tick_size": 0.001,
-      "pair_tick_sizes": {
-        "EURUSD": 0.00001,
-        "GBPUSD": 0.00001,
-        "AUDUSD": 0.00001,
-        "NZDUSD": 0.00001,
-        "USDCAD": 0.00001,
-        "USDCHF": 0.00001,
-        "USDJPY": 0.001,
-        "XAUUSD": 0.01
-      },
-      "xauusd_multiplier": 10,
-      "example": "DXY trade with 300 tick SL (0.300 DXY): EURUSD/GBPUSD/etc = 300 ticks x 0.00001 = 0.00300 (30 standard pips); USDJPY = 300 ticks x 0.001 = 0.300 (30 standard pips); XAUUSD = 3000 ticks x 0.01 = $30.00"
+      "method": "DXY SL/TP distance in pts × 10000 × tick_factor = pair price distance.",
+      "pair_tick_factors": {
+        "EURUSD": 0.01,
+        "GBPUSD": 0.01,
+        "AUDUSD": 0.01,
+        "NZDUSD": 0.01,
+        "USDCAD": 0.01,
+        "USDCHF": 0.01,
+        "USDJPY": 1.0,
+        "XAUUSD": 100.0
+      }
     },
     "direction_mapping": {
       "dxy_long": {
@@ -205,211 +195,176 @@
         "go_long":  ["EURUSD", "GBPUSD", "AUDUSD", "NZDUSD", "XAUUSD"]
       }
     },
-    "reversal_signal_pairs": ["EURUSD", "GBPUSD", "AUDUSD", "NZDUSD", "USDCAD", "USDCHF", "USDJPY", "XAUUSD"],
-    "attraction_signal_pairs": ["EURUSD", "GBPUSD", "AUDUSD", "NZDUSD", "USDCAD", "USDCHF", "USDJPY", "XAUUSD"],
-    "manual_exit_rule": "If DXY level is hit, manually close ALL correlated pair trades even if individual pair targets have not been reached."
+    "exit_method": "DXY-exit: exit pair trades when DXY hits its own TP or SL bar. Identified as best-performing exit method in multi-pair backtest research."
   },
 
   "no_trade_conditions": [
-    "Japan session active (23:45–06:00 GMT) — no entries, signals, or alerts. Observation only.",
-    "Price ranging tightly around the DXY Open Zone with no clear directional expansion.",
-    "Zone has been bridged repeatedly during Japan session — no clear bias.",
-    "Strong directional momentum during Japan session that may negate an attraction trade.",
-    "Reversal: divergence score < 1/6 across all 6 oscillators.",
-    "Reversal: 4H ADX < 20.0 (market not trending enough for momentum continuation).",
-    "Reversal: signal candle body < 200 pts OR range < 400 pts (indecisive candle at zone).",
-    "No valid entry signal (engulfing, pin bar, or 3-bar reversal) — applies to all 8 pairs for both attraction and reversal.",
-    "Attraction: price more than 400 indicator pts from zone edge.",
-    "High-impact news imminent during the trade window.",
-    "No valid entry signal (engulfing, pin bar, or 3-bar reversal)."
-  ],
-
-  "workflow_checklist": [
-    "SUNDAY: Review weekly fundamentals and high-impact news calendar.",
-    "DAILY (Weekly/Daily chart): Check 50/100/200 SMA trend. Mark S&D zones and Fibonacci confluence levels.",
-    "DAILY (4H chart): Confirm Daily bias alignment. Check MACD momentum and divergence. Note 4H ADX level.",
-    "23:45 GMT: Mark the DXY Open Zone on the 15m chart. Note whether Japan session opens above or below the prior candle close.",
-    "JAPAN SESSION: Monitor for zone pristine status. Note if any candle closes beyond the far zone edge.",
-    "PRE-LONDON: Assess Japan session momentum. Check MTFTI 1H and 4H bias. Check 4H ADX (>=20 required for reversals).",
-    "LONDON SESSION: Wait for price to approach zone area. Identify trade type (Attraction or Reversal).",
-    "ATTRACTION (clean pristine zone, price within 400 pts): Look for entry signal. No HTF bias or ADX required.",
-    "ATTRACTION (muddy zone — bridged or messy): Check HTF FIRST. If 1H + 4H align, take the setup. If not, walk away.",
-    "REVERSAL (broken zone): Check 4H ADX >= 20 AND divergence score >= 1/6 FIRST — MANDATORY. If aligned: wait for price to return to zone edge, look for IMPULSIVE entry signal (body >= 200 pts, range >= 400 pts). If not aligned or candle weak: no trade.",
-    "REVERSAL PAIR FILTER: None — all 8 pairs take reversal signals. Apply identical criteria (ADX, divergence, candle quality) across all pairs.",
-    "PRE-ENTRY: Check news calendar. Confirm SL placement. Confirm 1:1 RR is achievable.",
-    "ENTRY: Place DXY trade. Simultaneously apply equivalent tick-distance TP/SL to all applicable pairs.",
-    "MANAGEMENT: At target, take partial profits. Reevaluate runner based on HTF context. If DXY zone is hit, manually exit all correlated pair trades."
+    "Japan session active — no entries.",
+    "Outside the London session window.",
+    "REV: 1H BB regime does NOT match 4H BB regime direction, or either is flat (regime = 0).",
+    "REV: Price has not moved ≥ rev_min_move pts (100 pts) from the opening level before returning.",
+    "REV: Price is NOT within rev_proximity pts (150 pts) of the opening level.",
+    "REV: Prior day H/L not yet available (first day of data).",
+    "ATTR: Gap < attr_min_gap pts (150 pts) at London open.",
+    "ATTR: 4H BB regime ≠ 0 (market is trending — ATTR suppressed).",
+    "ATTR: Prior session range > attr_max_prev_range pts (2000 pts) — too much carry-over momentum.",
+    "ATTR: Reward to TP < attr_min_reward pts (100 pts).",
+    "No valid directional entry signal (engulfing, directional pin bar, or 3-bar reversal).",
+    "Pin bar direction does not match trade direction (e.g. bearish pin bar cannot be used for a long entry).",
+    "High-impact news event imminent during the trade window.",
+    "Signal already taken this session (rev_traded or attr_traded flag set)."
   ],
 
   "default_inputs": {
-    "attr_min_pts": 0,
-    "attr_min_pts_note": "Changed from 1500. Backtest: no minimum = better — closer to zone = higher return rate.",
-    "attr_max_pts": 400,
-    "attr_max_pts_note": "Changed from 5000. Backtest: <=400 pts = 97.9% return rate (46/47 days). Beyond 400 pts drops sharply.",
-    "zone_min_gap": 30,
-    "rev_min_sl": 3000,
-    "rev_max_dist": 500,
-    "rev_min_body": 200,
-    "rev_min_body_note": "New filter. Backtest: body >= 200 pts = 70% WR PF 2.333 vs 56% unfiltered.",
-    "rev_min_range": 400,
-    "rev_min_range_note": "New filter. Backtest: range >= 400 pts = 75% WR PF 3.000.",
-    "div_lookback": 30,
-    "rev_min_div": 1,
-    "rev_min_div_note": "Changed from 2. Backtest: div=1 = 54.5% WR PF 1.200; div=2 = 50.0% WR PF 1.000; div=0 = 44.1% WR PF 0.789.",
-    "use_adx_gate": true,
-    "adx_min": 20.0,
-    "adx_gate_applies_to": "REVERSAL signals only. Attraction is ungated.",
+    "attr_enabled": true,
+    "attr_min_gap": 150,
+    "attr_min_reward": 100,
+    "attr_near_buf": 50,
+    "attr_use_near_tp": true,
+    "attr_max_prev_range": 2000,
+    "rev_enabled": true,
+    "rev_proximity": 150,
+    "rev_min_move": 100,
+    "struct_sl_buf": 50,
+    "max_sl_pts": 3000,
     "entry_start_h": 7,
-    "entry_start_m": 30,
+    "entry_start_m": 0,
     "entry_end_h": 19,
     "entry_end_m": 30,
     "rev_end_h": 12,
     "rev_end_m": 0,
-    "monday_start_gmt": 6,
-    "japan_end_gmt": 6,
-    "use_4h_trend_gate": true,
-    "trend_ema_len": 50,
-    "trend_buf_pts": 30,
-    "use_1h_trend_gate": false,
+    "monday_start": 6,
+    "japan_end_h": 6,
+    "bb_period": 20,
+    "bb_std_mult": 2.0,
+    "bb_lookback": 20,
     "pin_wick_multiplier": 2.0,
     "use_engulfing": true,
     "use_pin_bar": true,
-    "use_3bar_reversal": true,
-    "show_zone_box": true,
-    "show_session": true
+    "use_3bar_reversal": true
   },
 
   "distance_units": {
-    "explanation": "Indicator pts: 1 pt = 0.0001 DXY. DXY points (TradingView measuring tool): 1 point = 0.001 DXY = 10 indicator pts.",
-    "formula": "dist_above = (close - zone_top) * 10000  |  dist_below = (zone_bottom - close) * 10000",
+    "explanation": "Indicator pts: 1 pt = 0.0001 DXY price move. DXY points (TradingView measuring tool): 1 point = 0.001 DXY = 10 indicator pts.",
+    "formula": "distance_pts = (price_a − price_b) × 10000",
     "examples": {
-      "400_indicator_pts": "= 40 DXY points = 0.0400 DXY price move (attraction max)",
-      "3000_indicator_pts": "= 300 DXY points = 0.300 DXY price move (reversal min SL)"
+      "150_pts": "= 15 DXY points = 0.015 DXY price move (~10.5 pips on correlated pairs) — proximity / gap thresholds",
+      "1600_pts": "= 160 DXY points = 0.16 DXY price move — Ash Mall median stop",
+      "2605_pts": "= 260.5 DXY points = 0.261 DXY price move — Brice Strebler median stop",
+      "3000_pts": "= 300 DXY points = 0.300 DXY price move — max SL cap"
     }
   },
 
   "backtesting_results": {
-    "historical_test_winners_only": {
-      "label": "Historical Backtest — May–Dec 2024 (winners only dataset)",
-      "total_trades_analysed": 50,
-      "match_rate_with_zone_data": "76% (26 of 34 trades where zone data was available)",
-      "performance_at_1000_risk_per_trade": {
-        "total_pnl_usd": 24514,
-        "avg_r_multiple": 0.94,
-        "note": "100% win rate — dataset is confirmed winners only. Real-world win rate will be lower."
+    "trader_validation": {
+      "label": "Independent Trader Backtests — Aug 2023 – Apr 2026 (~33 months)",
+      "rationale": "Two independent professional traders (Brice Strebler and Ash Mall) backtested this strategy on the same DXY instrument over the same period with no coordination. Near-identical results across both traders confirm a systematic edge, not luck.",
+      "brice_strebler": {
+        "period": "Post Aug 2023",
+        "total_trades": 193,
+        "win_rate_pct": 82.9,
+        "net_r": 132,
+        "non_attr_trades": 192,
+        "non_attr_wr_pct": 83.4,
+        "non_attr_net_r": 132,
+        "median_sl_pts": 2605,
+        "sl_sweet_spot": "1500–4000 pts (90%+ WR)",
+        "direction_split": "LONG 95 (WR 81.1%), SHORT 97 (WR 83.5%)"
+      },
+      "ash_mall": {
+        "period": "Post Aug 2023",
+        "total_trades": 177,
+        "win_rate_pct": 81.4,
+        "net_r": 105,
+        "non_attr_trades": 175,
+        "non_attr_wr_pct": 81.7,
+        "non_attr_net_r": 105,
+        "median_sl_pts": 1600,
+        "sl_sweet_spot": "1500–2500 pts (86% WR)",
+        "direction_split": "LONG 87 (WR 81.6%), SHORT 90 (WR 81.1%)",
+        "primary_pattern": "Pin bar (rejection trade) + reversal with 1H & 4H BB alignment",
+        "entry_timing": "07:00–08:00 GMT = 58% of entries; 09:00–12:00 GMT = best WR (88%)"
       }
     },
-    "python_backtest_10_month": {
-      "label": "Python Backtest — Jul 2025 – Apr 2026 (10 months, all signals)",
-      "dataset": "TVC:DXY 15m CSV from TradingView, 20548 bars",
-      "script": "dxy_backtest.py",
-      "parameters": "attr_min=0, attr_max=400, rev_min_sl=3000, rev_min_body=200, rev_min_range=400, rev_min_div=1, adx_gate=True adx_min=20, exit_mode=intrabar",
-      "total_trades": 17,
-      "win_rate_pct": 58.8,
-      "profit_factor": 1.238,
-      "net_pnl_pts": 3620,
-      "trade_breakdown": {
-        "ATTR_LONG":  {"trades": 4,  "win_rate_pct": 50.0},
-        "ATTR_SHORT": {"trades": 2,  "win_rate_pct": 100.0},
-        "REV_LONG":   {"trades": 5,  "win_rate_pct": 40.0},
-        "REV_SHORT":  {"trades": 6,  "win_rate_pct": 67.0}
-      },
-      "attraction_summary": {"trades": 6, "win_rate_pct": 66.7, "profit_factor": 4.100},
-      "reversal_summary":   {"trades": 11, "win_rate_pct": 54.5, "profit_factor": 1.200},
-      "market_context": "DXY in strong downtrend throughout (108 Jan 2026 → 98 Apr 2026)"
+
+    "our_backtest_old_rules": {
+      "label": "Python Backtest — Old System (23:45 zone, EMA bias, tight SL) — Aug 2023–Apr 2026",
+      "script": "dxy_clean_rules.py",
+      "win_rate_pct": 53.2,
+      "net_r": "negative",
+      "gap_vs_traders": "~30 percentage points below trader win rates",
+      "root_causes_identified": [
+        "Entry fired on approach candle, not at the level itself — too early",
+        "23:45 zone was ~500 pts wide vs traders' <150 pt proximity — too imprecise",
+        "Old ATR-based swing stop was only ~50–200 pts — hit by noise",
+        "ATTR used in trending markets (no BB flatness filter) — wrong market regime",
+        "Pin bars not directionally filtered — wrong-direction wicks accepted",
+        "No minimum move-away requirement before reversal fired",
+        "No prior session range filter on ATTR"
+      ]
     },
-    "multi_pair_backtest_10_month_prior": {
-      "label": "Multi-Pair Backtest — Jul 2025 – Apr 2026 (USDJPY + GBPUSD reversal excluded — SUPERSEDED)",
-      "script": "dxy_multi_pair_backtest.py",
-      "reversal_excluded_pairs": ["USDJPY", "GBPUSD"],
-      "status": "Superseded. Policy changed to all-8-pairs for both signal types. Results below are reference only.",
-      "portfolio_summary": {
-        "total_pair_trades": 114,
-        "win_rate_pct": 70.2,
-        "profit_factor": 2.353,
-        "net_units": 46
-      },
-      "pair_results": {
-        "EURUSD": {"trades": 17, "win_rate_pct": 58.8, "profit_factor": 1.429},
-        "GBPUSD": {"trades":  6, "win_rate_pct": 66.7, "profit_factor": 2.000, "note": "Attraction only — prior policy"},
-        "AUDUSD": {"trades": 17, "win_rate_pct": 64.7, "profit_factor": 1.833},
-        "NZDUSD": {"trades": 17, "win_rate_pct": 82.4, "profit_factor": 4.667, "note": "Best performer"},
-        "USDCAD": {"trades": 17, "win_rate_pct": 64.7, "profit_factor": 1.833},
-        "USDCHF": {"trades": 17, "win_rate_pct": 76.5, "profit_factor": 3.250},
-        "USDJPY": {"trades":  6, "win_rate_pct": 83.3, "profit_factor": 5.000, "note": "Attraction only — prior policy"},
-        "XAUUSD": {"trades": 17, "win_rate_pct": 70.6, "profit_factor": 2.400}
-      },
-      "attraction_pair_results": {
-        "EURUSD": {"trades": 6, "win_rate_pct": 66.7, "profit_factor": 2.000},
-        "GBPUSD": {"trades": 6, "win_rate_pct": 66.7, "profit_factor": 2.000},
-        "AUDUSD": {"trades": 6, "win_rate_pct": 83.3, "profit_factor": 5.000},
-        "NZDUSD": {"trades": 6, "win_rate_pct": 100.0, "profit_factor": "inf"},
-        "USDCAD": {"trades": 6, "win_rate_pct": 83.3, "profit_factor": 5.000},
-        "USDCHF": {"trades": 6, "win_rate_pct": 100.0, "profit_factor": "inf"},
-        "USDJPY": {"trades": 6, "win_rate_pct": 83.3, "profit_factor": 5.000},
-        "XAUUSD": {"trades": 6, "win_rate_pct": 83.3, "profit_factor": 5.000}
-      },
-      "reversal_pair_results": {
-        "EURUSD": {"trades": 11, "win_rate_pct": 54.5, "profit_factor": 1.200},
-        "GBPUSD": "EXCLUDED (prior policy)",
-        "AUDUSD": {"trades": 11, "win_rate_pct": 54.5, "profit_factor": 1.200},
-        "NZDUSD": {"trades": 11, "win_rate_pct": 72.7, "profit_factor": 2.667},
-        "USDCAD": {"trades": 11, "win_rate_pct": 54.5, "profit_factor": 1.200},
-        "USDCHF": {"trades": 11, "win_rate_pct": 63.6, "profit_factor": 1.750},
-        "USDJPY": "EXCLUDED (prior policy)",
-        "XAUUSD": {"trades": 11, "win_rate_pct": 63.6, "profit_factor": 1.750}
-      },
-      "caveat": "17-trade sample is small. Results directionally informative but not statistically conclusive."
+
+    "attr_sweep": {
+      "label": "ATTR Parameter Sweep — 686 combinations",
+      "script": "fast_sweep_attr.py",
+      "result": "ALL 686 combinations unprofitable. Best: gap=175, approach=50, rwd=50 → N=98, WR=50.7%, NetR=−5.7R.",
+      "conclusion": "Parameter tuning alone cannot fix the old ATTR framework. The 4H BB flatness filter and London open level reference are qualitative structural fixes that no parameter sweep can replicate."
     },
-    "multi_pair_backtest_all_8_pairs": {
-      "label": "Multi-Pair Backtest — Jul 2025 – Apr 2026 (all 8 pairs, both signal types — CURRENT POLICY)",
-      "script": "dxy_multi_pair_backtest.py",
-      "reversal_excluded_pairs": [],
+
+    "improved_rules_pending": {
+      "label": "Python Backtest — New System (BB regime, structural SL, opening level) — PENDING",
+      "script": "dxy_improved_rules.py",
+      "status": "Not yet run. Pine scripts updated first. Python validation to follow.",
+      "expected_improvements": [
+        "REV WR target: ~80%+ (vs 53% old system), based on trader validation data",
+        "ATTR filtered to flat-regime days only — expected lower volume but higher quality",
+        "Structural SL removes premature stop-outs from narrow ATR-based stops",
+        "Directional pin bars eliminate wrong-direction candle acceptance"
+      ]
+    },
+
+    "multi_pair_older_results": {
+      "label": "Multi-Pair Backtest — Jul 2025–Apr 2026 (old rules, all 8 pairs) — REFERENCE ONLY",
+      "status": "Based on old 23:45 zone logic. Superseded by improved rules.",
       "portfolio_summary": {
         "total_pair_trades": 136,
         "win_rate_pct": 64.7,
-        "profit_factor": 1.833,
-        "net_units": 40
+        "profit_factor": 1.833
       },
       "pair_results": {
-        "EURUSD": {"trades": 17, "win_rate_pct": 58.8, "profit_factor": 1.429},
-        "GBPUSD": {"trades": 17, "win_rate_pct": 52.9, "profit_factor": 1.125},
-        "AUDUSD": {"trades": 17, "win_rate_pct": 64.7, "profit_factor": 1.833},
-        "NZDUSD": {"trades": 17, "win_rate_pct": 82.4, "profit_factor": 4.667, "note": "Best performer"},
-        "USDCAD": {"trades": 17, "win_rate_pct": 64.7, "profit_factor": 1.833},
-        "USDCHF": {"trades": 17, "win_rate_pct": 76.5, "profit_factor": 3.250},
-        "USDJPY": {"trades": 17, "win_rate_pct": 47.1, "profit_factor": 0.889, "note": "Weakest — reversal WR 27.3%"},
-        "XAUUSD": {"trades": 17, "win_rate_pct": 70.6, "profit_factor": 2.400}
-      },
-      "attraction_pair_results": {
-        "EURUSD": {"trades": 6, "win_rate_pct": 66.7, "profit_factor": 2.000},
-        "GBPUSD": {"trades": 6, "win_rate_pct": 66.7, "profit_factor": 2.000},
-        "AUDUSD": {"trades": 6, "win_rate_pct": 83.3, "profit_factor": 5.000},
-        "NZDUSD": {"trades": 6, "win_rate_pct": 100.0, "profit_factor": "inf"},
-        "USDCAD": {"trades": 6, "win_rate_pct": 83.3, "profit_factor": 5.000},
-        "USDCHF": {"trades": 6, "win_rate_pct": 100.0, "profit_factor": "inf"},
-        "USDJPY": {"trades": 6, "win_rate_pct": 83.3, "profit_factor": 5.000},
-        "XAUUSD": {"trades": 6, "win_rate_pct": 83.3, "profit_factor": 5.000}
-      },
-      "reversal_pair_results": {
-        "EURUSD": {"trades": 11, "win_rate_pct": 54.5, "profit_factor": 1.200},
-        "GBPUSD": {"trades": 11, "win_rate_pct": 45.5, "profit_factor": 0.833, "note": "Marginal — monitor on longer dataset"},
-        "AUDUSD": {"trades": 11, "win_rate_pct": 54.5, "profit_factor": 1.200},
-        "NZDUSD": {"trades": 11, "win_rate_pct": 72.7, "profit_factor": 2.667},
-        "USDCAD": {"trades": 11, "win_rate_pct": 54.5, "profit_factor": 1.200},
-        "USDCHF": {"trades": 11, "win_rate_pct": 63.6, "profit_factor": 1.750},
-        "USDJPY": {"trades": 11, "win_rate_pct": 27.3, "profit_factor": 0.375, "note": "Weakest — BoJ/safe-haven drivers. Monitor closely."},
-        "XAUUSD": {"trades": 11, "win_rate_pct": 63.6, "profit_factor": 1.750}
-      },
-      "policy_rationale": "All 8 pairs take both attraction and reversal signals. Prior USDJPY/GBPUSD reversal exclusion (11-trade sample) deemed too small to be statistically conclusive. Consistent all-8-pairs approach simplifies execution. USDJPY and GBPUSD reversal performance flagged for monitoring on larger dataset.",
-      "vs_prior_policy": "vs prior policy (114 trades, 70.2% WR, PF 2.353, net +46): adding USDJPY + GBPUSD reversals adds 22 trades but reduces portfolio WR from 70.2% to 64.7% and PF from 2.353 to 1.833, consistent with original exclusion finding. Revisit if sample size increases significantly.",
-      "caveat": "17-signal sample remains small. Extend dataset with additional FXCM 15m data when available."
+        "EURUSD": {"trades": 17, "win_rate_pct": 58.8},
+        "GBPUSD": {"trades": 17, "win_rate_pct": 52.9},
+        "AUDUSD": {"trades": 17, "win_rate_pct": 64.7},
+        "NZDUSD": {"trades": 17, "win_rate_pct": 82.4, "note": "Best performer"},
+        "USDCAD": {"trades": 17, "win_rate_pct": 64.7},
+        "USDCHF": {"trades": 17, "win_rate_pct": 76.5},
+        "USDJPY": {"trades": 17, "win_rate_pct": 47.1, "note": "Weakest — reversal WR 27.3%"},
+        "XAUUSD": {"trades": 17, "win_rate_pct": 70.6}
+      }
     }
   },
+
+  "workflow_checklist": [
+    "SUNDAY: Review weekly fundamentals and high-impact news calendar.",
+    "DAILY (Weekly/Daily chart): Check 50/100/200 SMA trend direction.",
+    "DAILY (4H chart): Check BB regime direction. Is it expanding or flat? Flat = ATTR day possible. Expanding = REV day.",
+    "07:00 GMT (06:30 Monday): London open bar records. Note london_open_price and attr_gap_pts.",
+    "GAP CHECK: Is there a meaningful gap (≥150 pts)? 4H BB flat? Prior session range modest (≤2000 pts)? → ATTR conditions present.",
+    "REV CHECK: Has price moved ≥100 pts from opening? Is it returning toward opening level? BB expanding in trade direction on 1H and 4H? → Watch for REV signal.",
+    "SIGNAL: Wait for directional confirmation candle AT the level (engulfing, pin bar, 3-bar). Verify pin bar direction matches trade direction.",
+    "REV SL: Prior day low − 50 pts (long) or prior day high + 50 pts (short), capped at 3000 pts from entry.",
+    "ATTR SL: 1:1 mirror of TP distance (TP = London open ± 50 pts near-edge).",
+    "NEWS: Check economic calendar. If high-impact news imminent, skip or close existing position.",
+    "ENTRY: Place DXY trade. Apply same SL/TP distance (converted via tick_factor) to correlated pairs.",
+    "EXIT: When DXY hits TP or SL, close all correlated pair positions."
+  ],
 
   "source_documents": [
     "Strategy Rules/DXY Backtesting Rules Doc _1.pdf",
     "Strategy Rules/Dxy Open Strategy – Clean Operating Process.pdf",
-    "Strategy Rules/Nancy's Backtesting Rules for DXY Open Doc #1.docx"
+    "Strategy Rules/Nancy's Backtesting Rules for DXY Open Doc #1.docx",
+    "Backtesting Results/brice_reversal_analysis.txt",
+    "Backtesting Results/ash_mall_analysis.txt",
+    "sweep_attr_results.csv"
   ]
 }

@@ -35,6 +35,7 @@ PAIRS (DXY signal triggers pair entry):
   pair direction: PAIR_DIR * DXY_direction
 """
 
+import re
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -62,14 +63,14 @@ ZONE_MIN_WIDTH     = 150   # pts - minimum zone width
 # Strict 1:1 R:R: SL distance = TP distance = remaining pts to zone far side.
 # SL is NOT the bar extreme; it is mirrored below (long) / above (short) the entry close.
 # TP = zone far side (fills the imbalance). Min reward = ATTR_MIN_REWARD pts.
-ATTR_MIN_GAP       = 150   # pts - min distance from price to near zone edge at London open
+ATTR_MIN_GAP       = 75    # pts - min distance from price to near zone edge at London open
 ATTR_APPROACH_PTS  = 150   # pts - net move toward zone in prior 3 bars
-ATTR_MIN_REWARD    = 150   # pts - minimum distance from entry close to TP
+ATTR_MIN_REWARD    = 100   # pts - minimum distance from entry close to TP
 ATTR_NEAR_BUFFER   = 50    # pts - buffer past near zone edge for option-2 TP
 ATTR_WINDOW        = (7*60+30, 19*60+30)   # entry window: 07:30-19:30 UTC (mins)
 
 REV_MIN_BODY       = 200   # pts - reversal candle body
-REV_MIN_RANGE      = 400   # pts - reversal candle range
+REV_MIN_RANGE      = 300   # pts - reversal candle range
 REV_MAX_DIST       = 500   # pts - max distance from zone edge at entry
 REV_WINDOW         = (7*60+30, 12*60+0)   # reversal entry window: 07:30-12:00 UTC
 
@@ -78,6 +79,110 @@ MAX_LOOKFORWARD    = 400   # bars ? trade timeout
 
 EMA_FAST, EMA_SLOW = 20, 50  # for 1H and 4H bias
 PIN_WICK_MULT      = 2.0
+
+# --- NEWS FILTER --------------------------------------------------------------
+# Maps each high-impact currency to the pairs that should be skipped that day.
+# USD → skip all pairs (None means skip all); EUR/JPY/CAD → skip specific pair.
+NEWS_CURRENCY_PAIRS = {
+    'USD': None,          # None  = skip ALL trades on this date
+    'EUR': {'EURUSD'},
+    'JPY': {'USDJPY'},
+    'CAD': {'USDCAD'},
+}
+
+def load_news_filter(filepath=None):
+    """
+    Load high-impact news CSV and return:
+        news_dates : dict  { 'YYYY-MM-DD' -> set of currencies with high-impact news }
+
+    Accepts CSVs with either:
+      - 'iso_date' column  (new scraper format: '2023-08-10')
+      - 'date' column      (old scraper format: 'ThuAug 10')  -- year inferred from sequence
+    """
+    if filepath is None:
+        filepath = BASE / 'economic_calendar_high_impact.csv'
+    filepath = Path(filepath)
+    if not filepath.exists():
+        return {}
+
+    df = pd.read_csv(filepath)
+    if df.empty:
+        return {}
+
+    news = {}
+
+    # --- New format: iso_date column already present -------------------------
+    if 'iso_date' in df.columns:
+        for _, row in df.iterrows():
+            iso = str(row['iso_date']).strip()
+            cur = str(row['currency']).strip()
+            if iso and cur in NEWS_CURRENCY_PAIRS:
+                news.setdefault(iso, set()).add(cur)
+        return news
+
+    # --- Legacy format: 'date' column like 'ThuAug 10' ----------------------
+    MONTH_MAP = {
+        'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
+        'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
+    }
+    year = 2023
+    prev_month = None
+    for _, row in df.iterrows():
+        date_str = str(row.get('date', '')).strip()
+        cur      = str(row.get('currency', '')).strip()
+        m = re.match(r'[A-Za-z]{3}([A-Za-z]{3})\s*(\d+)', date_str)
+        if not m:
+            continue
+        month = MONTH_MAP.get(m.group(1))
+        if not month:
+            continue
+        day = int(m.group(2))
+        if prev_month is not None and month < prev_month and prev_month >= 11:
+            year += 1
+        prev_month = month
+        try:
+            from datetime import datetime
+            iso = datetime(year, month, day).strftime('%Y-%m-%d')
+        except ValueError:
+            continue
+        if cur in NEWS_CURRENCY_PAIRS:
+            news.setdefault(iso, set()).add(cur)
+
+    return news
+
+
+def news_blocks_pair(news_dates, entry_time_str, pair):
+    """
+    Return True if this trade should be skipped due to high-impact news.
+      entry_time_str : ISO timestamp string, e.g. '2023-08-10 13:30:00+00:00'
+      pair           : 'EURUSD' | 'USDJPY' | 'USDCAD' | 'XAUUSD'
+                       or 'ALL_USD' to check only for USD news (used in signal gen)
+    Rules:
+      USD news  → skip ALL trades / signals on this date
+      EUR news  → skip EURUSD only
+      JPY news  → skip USDJPY only
+      CAD news  → skip USDCAD only
+    """
+    if not news_dates:
+        return False
+    iso_date   = str(entry_time_str)[:10]
+    currencies = news_dates.get(iso_date)
+    if not currencies:
+        return False
+
+    # Special sentinel: caller only wants to know about USD
+    if pair == 'ALL_USD':
+        return 'USD' in currencies
+
+    for cur, blocked_pairs in NEWS_CURRENCY_PAIRS.items():
+        if cur not in currencies:
+            continue
+        if blocked_pairs is None:          # USD → block everything
+            return True
+        if pair in blocked_pairs:          # pair-specific block
+            return True
+    return False
+
 
 # --- DATA HELPERS -------------------------------------------------------------
 def load(sym):
@@ -186,7 +291,7 @@ def resolve(df, entry_idx, entry, tp, sl, direction):
     return 'timeout', df.at[j_last,'close'], j_last
 
 # --- DXY SIGNAL GENERATOR -----------------------------------------------------
-def generate_dxy_signals(df_dxy, near_edge_tp=False):
+def generate_dxy_signals(df_dxy, near_edge_tp=False, news_dates=None):
     """
     Runs the clean rules on DXY 15m data.
     Returns (signals list, raw_rev_candidate_count).
@@ -301,6 +406,11 @@ def generate_dxy_signals(df_dxy, near_edge_tp=False):
         eff_rev_start  = mon_start if dow == 0 else REV_WINDOW[0]
         in_attr_sess   = eff_attr_start <= curr_min <= ATTR_WINDOW[1] and not in_japan
         in_rev_sess    = eff_rev_start  <= curr_min <= REV_WINDOW[1]  and not in_japan
+
+        # -- USD news day: skip all signals ----------------------------------
+        # (pair-specific EUR/JPY/CAD news is filtered at apply_to_pair level)
+        if news_dates and news_blocks_pair(news_dates, str(ts), 'ALL_USD'):
+            continue
 
         # -- Distance to zone ------------------------------------------------
         dist_to_top    = (c - zone_top)    * 10000   # positive = above zone_top
@@ -461,10 +571,11 @@ def generate_dxy_signals(df_dxy, near_edge_tp=False):
     return signals, raw_rev_candidates
 
 # --- PAIR BACKTEST ------------------------------------------------------------
-def apply_to_pair(dxy_signals, df_pair, pair):
+def apply_to_pair(dxy_signals, df_pair, pair, news_dates=None):
     """
     For each DXY signal, find the matching bar on the pair and resolve the trade.
     SL/TP distances are converted from DXY pts to pair price units via PAIR_FACTOR.
+    news_dates: optional dict from load_news_filter() — filters EUR/JPY/CAD news days.
     """
     F   = PAIR_FACTOR[pair]
     D   = PAIR_DIR[pair]
@@ -476,6 +587,9 @@ def apply_to_pair(dxy_signals, df_pair, pair):
     for sig in dxy_signals:
         et = sig['entry_time']
         if et not in pair_idx:
+            continue
+        # Skip pair-specific news days (USD already filtered in generate_dxy_signals)
+        if news_dates and news_blocks_pair(news_dates, et, pair):
             continue
         pi = pair_idx[et]
         pr = df_pair.iloc[pi]
@@ -519,7 +633,7 @@ def apply_to_pair(dxy_signals, df_pair, pair):
     return results
 
 # --- PAIR BACKTEST (DXY-EXIT VARIANT) ----------------------------------------
-def apply_to_pair_dxy_exit(dxy_signals, df_pair, pair):
+def apply_to_pair_dxy_exit(dxy_signals, df_pair, pair, news_dates=None):
     """
     Exit pair trades when DXY hits its own TP or SL — not when the pair does.
     The pair may have moved only partially toward its target, so outcomes are
@@ -528,6 +642,7 @@ def apply_to_pair_dxy_exit(dxy_signals, df_pair, pair):
     This captures the case where DXY completes its move but the pair has been
     pushed sideways by pair-specific factors (oil for USDCAD, safe-haven flows
     for USDCHF), exiting before divergence reverses the trade into a full loss.
+    news_dates: optional dict from load_news_filter() — filters EUR/JPY/CAD news days.
     """
     F = PAIR_FACTOR[pair]
     D = PAIR_DIR[pair]
@@ -538,6 +653,9 @@ def apply_to_pair_dxy_exit(dxy_signals, df_pair, pair):
         et = sig['entry_time']
         xt = sig.get('exit_time')
         if et not in pair_idx or not xt or xt not in pair_idx:
+            continue
+        # Skip pair-specific news days (USD already filtered in generate_dxy_signals)
+        if news_dates and news_blocks_pair(news_dates, et, pair):
             continue
 
         pi = pair_idx[et]
@@ -700,12 +818,14 @@ def profit_estimate_r(label, all_pair_trades, account=100_000, risk_pct=0.0025):
 
 
 # --- HELPERS ------------------------------------------------------------------
-def run_variant(df_dxy, pair_dfs, near_edge_tp=False):
+def run_variant(df_dxy, pair_dfs, near_edge_tp=False, news_dates=None):
     """Run full backtest for one TP variant. Returns (dxy_signals, all_pair_trades, raw_rev)."""
-    dxy_signals, raw_rev = generate_dxy_signals(df_dxy, near_edge_tp=near_edge_tp)
+    dxy_signals, raw_rev = generate_dxy_signals(df_dxy, near_edge_tp=near_edge_tp,
+                                                 news_dates=news_dates)
     all_pair_trades = []
     for pair in PAIRS:
-        all_pair_trades.extend(apply_to_pair(dxy_signals, pair_dfs[pair], pair))
+        all_pair_trades.extend(apply_to_pair(dxy_signals, pair_dfs[pair], pair,
+                                             news_dates=news_dates))
     return dxy_signals, all_pair_trades, raw_rev
 
 
@@ -797,16 +917,35 @@ def main():
     df_dxy   = load('DXY')
     pair_dfs = {p: load(p) for p in PAIRS}
 
+    # Load news filter (optional — runs without it if CSV not yet available)
+    news_dates = load_news_filter()
+    if news_dates:
+        n_days = len(news_dates)
+        n_usd  = sum(1 for s in news_dates.values() if 'USD' in s)
+        n_eur  = sum(1 for s in news_dates.values() if 'EUR' in s)
+        n_jpy  = sum(1 for s in news_dates.values() if 'JPY' in s)
+        n_cad  = sum(1 for s in news_dates.values() if 'CAD' in s)
+        print(f"News filter loaded: {n_days} dates with high-impact events")
+        print(f"  USD days (all pairs skipped): {n_usd}")
+        print(f"  EUR days (EURUSD skipped):    {n_eur}")
+        print(f"  JPY days (USDJPY skipped):    {n_jpy}")
+        print(f"  CAD days (USDCAD skipped):    {n_cad}")
+    else:
+        print("News filter: not found — running without news filter")
+
     print("Running Option 1: TP = zone FAR side (full gap fill)...")
-    sigs1, pt1, raw1 = run_variant(df_dxy, pair_dfs, near_edge_tp=False)
+    sigs1, pt1, raw1 = run_variant(df_dxy, pair_dfs, near_edge_tp=False,
+                                   news_dates=news_dates)
 
     print("Running Option 2: TP = zone NEAR edge + 50 pt buffer...")
-    sigs2, pt2, raw2 = run_variant(df_dxy, pair_dfs, near_edge_tp=True)
+    sigs2, pt2, raw2 = run_variant(df_dxy, pair_dfs, near_edge_tp=True,
+                                   news_dates=news_dates)
 
     print("Running Option 2 + DXY Exit: exit pair when DXY hits its TP/SL...")
     pt_dxy = []
     for pair in PAIRS:
-        pt_dxy.extend(apply_to_pair_dxy_exit(sigs2, pair_dfs[pair], pair))
+        pt_dxy.extend(apply_to_pair_dxy_exit(sigs2, pair_dfs[pair], pair,
+                                             news_dates=news_dates))
 
     # -- Results ---------------------------------------------------------------
     print_variant("OPTION 1: ATTR TP = zone far side  (full gap fill, 1:1)", sigs1, pt1, raw1)

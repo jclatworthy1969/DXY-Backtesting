@@ -10,3 +10,24 @@
 # Python cache
 __pycache__/
 *.pyc
+
+# Raw price data CSVs (large source data — re-export from TradingView as needed)
+TVC_DXY*.csv
+FX_AUDUSD*.csv
+FX_EURUSD*.csv
+FX_GBPUSD*.csv
+FX_NZDUSD*.csv
+FX_USDCAD*.csv
+FX_USDCHF*.csv
+FX_USDJPY*.csv
+FX_XAUUSD*.csv
+
+# Large generated trade/pattern output CSVs
+dxy_london_patterns*.csv
+dxy_multi_pair_trades.csv
+dxy_fixed_tick_trades.csv
+dxy_pair_native_signals.csv
+
+# Session transcripts and browser exports
+*_transcription.txt
+*.html

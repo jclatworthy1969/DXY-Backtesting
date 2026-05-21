@@ -1,0 +1,1660 @@
+date,time,currency,event
+TueAug 1,3:00pm,USD,ISM Manufacturing PMI
+TueAug 1,,USD,JOLTS Job Openings
+WedAug 2,1:15pm,USD,ADP Non-Farm Employment Change
+ThuAug 3,1:30pm,USD,Unemployment Claims
+ThuAug 3,3:00pm,USD,ISM Services PMI
+FriAug 4,1:30pm,CAD,Employment Change
+FriAug 4,,CAD,Unemployment Rate
+FriAug 4,,USD,Average Hourly Earnings m/m
+FriAug 4,,USD,Non-Farm Employment Change
+FriAug 4,,USD,Unemployment Rate
+ThuAug 10,1:30pm,USD,Core CPI m/m
+ThuAug 10,,USD,CPI m/m
+ThuAug 10,,USD,CPI y/y
+ThuAug 10,,USD,Unemployment Claims
+FriAug 11,1:30pm,USD,Core PPI m/m
+FriAug 11,,USD,PPI m/m
+FriAug 11,3:00pm,USD,Prelim UoM Consumer Sentiment
+TueAug 15,1:30pm,CAD,CPI m/m
+TueAug 15,,CAD,Median CPI y/y
+TueAug 15,,CAD,Trimmed CPI y/y
+TueAug 15,,USD,Core Retail Sales m/m
+TueAug 15,,USD,Empire State Manufacturing Index
+TueAug 15,,USD,Retail Sales m/m
+WedAug 16,7:00pm,USD,FOMC Meeting Minutes
+ThuAug 17,,USD,Unemployment Claims
+WedAug 23,8:15am,EUR,French Flash Manufacturing PMI
+WedAug 23,,EUR,French Flash Services PMI
+WedAug 23,8:30am,EUR,German Flash Manufacturing PMI
+WedAug 23,,EUR,German Flash Services PMI
+WedAug 23,2:45pm,USD,Flash Manufacturing PMI
+WedAug 23,,USD,Flash Services PMI
+WedAug 23,,USD,Prelim Benchmark Payrolls Revision
+ThuAug 24,,USD,Unemployment Claims
+FriAug 25,9:00am,EUR,German ifo Business Climate
+FriAug 25,3:00pm,USD,Revised UoM Consumer Sentiment
+FriAug 25,3:05pm,USD,Fed Chairman Powell Speaks
+FriAug 25,8:00pm,EUR,ECB President Lagarde Speaks
+TueAug 29,2:00pm,USD,S&P/CS Composite-20 HPI y/y
+TueAug 29,3:00pm,USD,CB Consumer Confidence
+TueAug 29,,USD,JOLTS Job Openings
+WedAug 30,All Day,EUR,German Prelim CPI m/m
+WedAug 30,,EUR,Spanish Flash CPI y/y
+WedAug 30,1:15pm,USD,ADP Non-Farm Employment Change
+WedAug 30,1:30pm,USD,Prelim GDP q/q
+ThuAug 31,,USD,Core PCE Price Index m/m
+ThuAug 31,,USD,Unemployment Claims
+FriSep 1,1:30pm,CAD,GDP m/m
+FriSep 1,,USD,Average Hourly Earnings m/m
+FriSep 1,,USD,Non-Farm Employment Change
+FriSep 1,,USD,Unemployment Rate
+FriSep 1,3:00pm,USD,ISM Manufacturing PMI
+WedSep 6,3:00pm,CAD,BOC Rate Statement
+WedSep 6,,CAD,Overnight Rate
+WedSep 6,,USD,ISM Services PMI
+ThuSep 7,,USD,Unemployment Claims
+ThuSep 7,6:55pm,CAD,BOC Gov Macklem Speaks
+FriSep 8,1:30pm,CAD,Employment Change
+FriSep 8,,CAD,Unemployment Rate
+WedSep 13,1:30pm,USD,Core CPI m/m
+WedSep 13,,USD,CPI m/m
+WedSep 13,,USD,CPI y/y
+ThuSep 14,1:15pm,EUR,Main Refinancing Rate
+ThuSep 14,,EUR,Monetary Policy Statement
+ThuSep 14,,USD,Core PPI m/m
+ThuSep 14,,USD,Core Retail Sales m/m
+ThuSep 14,,USD,PPI m/m
+ThuSep 14,,USD,Retail Sales m/m
+ThuSep 14,,USD,Unemployment Claims
+ThuSep 14,1:45pm,EUR,ECB Press Conference
+FriSep 15,,USD,Empire State Manufacturing Index
+FriSep 15,3:00pm,USD,Prelim UoM Consumer Sentiment
+TueSep 19,1:30pm,CAD,CPI m/m
+TueSep 19,,CAD,Median CPI y/y
+TueSep 19,,CAD,Trimmed CPI y/y
+WedSep 20,7:00pm,USD,Federal Funds Rate
+WedSep 20,,USD,FOMC Economic Projections
+WedSep 20,,USD,FOMC Statement
+WedSep 20,7:30pm,USD,FOMC Press Conference
+ThuSep 21,,USD,Unemployment Claims
+FriSep 22,3:52am,JPY,Monetary Policy Statement
+FriSep 22,7:30am,JPY,BOJ Press Conference
+FriSep 22,8:15am,EUR,French Flash Manufacturing PMI
+FriSep 22,,EUR,French Flash Services PMI
+FriSep 22,8:30am,EUR,German Flash Manufacturing PMI
+FriSep 22,,EUR,German Flash Services PMI
+FriSep 22,2:45pm,USD,Flash Manufacturing PMI
+FriSep 22,,USD,Flash Services PMI
+MonSep 25,6:35am,JPY,BOJ Gov Ueda Speaks
+MonSep 25,9:00am,EUR,German ifo Business Climate
+TueSep 26,3:00pm,USD,CB Consumer Confidence
+ThuSep 28,All Day,EUR,German Prelim CPI m/m
+ThuSep 28,8:00am,EUR,Spanish Flash CPI y/y
+ThuSep 28,1:30pm,USD,Final GDP q/q
+ThuSep 28,,USD,Unemployment Claims
+ThuSep 28,9:00pm,USD,Fed Chairman Powell Speaks
+FriSep 29,1:30pm,CAD,GDP m/m
+FriSep 29,,USD,Core PCE Price Index m/m
+FriSep 29,3:00pm,USD,Revised UoM Consumer Sentiment
+SatSep 30,7:01am,JPY,BOJ Gov Ueda Speaks
+MonOct 2,3:00pm,USD,ISM Manufacturing PMI
+MonOct 2,,USD,Fed Chairman Powell Speaks
+TueOct 3,3:00pm,USD,JOLTS Job Openings
+WedOct 4,1:15pm,USD,ADP Non-Farm Employment Change
+WedOct 4,3:00pm,USD,ISM Services PMI
+ThuOct 5,,USD,Unemployment Claims
+FriOct 6,1:30pm,CAD,Employment Change
+FriOct 6,,CAD,Unemployment Rate
+FriOct 6,,USD,Average Hourly Earnings m/m
+FriOct 6,,USD,Non-Farm Employment Change
+FriOct 6,,USD,Unemployment Rate
+WedOct 11,,USD,Core PPI m/m
+WedOct 11,,USD,PPI m/m
+WedOct 11,7:00pm,USD,FOMC Meeting Minutes
+ThuOct 12,1:30pm,USD,Core CPI m/m
+ThuOct 12,,USD,CPI m/m
+ThuOct 12,,USD,CPI y/y
+ThuOct 12,,USD,Unemployment Claims
+FriOct 13,3:00pm,USD,Prelim UoM Consumer Sentiment
+MonOct 16,,USD,Empire State Manufacturing Index
+TueOct 17,1:30pm,CAD,CPI m/m
+TueOct 17,,CAD,Median CPI y/y
+TueOct 17,,CAD,Trimmed CPI y/y
+TueOct 17,,USD,Core Retail Sales m/m
+TueOct 17,,USD,Retail Sales m/m
+ThuOct 19,,USD,Unemployment Claims
+ThuOct 19,5:00pm,USD,Fed Chairman Powell Speaks
+TueOct 24,8:15am,EUR,French Flash Manufacturing PMI
+TueOct 24,,EUR,French Flash Services PMI
+TueOct 24,8:30am,EUR,German Flash Manufacturing PMI
+TueOct 24,,EUR,German Flash Services PMI
+TueOct 24,2:45pm,USD,Flash Manufacturing PMI
+TueOct 24,,USD,Flash Services PMI
+WedOct 25,,EUR,German ifo Business Climate
+WedOct 25,3:00pm,CAD,BOC Monetary Policy Report
+WedOct 25,,CAD,BOC Rate Statement
+WedOct 25,,CAD,Overnight Rate
+WedOct 25,4:00pm,CAD,BOC Press Conference
+WedOct 25,9:35pm,USD,Fed Chairman Powell Speaks
+ThuOct 26,1:15pm,EUR,Main Refinancing Rate
+ThuOct 26,,EUR,Monetary Policy Statement
+ThuOct 26,1:30pm,USD,Advance GDP q/q
+ThuOct 26,,USD,Unemployment Claims
+ThuOct 26,1:45pm,EUR,ECB Press Conference
+FriOct 27,All Day,EUR,Euro Summit
+FriOct 27,1:30pm,USD,Core PCE Price Index m/m
+FriOct 27,3:00pm,USD,Revised UoM Consumer Sentiment
+MonOct 30,All Day,EUR,German Prelim CPI m/m
+MonOct 30,,EUR,Spanish Flash CPI y/y
+MonOct 30,7:30pm,CAD,BOC Gov Macklem Speaks
+TueOct 31,3:28am,JPY,BOJ Outlook Report
+TueOct 31,,JPY,BOJ Policy Rate
+TueOct 31,,JPY,Monetary Policy Statement
+TueOct 31,6:40am,JPY,BOJ Press Conference
+TueOct 31,12:30pm,CAD,GDP m/m
+TueOct 31,,USD,Employment Cost Index q/q
+TueOct 31,2:00pm,USD,CB Consumer Confidence
+WedNov 1,12:15pm,USD,ADP Non-Farm Employment Change
+WedNov 1,2:00pm,USD,ISM Manufacturing PMI
+WedNov 1,,USD,JOLTS Job Openings
+WedNov 1,6:00pm,USD,Federal Funds Rate
+WedNov 1,,USD,FOMC Statement
+WedNov 1,6:30pm,USD,FOMC Press Conference
+WedNov 1,8:15pm,CAD,BOC Gov Macklem Speaks
+ThuNov 2,,USD,Unemployment Claims
+FriNov 3,12:30pm,CAD,Employment Change
+FriNov 3,,CAD,Unemployment Rate
+FriNov 3,,USD,Average Hourly Earnings m/m
+FriNov 3,,USD,Non-Farm Employment Change
+FriNov 3,,USD,Unemployment Rate
+FriNov 3,2:00pm,USD,ISM Services PMI
+MonNov 6,1:05am,JPY,BOJ Gov Ueda Speaks
+TueNov 7,9:00pm,USD,Treasury Currency Report
+WedNov 8,2:15pm,USD,Fed Chairman Powell Speaks
+ThuNov 9,1:30pm,USD,Unemployment Claims
+ThuNov 9,7:00pm,USD,Fed Chairman Powell Speaks
+FriNov 10,3:00pm,USD,Prelim UoM Consumer Sentiment
+TueNov 14,1:30pm,USD,Core CPI m/m
+TueNov 14,,USD,CPI m/m
+TueNov 14,,USD,CPI y/y
+WedNov 15,,USD,Core PPI m/m
+WedNov 15,,USD,Core Retail Sales m/m
+WedNov 15,,USD,Empire State Manufacturing Index
+WedNov 15,,USD,PPI m/m
+WedNov 15,,USD,Retail Sales m/m
+ThuNov 16,1:30pm,USD,Unemployment Claims
+TueNov 21,1:30pm,CAD,CPI m/m
+TueNov 21,,CAD,Median CPI y/y
+TueNov 21,,CAD,Trimmed CPI y/y
+TueNov 21,7:00pm,USD,FOMC Meeting Minutes
+WedNov 22,1:30pm,USD,Unemployment Claims
+WedNov 22,,USD,Revised UoM Consumer Sentiment
+WedNov 22,4:30pm,CAD,BOC Gov Macklem Speaks
+ThuNov 23,8:15am,EUR,French Flash Manufacturing PMI
+ThuNov 23,,EUR,French Flash Services PMI
+ThuNov 23,8:30am,EUR,German Flash Manufacturing PMI
+ThuNov 23,,EUR,German Flash Services PMI
+FriNov 24,2:45pm,USD,Flash Manufacturing PMI
+FriNov 24,,USD,Flash Services PMI
+TueNov 28,3:00pm,USD,CB Consumer Confidence
+WedNov 29,All Day,EUR,German Prelim CPI m/m
+WedNov 29,8:00am,EUR,Spanish Flash CPI y/y
+WedNov 29,,USD,Prelim GDP q/q
+ThuNov 30,1:30pm,CAD,GDP m/m
+ThuNov 30,,USD,Core PCE Price Index m/m
+ThuNov 30,,USD,Unemployment Claims
+FriDec 1,1:30pm,CAD,Employment Change
+FriDec 1,,CAD,Unemployment Rate
+FriDec 1,3:00pm,USD,ISM Manufacturing PMI
+FriDec 1,4:00pm,USD,Fed Chairman Powell Speaks
+FriDec 1,7:00pm,USD,Fed Chairman Powell Speaks
+TueDec 5,3:00pm,USD,ISM Services PMI
+TueDec 5,,USD,JOLTS Job Openings
+WedDec 6,1:15pm,USD,ADP Non-Farm Employment Change
+WedDec 6,3:00pm,CAD,BOC Rate Statement
+WedDec 6,,CAD,Overnight Rate
+ThuDec 7,,USD,Unemployment Claims
+FriDec 8,,USD,Average Hourly Earnings m/m
+FriDec 8,,USD,Non-Farm Employment Change
+FriDec 8,,USD,Unemployment Rate
+FriDec 8,3:00pm,USD,Prelim UoM Consumer Sentiment
+TueDec 12,1:30pm,USD,Core CPI m/m
+TueDec 12,,USD,CPI m/m
+TueDec 12,,USD,CPI y/y
+WedDec 13,1:30pm,USD,Core PPI m/m
+WedDec 13,,USD,PPI m/m
+WedDec 13,7:00pm,USD,Federal Funds Rate
+WedDec 13,,USD,FOMC Economic Projections
+WedDec 13,,USD,FOMC Statement
+WedDec 13,7:30pm,USD,FOMC Press Conference
+ThuDec 14,1:15pm,EUR,Main Refinancing Rate
+ThuDec 14,,EUR,Monetary Policy Statement
+ThuDec 14,,USD,Core Retail Sales m/m
+ThuDec 14,,USD,Retail Sales m/m
+ThuDec 14,,USD,Unemployment Claims
+ThuDec 14,1:45pm,EUR,ECB Press Conference
+FriDec 15,8:15am,EUR,French Flash Manufacturing PMI
+FriDec 15,,EUR,French Flash Services PMI
+FriDec 15,8:30am,EUR,German Flash Manufacturing PMI
+FriDec 15,,EUR,German Flash Services PMI
+FriDec 15,,USD,Empire State Manufacturing Index
+FriDec 15,2:45pm,USD,Flash Manufacturing PMI
+FriDec 15,,USD,Flash Services PMI
+FriDec 15,5:25pm,CAD,BOC Gov Macklem Speaks
+TueDec 19,2:49am,JPY,Monetary Policy Statement
+TueDec 19,6:30am,JPY,BOJ Press Conference
+TueDec 19,1:30pm,CAD,CPI m/m
+TueDec 19,,CAD,Median CPI y/y
+TueDec 19,,CAD,Trimmed CPI y/y
+WedDec 20,,USD,CB Consumer Confidence
+ThuDec 21,,USD,Final GDP q/q
+ThuDec 21,,USD,Unemployment Claims
+FriDec 22,1:30pm,CAD,GDP m/m
+FriDec 22,,USD,Core PCE Price Index m/m
+FriDec 22,3:00pm,USD,Revised UoM Consumer Sentiment
+WedJan 3,3:00pm,USD,ISM Manufacturing PMI
+WedJan 3,,USD,JOLTS Job Openings
+WedJan 3,7:00pm,USD,FOMC Meeting Minutes
+ThuJan 4,All Day,EUR,German Prelim CPI m/m
+ThuJan 4,1:15pm,USD,ADP Non-Farm Employment Change
+ThuJan 4,1:30pm,USD,Unemployment Claims
+FriJan 5,1:30pm,CAD,Employment Change
+FriJan 5,,CAD,Unemployment Rate
+FriJan 5,,USD,Average Hourly Earnings m/m
+FriJan 5,,USD,Non-Farm Employment Change
+FriJan 5,,USD,Unemployment Rate
+FriJan 5,,USD,ISM Services PMI
+ThuJan 11,1:30pm,USD,Core CPI m/m
+ThuJan 11,,USD,CPI m/m
+ThuJan 11,,USD,CPI y/y
+ThuJan 11,,USD,Unemployment Claims
+FriJan 12,1:30pm,USD,Core PPI m/m
+FriJan 12,,USD,PPI m/m
+TueJan 16,1:30pm,CAD,CPI m/m
+TueJan 16,,CAD,Median CPI y/y
+TueJan 16,,CAD,Trimmed CPI y/y
+TueJan 16,,USD,Empire State Manufacturing Index
+WedJan 17,,USD,Core Retail Sales m/m
+WedJan 17,,USD,Retail Sales m/m
+ThuJan 18,1:30pm,USD,Unemployment Claims
+FriJan 19,3:00pm,USD,Prelim UoM Consumer Sentiment
+TueJan 23,3:09am,JPY,BOJ Outlook Report
+TueJan 23,,JPY,Monetary Policy Statement
+TueJan 23,6:30am,JPY,BOJ Press Conference
+WedJan 24,8:15am,EUR,French Flash Manufacturing PMI
+WedJan 24,,EUR,French Flash Services PMI
+WedJan 24,8:30am,EUR,German Flash Manufacturing PMI
+WedJan 24,,EUR,German Flash Services PMI
+WedJan 24,2:45pm,CAD,BOC Monetary Policy Report
+WedJan 24,,CAD,BOC Rate Statement
+WedJan 24,,CAD,Overnight Rate
+WedJan 24,,USD,Flash Manufacturing PMI
+WedJan 24,,USD,Flash Services PMI
+WedJan 24,3:30pm,CAD,BOC Press Conference
+ThuJan 25,1:15pm,EUR,Main Refinancing Rate
+ThuJan 25,,EUR,Monetary Policy Statement
+ThuJan 25,1:30pm,USD,Advance GDP q/q
+ThuJan 25,,USD,Unemployment Claims
+ThuJan 25,1:45pm,EUR,ECB Press Conference
+FriJan 26,1:30pm,USD,Core PCE Price Index m/m
+TueJan 30,3:00pm,USD,CB Consumer Confidence
+TueJan 30,,USD,JOLTS Job Openings
+WedJan 31,All Day,EUR,German Prelim CPI m/m
+WedJan 31,1:15pm,USD,ADP Non-Farm Employment Change
+WedJan 31,1:30pm,CAD,GDP m/m
+WedJan 31,,USD,Employment Cost Index q/q
+WedJan 31,7:00pm,USD,Federal Funds Rate
+WedJan 31,,USD,FOMC Statement
+WedJan 31,7:30pm,USD,FOMC Press Conference
+ThuFeb 1,1:30pm,USD,Unemployment Claims
+ThuFeb 1,3:00pm,USD,ISM Manufacturing PMI
+ThuFeb 1,4:30pm,CAD,BOC Gov Macklem Speaks
+FriFeb 2,1:30pm,USD,Average Hourly Earnings m/m
+FriFeb 2,,USD,Non-Farm Employment Change
+FriFeb 2,,USD,Unemployment Rate
+FriFeb 2,3:00pm,USD,Revised UoM Consumer Sentiment
+MonFeb 5,,USD,Fed Chairman Powell Speaks
+MonFeb 5,3:00pm,USD,ISM Services PMI
+TueFeb 6,5:45pm,CAD,BOC Gov Macklem Speaks
+ThuFeb 8,1:30pm,USD,Unemployment Claims
+FriFeb 9,1:30pm,CAD,Employment Change
+FriFeb 9,,CAD,Unemployment Rate
+TueFeb 13,1:30pm,USD,Core CPI m/m
+TueFeb 13,,USD,CPI m/m
+TueFeb 13,,USD,CPI y/y
+ThuFeb 15,,USD,Core Retail Sales m/m
+ThuFeb 15,,USD,Empire State Manufacturing Index
+ThuFeb 15,,USD,Retail Sales m/m
+ThuFeb 15,,USD,Unemployment Claims
+FriFeb 16,,USD,Core PPI m/m
+FriFeb 16,,USD,PPI m/m
+FriFeb 16,3:00pm,USD,Prelim UoM Consumer Sentiment
+TueFeb 20,1:30pm,CAD,CPI m/m
+TueFeb 20,,CAD,Median CPI y/y
+TueFeb 20,,CAD,Trimmed CPI y/y
+WedFeb 21,7:00pm,USD,FOMC Meeting Minutes
+ThuFeb 22,8:15am,EUR,French Flash Manufacturing PMI
+ThuFeb 22,,EUR,French Flash Services PMI
+ThuFeb 22,8:30am,EUR,German Flash Manufacturing PMI
+ThuFeb 22,,EUR,German Flash Services PMI
+ThuFeb 22,,USD,Unemployment Claims
+ThuFeb 22,2:45pm,USD,Flash Manufacturing PMI
+ThuFeb 22,,USD,Flash Services PMI
+TueFeb 27,1:30pm,USD,Durable Goods Orders m/m
+TueFeb 27,3:00pm,USD,CB Consumer Confidence
+WedFeb 28,,USD,Prelim GDP q/q
+ThuFeb 29,All Day,EUR,German Prelim CPI m/m
+ThuFeb 29,1:30pm,CAD,GDP m/m
+ThuFeb 29,,USD,Core PCE Price Index m/m
+ThuFeb 29,,USD,Unemployment Claims
+FriMar 1,3:00pm,USD,ISM Manufacturing PMI
+FriMar 1,,USD,Revised UoM Consumer Sentiment
+TueMar 5,4:00am,JPY,BOJ Gov Ueda Speaks
+TueMar 5,3:00pm,USD,ISM Services PMI
+WedMar 6,1:15pm,USD,ADP Non-Farm Employment Change
+WedMar 6,2:45pm,CAD,BOC Rate Statement
+WedMar 6,,CAD,Overnight Rate
+WedMar 6,,USD,Fed Chairman Powell Testifies
+WedMar 6,,USD,JOLTS Job Openings
+WedMar 6,3:30pm,CAD,BOC Press Conference
+ThuMar 7,1:15pm,EUR,Main Refinancing Rate
+ThuMar 7,,EUR,Monetary Policy Statement
+ThuMar 7,,USD,Unemployment Claims
+ThuMar 7,1:45pm,EUR,ECB Press Conference
+ThuMar 7,3:00pm,USD,Fed Chairman Powell Testifies
+FriMar 8,1:30pm,CAD,Employment Change
+FriMar 8,,CAD,Unemployment Rate
+FriMar 8,,USD,Average Hourly Earnings m/m
+FriMar 8,,USD,Non-Farm Employment Change
+FriMar 8,,USD,Unemployment Rate
+TueMar 12,12:30pm,USD,Core CPI m/m
+TueMar 12,,USD,CPI m/m
+TueMar 12,,USD,CPI y/y
+TueMar 12,5:01pm,USD,10-y Bond Auction
+WedMar 13,5:01pm,USD,30-y Bond Auction
+ThuMar 14,,USD,Core PPI m/m
+ThuMar 14,,USD,Core Retail Sales m/m
+ThuMar 14,,USD,PPI m/m
+ThuMar 14,,USD,Retail Sales m/m
+ThuMar 14,,USD,Unemployment Claims
+FriMar 15,,USD,Empire State Manufacturing Index
+FriMar 15,2:00pm,USD,Prelim UoM Consumer Sentiment
+TueMar 19,3:36am,JPY,BOJ Policy Rate
+TueMar 19,,JPY,Monetary Policy Statement
+TueMar 19,6:30am,JPY,BOJ Press Conference
+TueMar 19,12:30pm,CAD,CPI m/m
+TueMar 19,,CAD,Median CPI y/y
+TueMar 19,,CAD,Trimmed CPI y/y
+WedMar 20,6:00pm,USD,Federal Funds Rate
+WedMar 20,,USD,FOMC Economic Projections
+WedMar 20,,USD,FOMC Statement
+WedMar 20,6:30pm,USD,FOMC Press Conference
+ThuMar 21,8:15am,EUR,French Flash Manufacturing PMI
+ThuMar 21,,EUR,French Flash Services PMI
+ThuMar 21,,EUR,German Flash Manufacturing PMI
+ThuMar 21,,EUR,German Flash Services PMI
+ThuMar 21,,USD,Unemployment Claims
+ThuMar 21,1:45pm,USD,Flash Manufacturing PMI
+ThuMar 21,,USD,Flash Services PMI
+FriMar 22,All Day,EUR,Euro Summit
+FriMar 22,,USD,Fed Chairman Powell Speaks
+TueMar 26,2:00pm,USD,CB Consumer Confidence
+WedMar 27,10:00pm,USD,FOMC Member Waller Speaks
+ThuMar 28,12:30pm,CAD,GDP m/m
+ThuMar 28,,USD,Final GDP q/q
+ThuMar 28,,USD,Unemployment Claims
+ThuMar 28,2:00pm,USD,Pending Home Sales m/m
+ThuMar 28,,USD,Revised UoM Consumer Sentiment
+FriMar 29,12:30pm,USD,Core PCE Price Index m/m
+FriMar 29,3:30pm,USD,Fed Chairman Powell Speaks
+MonApr 1,3:00pm,USD,ISM Manufacturing PMI
+TueApr 2,All Day,EUR,German Prelim CPI m/m
+TueApr 2,3:00pm,USD,JOLTS Job Openings
+WedApr 3,1:15pm,USD,ADP Non-Farm Employment Change
+WedApr 3,3:00pm,USD,ISM Services PMI
+WedApr 3,5:10pm,USD,Fed Chairman Powell Speaks
+ThuApr 4,,USD,Unemployment Claims
+FriApr 5,1:30pm,CAD,Employment Change
+FriApr 5,,CAD,Unemployment Rate
+FriApr 5,,USD,Average Hourly Earnings m/m
+FriApr 5,,USD,Non-Farm Employment Change
+FriApr 5,,USD,Unemployment Rate
+WedApr 10,,USD,Core CPI m/m
+WedApr 10,,USD,CPI m/m
+WedApr 10,,USD,CPI y/y
+WedApr 10,2:45pm,CAD,BOC Monetary Policy Report
+WedApr 10,,CAD,BOC Rate Statement
+WedApr 10,,CAD,Overnight Rate
+WedApr 10,3:30pm,CAD,BOC Press Conference
+WedApr 10,7:00pm,USD,FOMC Meeting Minutes
+ThuApr 11,1:15pm,EUR,Main Refinancing Rate
+ThuApr 11,,EUR,Monetary Policy Statement
+ThuApr 11,1:30pm,USD,Core PPI m/m
+ThuApr 11,,USD,PPI m/m
+ThuApr 11,,USD,Unemployment Claims
+ThuApr 11,1:45pm,EUR,ECB Press Conference
+ThuApr 11,6:01pm,USD,30-y Bond Auction
+FriApr 12,3:00pm,USD,Prelim UoM Consumer Sentiment
+MonApr 15,,USD,Core Retail Sales m/m
+MonApr 15,,USD,Empire State Manufacturing Index
+MonApr 15,,USD,Retail Sales m/m
+TueApr 16,1:30pm,CAD,CPI m/m
+TueApr 16,,CAD,Median CPI y/y
+TueApr 16,,CAD,Trimmed CPI y/y
+TueApr 16,6:15pm,CAD,BOC Gov Macklem Speaks
+TueApr 16,,USD,Fed Chairman Powell Speaks
+ThuApr 18,1:30pm,USD,Unemployment Claims
+TueApr 23,8:15am,EUR,French Flash Manufacturing PMI
+TueApr 23,,EUR,French Flash Services PMI
+TueApr 23,8:30am,EUR,German Flash Manufacturing PMI
+TueApr 23,,EUR,German Flash Services PMI
+TueApr 23,2:45pm,USD,Flash Manufacturing PMI
+TueApr 23,,USD,Flash Services PMI
+ThuApr 25,1:30pm,USD,Advance GDP q/q
+ThuApr 25,,USD,Unemployment Claims
+ThuApr 25,3:00pm,USD,Pending Home Sales m/m
+FriApr 26,4:22am,JPY,BOJ Outlook Report
+FriApr 26,,JPY,BOJ Policy Rate
+FriApr 26,,JPY,Monetary Policy Statement
+FriApr 26,7:30am,JPY,BOJ Press Conference
+FriApr 26,1:30pm,USD,Core PCE Price Index m/m
+FriApr 26,3:00pm,USD,Revised UoM Consumer Sentiment
+MonApr 29,All Day,EUR,German Prelim CPI m/m
+TueApr 30,1:30pm,CAD,GDP m/m
+TueApr 30,,USD,Employment Cost Index q/q
+TueApr 30,3:00pm,USD,CB Consumer Confidence
+WedMay 1,1:15pm,USD,ADP Non-Farm Employment Change
+WedMay 1,2:45pm,USD,Final Manufacturing PMI
+WedMay 1,3:00pm,USD,ISM Manufacturing PMI
+WedMay 1,,USD,JOLTS Job Openings
+WedMay 1,7:00pm,USD,Federal Funds Rate
+WedMay 1,,USD,FOMC Statement
+WedMay 1,7:30pm,USD,FOMC Press Conference
+WedMay 1,9:15pm,CAD,BOC Gov Macklem Speaks
+ThuMay 2,,USD,Unemployment Claims
+ThuMay 2,1:45pm,CAD,BOC Gov Macklem Speaks
+FriMay 3,1:30pm,USD,Average Hourly Earnings m/m
+FriMay 3,,USD,Non-Farm Employment Change
+FriMay 3,,USD,Unemployment Rate
+FriMay 3,3:00pm,USD,ISM Services PMI
+ThuMay 9,1:30pm,USD,Unemployment Claims
+ThuMay 9,4:00pm,CAD,BOC Gov Macklem Speaks
+ThuMay 9,6:01pm,USD,30-y Bond Auction
+FriMay 10,1:30pm,CAD,Employment Change
+FriMay 10,,CAD,Unemployment Rate
+FriMay 10,3:00pm,USD,Prelim UoM Consumer Sentiment
+TueMay 14,,USD,Core PPI m/m
+TueMay 14,,USD,PPI m/m
+TueMay 14,3:00pm,USD,Fed Chairman Powell Speaks
+WedMay 15,,USD,Core CPI m/m
+WedMay 15,,USD,Core Retail Sales m/m
+WedMay 15,,USD,CPI m/m
+WedMay 15,,USD,CPI y/y
+WedMay 15,,USD,Empire State Manufacturing Index
+WedMay 15,,USD,Retail Sales m/m
+ThuMay 16,1:30pm,USD,Unemployment Claims
+TueMay 21,1:30pm,CAD,CPI m/m
+TueMay 21,,CAD,Median CPI y/y
+TueMay 21,,CAD,Trimmed CPI y/y
+WedMay 22,7:00pm,USD,FOMC Meeting Minutes
+ThuMay 23,8:15am,EUR,French Flash Manufacturing PMI
+ThuMay 23,,EUR,French Flash Services PMI
+ThuMay 23,8:30am,EUR,German Flash Manufacturing PMI
+ThuMay 23,,EUR,German Flash Services PMI
+ThuMay 23,,USD,Unemployment Claims
+ThuMay 23,2:45pm,USD,Flash Manufacturing PMI
+ThuMay 23,,USD,Flash Services PMI
+FriMay 24,3:00pm,USD,Revised UoM Consumer Sentiment
+MonMay 27,1:05am,JPY,BOJ Gov Ueda Speaks
+TueMay 28,3:00pm,USD,CB Consumer Confidence
+WedMay 29,All Day,EUR,German Prelim CPI m/m
+ThuMay 30,,USD,Prelim GDP q/q
+ThuMay 30,,USD,Unemployment Claims
+ThuMay 30,3:00pm,USD,Pending Home Sales m/m
+FriMay 31,10:00am,EUR,Core CPI Flash Estimate y/y
+FriMay 31,,EUR,CPI Flash Estimate y/y
+FriMay 31,1:30pm,CAD,GDP m/m
+FriMay 31,,USD,Core PCE Price Index m/m
+MonJun 3,2:45pm,USD,Final Manufacturing PMI
+MonJun 3,3:00pm,USD,ISM Manufacturing PMI
+TueJun 4,3:00pm,USD,JOLTS Job Openings
+WedJun 5,1:15pm,USD,ADP Non-Farm Employment Change
+WedJun 5,2:45pm,CAD,BOC Rate Statement
+WedJun 5,,CAD,Overnight Rate
+WedJun 5,3:00pm,USD,ISM Services PMI
+WedJun 5,3:30pm,CAD,BOC Press Conference
+ThuJun 6,1:15pm,EUR,Main Refinancing Rate
+ThuJun 6,,EUR,Monetary Policy Statement
+ThuJun 6,,USD,Unemployment Claims
+ThuJun 6,1:45pm,EUR,ECB Press Conference
+FriJun 7,1:30pm,CAD,Employment Change
+FriJun 7,,CAD,Unemployment Rate
+FriJun 7,,USD,Average Hourly Earnings m/m
+FriJun 7,,USD,Non-Farm Employment Change
+FriJun 7,,USD,Unemployment Rate
+SunJun 9,Day 4,EUR,European Parliamentary Elections
+WedJun 12,1:30pm,USD,Core CPI m/m
+WedJun 12,,USD,CPI m/m
+WedJun 12,,USD,CPI y/y
+WedJun 12,7:00pm,USD,Federal Funds Rate
+WedJun 12,,USD,FOMC Economic Projections
+WedJun 12,,USD,FOMC Statement
+WedJun 12,7:30pm,USD,FOMC Press Conference
+WedJun 12,8:15pm,CAD,BOC Gov Macklem Speaks
+ThuJun 13,1:30pm,USD,Core PPI m/m
+ThuJun 13,,USD,PPI m/m
+ThuJun 13,,USD,Unemployment Claims
+ThuJun 13,6:00pm,CAD,BOC Gov Macklem Speaks
+FriJun 14,4:23am,JPY,BOJ Policy Rate
+FriJun 14,,JPY,Monetary Policy Statement
+FriJun 14,7:30am,JPY,BOJ Press Conference
+FriJun 14,3:00pm,USD,Prelim UoM Consumer Sentiment
+MonJun 17,,USD,Empire State Manufacturing Index
+TueJun 18,1:30pm,USD,Core Retail Sales m/m
+TueJun 18,,USD,Retail Sales m/m
+ThuJun 20,,USD,Unemployment Claims
+ThuJun 20,9:00pm,USD,Treasury Currency Report
+FriJun 21,8:15am,EUR,French Flash Manufacturing PMI
+FriJun 21,,EUR,French Flash Services PMI
+FriJun 21,8:30am,EUR,German Flash Manufacturing PMI
+FriJun 21,,EUR,German Flash Services PMI
+FriJun 21,2:45pm,USD,Flash Manufacturing PMI
+FriJun 21,,USD,Flash Services PMI
+MonJun 24,6:30pm,CAD,BOC Gov Macklem Speaks
+TueJun 25,1:30pm,CAD,CPI m/m
+TueJun 25,,CAD,Median CPI y/y
+TueJun 25,,CAD,Trimmed CPI y/y
+TueJun 25,3:00pm,USD,CB Consumer Confidence
+WedJun 26,3:00pm,USD,New Home Sales
+ThuJun 27,1:30pm,USD,Final GDP q/q
+ThuJun 27,,USD,Unemployment Claims
+ThuJun 27,3:00pm,USD,Pending Home Sales m/m
+FriJun 28,1:30pm,CAD,GDP m/m
+FriJun 28,,USD,Core PCE Price Index m/m
+SunJun 30,All Day,EUR,French Parliamentary Elections
+MonJul 1,All Day,EUR,German Prelim CPI m/m
+MonJul 1,3:00pm,USD,ISM Manufacturing PMI
+TueJul 2,10:00am,EUR,Core CPI Flash Estimate y/y
+TueJul 2,,EUR,CPI Flash Estimate y/y
+TueJul 2,,USD,Fed Chairman Powell Speaks
+TueJul 2,3:00pm,USD,JOLTS Job Openings
+WedJul 3,1:15pm,USD,ADP Non-Farm Employment Change
+WedJul 3,,USD,Unemployment Claims
+WedJul 3,3:00pm,USD,ISM Services PMI
+WedJul 3,7:00pm,USD,FOMC Meeting Minutes
+FriJul 5,1:30pm,CAD,Employment Change
+FriJul 5,,CAD,Unemployment Rate
+FriJul 5,,USD,Average Hourly Earnings m/m
+FriJul 5,,USD,Non-Farm Employment Change
+FriJul 5,,USD,Unemployment Rate
+SunJul 7,All Day,EUR,French Parliamentary Elections
+TueJul 9,3:00pm,USD,Fed Chairman Powell Testifies
+WedJul 10,,USD,Fed Chairman Powell Testifies
+ThuJul 11,1:30pm,USD,Core CPI m/m
+ThuJul 11,,USD,CPI m/m
+ThuJul 11,,USD,CPI y/y
+ThuJul 11,,USD,Unemployment Claims
+FriJul 12,,USD,Core PPI m/m
+FriJul 12,,USD,PPI m/m
+FriJul 12,3:00pm,USD,Prelim UoM Consumer Sentiment
+MonJul 15,,USD,Empire State Manufacturing Index
+MonJul 15,5:30pm,USD,Fed Chairman Powell Speaks
+TueJul 16,1:30pm,CAD,CPI m/m
+TueJul 16,,CAD,Median CPI y/y
+TueJul 16,,CAD,Trimmed CPI y/y
+TueJul 16,,USD,Core Retail Sales m/m
+TueJul 16,,USD,Retail Sales m/m
+ThuJul 18,1:15pm,EUR,Main Refinancing Rate
+ThuJul 18,,EUR,Monetary Policy Statement
+ThuJul 18,1:30pm,USD,Unemployment Claims
+ThuJul 18,1:45pm,EUR,ECB Press Conference
+FriJul 19,1:30pm,CAD,Core Retail Sales m/m
+FriJul 19,,CAD,Retail Sales m/m
+WedJul 24,8:15am,EUR,French Flash Manufacturing PMI
+WedJul 24,,EUR,French Flash Services PMI
+WedJul 24,8:30am,EUR,German Flash Manufacturing PMI
+WedJul 24,,EUR,German Flash Services PMI
+WedJul 24,2:45pm,CAD,BOC Monetary Policy Report
+WedJul 24,,CAD,BOC Rate Statement
+WedJul 24,,CAD,Overnight Rate
+WedJul 24,,USD,Flash Manufacturing PMI
+WedJul 24,,USD,Flash Services PMI
+WedJul 24,3:30pm,CAD,BOC Press Conference
+ThuJul 25,1:30pm,USD,Advance GDP q/q
+ThuJul 25,,USD,Unemployment Claims
+FriJul 26,1:30pm,USD,Core PCE Price Index m/m
+TueJul 30,All Day,EUR,German Prelim CPI m/m
+TueJul 30,3:00pm,USD,CB Consumer Confidence
+TueJul 30,,USD,JOLTS Job Openings
+WedJul 31,4:57am,JPY,BOJ Outlook Report
+WedJul 31,,JPY,BOJ Policy Rate
+WedJul 31,,JPY,Monetary Policy Statement
+WedJul 31,7:30am,JPY,BOJ Press Conference
+WedJul 31,10:00am,EUR,Core CPI Flash Estimate y/y
+WedJul 31,,EUR,CPI Flash Estimate y/y
+WedJul 31,1:15pm,USD,ADP Non-Farm Employment Change
+WedJul 31,1:30pm,CAD,GDP m/m
+WedJul 31,,USD,Employment Cost Index q/q
+WedJul 31,3:00pm,USD,Pending Home Sales m/m
+WedJul 31,7:00pm,USD,Federal Funds Rate
+WedJul 31,,USD,FOMC Statement
+WedJul 31,7:30pm,USD,FOMC Press Conference
+ThuAug 1,1:30pm,USD,Unemployment Claims
+ThuAug 1,3:00pm,USD,ISM Manufacturing PMI
+FriAug 2,1:30pm,USD,Average Hourly Earnings m/m
+FriAug 2,,USD,Non-Farm Employment Change
+FriAug 2,,USD,Unemployment Rate
+MonAug 5,3:00pm,USD,ISM Services PMI
+ThuAug 8,1:30pm,USD,Unemployment Claims
+FriAug 9,1:30pm,CAD,Employment Change
+FriAug 9,,CAD,Unemployment Rate
+TueAug 13,1:30pm,USD,Core PPI m/m
+TueAug 13,,USD,PPI m/m
+WedAug 14,1:30pm,USD,Core CPI m/m
+WedAug 14,,USD,CPI m/m
+WedAug 14,,USD,CPI y/y
+ThuAug 15,,USD,Core Retail Sales m/m
+ThuAug 15,,USD,Retail Sales m/m
+ThuAug 15,,USD,Unemployment Claims
+TueAug 20,1:30pm,CAD,CPI m/m
+TueAug 20,,CAD,Median CPI y/y
+TueAug 20,,CAD,Trimmed CPI y/y
+WedAug 21,3:00pm,USD,Prelim Benchmark Payrolls Revision
+WedAug 21,7:00pm,USD,FOMC Meeting Minutes
+ThuAug 22,8:15am,EUR,French Flash Manufacturing PMI
+ThuAug 22,,EUR,French Flash Services PMI
+ThuAug 22,8:30am,EUR,German Flash Manufacturing PMI
+ThuAug 22,,EUR,German Flash Services PMI
+ThuAug 22,1:30pm,USD,Unemployment Claims
+ThuAug 22,2:45pm,USD,Flash Manufacturing PMI
+ThuAug 22,,USD,Flash Services PMI
+FriAug 23,1:33am,JPY,BOJ Gov Ueda Speaks
+FriAug 23,5:00am,JPY,BOJ Gov Ueda Speaks
+FriAug 23,1:30pm,CAD,Core Retail Sales m/m
+FriAug 23,,CAD,Retail Sales m/m
+FriAug 23,3:00pm,USD,Fed Chairman Powell Speaks
+TueAug 27,,USD,CB Consumer Confidence
+ThuAug 29,All Day,EUR,German Prelim CPI m/m
+ThuAug 29,,USD,Prelim GDP q/q
+ThuAug 29,,USD,Unemployment Claims
+FriAug 30,10:00am,EUR,CPI Flash Estimate y/y
+FriAug 30,1:30pm,CAD,GDP m/m
+FriAug 30,,USD,Core PCE Price Index m/m
+TueSep 3,3:00pm,USD,ISM Manufacturing PMI
+WedSep 4,2:45pm,CAD,BOC Rate Statement
+WedSep 4,,CAD,Overnight Rate
+WedSep 4,3:00pm,USD,JOLTS Job Openings
+WedSep 4,3:30pm,CAD,BOC Press Conference
+ThuSep 5,1:15pm,USD,ADP Non-Farm Employment Change
+ThuSep 5,,USD,Unemployment Claims
+ThuSep 5,3:00pm,USD,ISM Services PMI
+FriSep 6,1:30pm,CAD,Employment Change
+FriSep 6,,CAD,Unemployment Rate
+FriSep 6,,USD,Average Hourly Earnings m/m
+FriSep 6,,USD,Non-Farm Employment Change
+FriSep 6,,USD,Unemployment Rate
+FriSep 6,4:00pm,USD,FOMC Member Waller Speaks
+TueSep 10,1:10pm,CAD,BOC Gov Macklem Speaks
+WedSep 11,1:30pm,USD,Core CPI m/m
+WedSep 11,,USD,CPI m/m
+WedSep 11,,USD,CPI y/y
+ThuSep 12,1:15pm,EUR,Main Refinancing Rate
+ThuSep 12,,EUR,Monetary Policy Statement
+ThuSep 12,,USD,Core PPI m/m
+ThuSep 12,,USD,PPI m/m
+ThuSep 12,,USD,Unemployment Claims
+ThuSep 12,1:45pm,EUR,ECB Press Conference
+TueSep 17,1:30pm,CAD,CPI m/m
+TueSep 17,,CAD,Median CPI y/y
+TueSep 17,,CAD,Trimmed CPI y/y
+TueSep 17,,USD,Core Retail Sales m/m
+TueSep 17,,USD,Retail Sales m/m
+WedSep 18,7:00pm,USD,Federal Funds Rate
+WedSep 18,,USD,FOMC Economic Projections
+WedSep 18,,USD,FOMC Statement
+WedSep 18,7:30pm,USD,FOMC Press Conference
+ThuSep 19,1:30pm,USD,Unemployment Claims
+FriSep 20,3:52am,JPY,BOJ Policy Rate
+FriSep 20,,JPY,Monetary Policy Statement
+FriSep 20,7:30am,JPY,BOJ Press Conference
+FriSep 20,1:15pm,CAD,BOC Gov Macklem Speaks
+FriSep 20,1:30pm,CAD,Core Retail Sales m/m
+FriSep 20,,CAD,Retail Sales m/m
+MonSep 23,8:15am,EUR,French Flash Manufacturing PMI
+MonSep 23,,EUR,French Flash Services PMI
+MonSep 23,8:30am,EUR,German Flash Manufacturing PMI
+MonSep 23,,EUR,German Flash Services PMI
+MonSep 23,2:45pm,USD,Flash Manufacturing PMI
+MonSep 23,,USD,Flash Services PMI
+TueSep 24,6:05am,JPY,BOJ Gov Ueda Speaks
+TueSep 24,3:00pm,USD,CB Consumer Confidence
+TueSep 24,6:10pm,CAD,BOC Gov Macklem Speaks
+ThuSep 26,1:30pm,USD,Final GDP q/q
+ThuSep 26,,USD,Unemployment Claims
+ThuSep 26,2:20pm,USD,Fed Chairman Powell Speaks
+FriSep 27,1:30pm,CAD,GDP m/m
+FriSep 27,,USD,Core PCE Price Index m/m
+MonSep 30,All Day,EUR,German Prelim CPI m/m
+MonSep 30,6:55pm,USD,Fed Chairman Powell Speaks
+TueOct 1,10:00am,EUR,Core CPI Flash Estimate y/y
+TueOct 1,,EUR,CPI Flash Estimate y/y
+TueOct 1,,USD,ISM Manufacturing PMI
+TueOct 1,,USD,JOLTS Job Openings
+WedOct 2,1:15pm,USD,ADP Non-Farm Employment Change
+ThuOct 3,1:30pm,USD,Unemployment Claims
+ThuOct 3,3:00pm,USD,ISM Services PMI
+FriOct 4,1:30pm,USD,Average Hourly Earnings m/m
+FriOct 4,,USD,Non-Farm Employment Change
+FriOct 4,,USD,Unemployment Rate
+WedOct 9,7:00pm,USD,FOMC Meeting Minutes
+ThuOct 10,1:30pm,USD,Core CPI m/m
+ThuOct 10,,USD,CPI m/m
+ThuOct 10,,USD,CPI y/y
+ThuOct 10,,USD,Unemployment Claims
+FriOct 11,1:30pm,CAD,Employment Change
+FriOct 11,,CAD,Unemployment Rate
+FriOct 11,,USD,Core PPI m/m
+FriOct 11,,USD,PPI m/m
+TueOct 15,1:30pm,CAD,CPI m/m
+TueOct 15,,CAD,Median CPI y/y
+TueOct 15,,CAD,Trimmed CPI y/y
+ThuOct 17,1:15pm,EUR,Main Refinancing Rate
+ThuOct 17,,EUR,Monetary Policy Statement
+ThuOct 17,,USD,Core Retail Sales m/m
+ThuOct 17,,USD,Retail Sales m/m
+ThuOct 17,,USD,Unemployment Claims
+ThuOct 17,1:45pm,EUR,ECB Press Conference
+WedOct 23,2:45pm,CAD,BOC Monetary Policy Report
+WedOct 23,,CAD,BOC Rate Statement
+WedOct 23,,CAD,Overnight Rate
+WedOct 23,3:30pm,CAD,BOC Press Conference
+ThuOct 24,8:15am,EUR,French Flash Manufacturing PMI
+ThuOct 24,,EUR,French Flash Services PMI
+ThuOct 24,8:30am,EUR,German Flash Manufacturing PMI
+ThuOct 24,,EUR,German Flash Services PMI
+ThuOct 24,1:30pm,USD,Unemployment Claims
+ThuOct 24,2:45pm,USD,Flash Manufacturing PMI
+ThuOct 24,,USD,Flash Services PMI
+FriOct 25,1:30pm,CAD,Core Retail Sales m/m
+FriOct 25,,CAD,Retail Sales m/m
+SunOct 27,All Day,JPY,Lower House Elections
+MonOct 28,5:30pm,CAD,BOC Gov Macklem Speaks
+TueOct 29,2:00pm,USD,CB Consumer Confidence
+TueOct 29,,USD,JOLTS Job Openings
+TueOct 29,7:30pm,CAD,BOC Gov Macklem Speaks
+WedOct 30,All Day,EUR,German Prelim CPI m/m
+WedOct 30,12:15pm,USD,ADP Non-Farm Employment Change
+WedOct 30,12:30pm,USD,Advance GDP q/q
+WedOct 30,8:15pm,CAD,BOC Gov Macklem Speaks
+ThuOct 31,2:48am,JPY,BOJ Outlook Report
+ThuOct 31,,JPY,BOJ Policy Rate
+ThuOct 31,,JPY,Monetary Policy Statement
+ThuOct 31,6:30am,JPY,BOJ Press Conference
+ThuOct 31,12:30pm,CAD,GDP m/m
+ThuOct 31,,USD,Core PCE Price Index m/m
+ThuOct 31,,USD,Employment Cost Index q/q
+ThuOct 31,,USD,Unemployment Claims
+FriNov 1,12:30pm,USD,Average Hourly Earnings m/m
+FriNov 1,,USD,Non-Farm Employment Change
+FriNov 1,,USD,Unemployment Rate
+FriNov 1,2:00pm,USD,ISM Manufacturing PMI
+TueNov 5,3:00pm,USD,ISM Services PMI
+TueNov 5,All Day,USD,Presidential Election
+TueNov 5,All Day,USD,Congressional Elections
+ThuNov 7,1:30pm,USD,Unemployment Claims
+ThuNov 7,7:00pm,USD,Federal Funds Rate
+ThuNov 7,,USD,FOMC Statement
+ThuNov 7,7:30pm,USD,FOMC Press Conference
+FriNov 8,1:30pm,CAD,Employment Change
+FriNov 8,,CAD,Unemployment Rate
+WedNov 13,1:30pm,USD,Core CPI m/m
+WedNov 13,,USD,CPI m/m
+WedNov 13,,USD,CPI y/y
+ThuNov 14,1:30pm,USD,Core PPI m/m
+ThuNov 14,,USD,PPI m/m
+ThuNov 14,,USD,Unemployment Claims
+ThuNov 14,8:00pm,USD,Fed Chairman Powell Speaks
+FriNov 15,,USD,Core Retail Sales m/m
+FriNov 15,,USD,Retail Sales m/m
+MonNov 18,1:05am,JPY,BOJ Gov Ueda Speaks
+TueNov 19,1:30pm,CAD,CPI m/m
+TueNov 19,,CAD,Median CPI y/y
+TueNov 19,,CAD,Trimmed CPI y/y
+ThuNov 21,5:12am,JPY,BOJ Gov Ueda Speaks
+ThuNov 21,,USD,Unemployment Claims
+FriNov 22,8:15am,EUR,French Flash Manufacturing PMI
+FriNov 22,,EUR,French Flash Services PMI
+FriNov 22,8:30am,EUR,German Flash Manufacturing PMI
+FriNov 22,,EUR,German Flash Services PMI
+FriNov 22,1:30pm,CAD,Core Retail Sales m/m
+FriNov 22,,CAD,Retail Sales m/m
+FriNov 22,2:45pm,USD,Flash Manufacturing PMI
+FriNov 22,,USD,Flash Services PMI
+TueNov 26,,USD,CB Consumer Confidence
+TueNov 26,7:00pm,USD,FOMC Meeting Minutes
+WedNov 27,1:30pm,USD,Prelim GDP q/q
+WedNov 27,,USD,Unemployment Claims
+WedNov 27,3:00pm,USD,Core PCE Price Index m/m
+ThuNov 28,All Day,EUR,German Prelim CPI m/m
+FriNov 29,1:30pm,CAD,GDP m/m
+MonDec 2,3:00pm,USD,ISM Manufacturing PMI
+TueDec 3,3:00pm,USD,JOLTS Job Openings
+WedDec 4,1:15pm,USD,ADP Non-Farm Employment Change
+WedDec 4,3:00pm,USD,ISM Services PMI
+WedDec 4,6:45pm,USD,Fed Chairman Powell Speaks
+ThuDec 5,,USD,Unemployment Claims
+FriDec 6,1:30pm,CAD,Employment Change
+FriDec 6,,CAD,Unemployment Rate
+FriDec 6,,USD,Average Hourly Earnings m/m
+FriDec 6,,USD,Non-Farm Employment Change
+FriDec 6,,USD,Unemployment Rate
+WedDec 11,1:30pm,USD,Core CPI m/m
+WedDec 11,,USD,CPI m/m
+WedDec 11,,USD,CPI y/y
+WedDec 11,2:45pm,CAD,BOC Rate Statement
+WedDec 11,,CAD,Overnight Rate
+WedDec 11,3:30pm,CAD,BOC Press Conference
+ThuDec 12,1:15pm,EUR,Main Refinancing Rate
+ThuDec 12,,EUR,Monetary Policy Statement
+ThuDec 12,,USD,Core PPI m/m
+ThuDec 12,,USD,PPI m/m
+ThuDec 12,,USD,Unemployment Claims
+ThuDec 12,1:45pm,EUR,ECB Press Conference
+MonDec 16,8:15am,EUR,French Flash Manufacturing PMI
+MonDec 16,,EUR,French Flash Services PMI
+MonDec 16,8:30am,EUR,German Flash Manufacturing PMI
+MonDec 16,,EUR,German Flash Services PMI
+MonDec 16,2:45pm,USD,Flash Manufacturing PMI
+MonDec 16,,USD,Flash Services PMI
+MonDec 16,8:20pm,CAD,BOC Gov Macklem Speaks
+TueDec 17,1:30pm,CAD,CPI m/m
+TueDec 17,,CAD,Median CPI y/y
+TueDec 17,,CAD,Trimmed CPI y/y
+TueDec 17,,USD,Core Retail Sales m/m
+TueDec 17,,USD,Retail Sales m/m
+WedDec 18,7:00pm,USD,Federal Funds Rate
+WedDec 18,,USD,FOMC Economic Projections
+WedDec 18,,USD,FOMC Statement
+WedDec 18,7:30pm,USD,FOMC Press Conference
+ThuDec 19,2:52am,JPY,BOJ Policy Rate
+ThuDec 19,,JPY,Monetary Policy Statement
+ThuDec 19,6:30am,JPY,BOJ Press Conference
+ThuDec 19,1:30pm,USD,Final GDP q/q
+ThuDec 19,,USD,Unemployment Claims
+FriDec 20,1:30pm,CAD,Core Retail Sales m/m
+FriDec 20,,CAD,Retail Sales m/m
+FriDec 20,,USD,Core PCE Price Index m/m
+MonDec 23,1:30pm,CAD,GDP m/m
+ThuDec 26,1:30pm,USD,Unemployment Claims
+ThuJan 2,1:30pm,USD,Unemployment Claims
+FriJan 3,3:00pm,USD,ISM Manufacturing PMI
+MonJan 6,All Day,EUR,German Prelim CPI m/m
+TueJan 7,,USD,ISM Services PMI
+TueJan 7,,USD,JOLTS Job Openings
+WedJan 8,1:15pm,USD,ADP Non-Farm Employment Change
+WedJan 8,1:30pm,USD,Unemployment Claims
+WedJan 8,7:00pm,USD,FOMC Meeting Minutes
+FriJan 10,1:30pm,CAD,Employment Change
+FriJan 10,,CAD,Unemployment Rate
+FriJan 10,,USD,Average Hourly Earnings m/m
+FriJan 10,,USD,Non-Farm Employment Change
+FriJan 10,,USD,Unemployment Rate
+TueJan 14,1:30pm,USD,Core PPI m/m
+TueJan 14,,USD,PPI m/m
+WedJan 15,,USD,Core CPI m/m
+WedJan 15,,USD,CPI m/m
+WedJan 15,,USD,CPI y/y
+ThuJan 16,1:30pm,USD,Core Retail Sales m/m
+ThuJan 16,,USD,Retail Sales m/m
+ThuJan 16,,USD,Unemployment Claims
+MonJan 20,5:00pm,USD,President Trump Speaks
+TueJan 21,1:30pm,CAD,CPI m/m
+TueJan 21,,CAD,Median CPI y/y
+TueJan 21,,CAD,Trimmed CPI y/y
+ThuJan 23,1:30pm,CAD,Core Retail Sales m/m
+ThuJan 23,,CAD,Retail Sales m/m
+ThuJan 23,,USD,Unemployment Claims
+ThuJan 23,4:00pm,USD,President Trump Speaks
+FriJan 24,3:23am,JPY,BOJ Outlook Report
+FriJan 24,,JPY,BOJ Policy Rate
+FriJan 24,,JPY,Monetary Policy Statement
+FriJan 24,6:30am,JPY,BOJ Press Conference
+FriJan 24,8:15am,EUR,French Flash Manufacturing PMI
+FriJan 24,,EUR,French Flash Services PMI
+FriJan 24,8:30am,EUR,German Flash Manufacturing PMI
+FriJan 24,,EUR,German Flash Services PMI
+FriJan 24,2:45pm,USD,Flash Manufacturing PMI
+FriJan 24,,USD,Flash Services PMI
+TueJan 28,3:00pm,USD,CB Consumer Confidence
+WedJan 29,2:45pm,CAD,BOC Monetary Policy Report
+WedJan 29,,CAD,BOC Rate Statement
+WedJan 29,,CAD,Overnight Rate
+WedJan 29,3:30pm,CAD,BOC Press Conference
+WedJan 29,7:00pm,USD,Federal Funds Rate
+WedJan 29,,USD,FOMC Statement
+WedJan 29,7:30pm,USD,FOMC Press Conference
+ThuJan 30,1:15pm,EUR,Main Refinancing Rate
+ThuJan 30,,EUR,Monetary Policy Statement
+ThuJan 30,1:30pm,USD,Advance GDP q/q
+ThuJan 30,,USD,Unemployment Claims
+ThuJan 30,1:45pm,EUR,ECB Press Conference
+FriJan 31,All Day,EUR,German Prelim CPI m/m
+FriJan 31,1:30pm,CAD,GDP m/m
+FriJan 31,,USD,Core PCE Price Index m/m
+FriJan 31,,USD,Employment Cost Index q/q
+MonFeb 3,3:00pm,USD,ISM Manufacturing PMI
+TueFeb 4,3:00pm,USD,JOLTS Job Openings
+TueFeb 4,10:10pm,USD,President Trump Speaks
+WedFeb 5,1:15pm,USD,ADP Non-Farm Employment Change
+WedFeb 5,3:00pm,USD,ISM Services PMI
+ThuFeb 6,1:30pm,USD,Unemployment Claims
+FriFeb 7,1:30pm,CAD,Employment Change
+FriFeb 7,,CAD,Unemployment Rate
+FriFeb 7,,USD,Average Hourly Earnings m/m
+FriFeb 7,,USD,Non-Farm Employment Change
+FriFeb 7,,USD,Unemployment Rate
+MonFeb 10,9:30pm,USD,President Trump Speaks
+TueFeb 11,3:00pm,USD,Fed Chairman Powell Testifies
+TueFeb 11,8:40pm,USD,President Trump Speaks
+WedFeb 12,All Day,EUR,Greek Presidential Elections
+WedFeb 12,1:30pm,USD,Core CPI m/m
+WedFeb 12,,USD,CPI m/m
+WedFeb 12,,USD,CPI y/y
+WedFeb 12,,USD,Fed Chairman Powell Testifies
+WedFeb 12,8:48pm,USD,President Trump Speaks
+ThuFeb 13,1:30pm,USD,Core PPI m/m
+ThuFeb 13,,USD,PPI m/m
+ThuFeb 13,,USD,Unemployment Claims
+ThuFeb 13,6:36pm,USD,President Trump Speaks
+FriFeb 14,,USD,Core Retail Sales m/m
+FriFeb 14,,USD,Retail Sales m/m
+FriFeb 14,7:08pm,USD,President Trump Speaks
+TueFeb 18,1:30pm,CAD,CPI m/m
+TueFeb 18,,CAD,Median CPI y/y
+TueFeb 18,,CAD,Trimmed CPI y/y
+TueFeb 18,9:13pm,USD,President Trump Speaks
+WedFeb 19,,USD,President Trump Speaks
+WedFeb 19,7:00pm,USD,FOMC Meeting Minutes
+WedFeb 19,10:00pm,USD,President Trump Speaks
+ThuFeb 20,,USD,Unemployment Claims
+FriFeb 21,12:20am,USD,President Trump Speaks
+FriFeb 21,8:15am,EUR,French Flash Manufacturing PMI
+FriFeb 21,,EUR,French Flash Services PMI
+FriFeb 21,8:30am,EUR,German Flash Manufacturing PMI
+FriFeb 21,,EUR,German Flash Services PMI
+FriFeb 21,1:30pm,CAD,Core Retail Sales m/m
+FriFeb 21,,CAD,Retail Sales m/m
+FriFeb 21,2:45pm,USD,Flash Manufacturing PMI
+FriFeb 21,,USD,Flash Services PMI
+FriFeb 21,5:30pm,CAD,BOC Gov Macklem Speaks
+FriFeb 21,8:56pm,USD,President Trump Speaks
+SunFeb 23,All Day,EUR,German Federal Elections
+MonFeb 24,7:49pm,USD,President Trump Speaks
+TueFeb 25,8:59pm,USD,President Trump Speaks
+ThuFeb 27,,USD,Prelim GDP q/q
+ThuFeb 27,,USD,Unemployment Claims
+FriFeb 28,All Day,EUR,German Prelim CPI m/m
+FriFeb 28,1:30pm,CAD,GDP m/m
+FriFeb 28,,USD,Core PCE Price Index m/m
+FriFeb 28,5:15pm,USD,President Trump Speaks
+MonMar 3,3:00pm,USD,ISM Manufacturing PMI
+WedMar 5,2:10am,USD,President Trump Speaks
+WedMar 5,1:15pm,USD,ADP Non-Farm Employment Change
+WedMar 5,3:00pm,USD,ISM Services PMI
+ThuMar 6,All Day,EUR,Euro Summit
+ThuMar 6,1:15pm,EUR,Main Refinancing Rate
+ThuMar 6,,EUR,Monetary Policy Statement
+ThuMar 6,,USD,Unemployment Claims
+ThuMar 6,1:45pm,EUR,ECB Press Conference
+FriMar 7,1:30pm,CAD,Employment Change
+FriMar 7,,CAD,Unemployment Rate
+FriMar 7,,USD,Average Hourly Earnings m/m
+FriMar 7,,USD,Non-Farm Employment Change
+FriMar 7,,USD,Unemployment Rate
+FriMar 7,5:30pm,USD,Fed Chairman Powell Speaks
+TueMar 11,2:00pm,USD,JOLTS Job Openings
+WedMar 12,12:30pm,USD,Core CPI m/m
+WedMar 12,,USD,CPI m/m
+WedMar 12,,USD,CPI y/y
+WedMar 12,1:45pm,CAD,BOC Rate Statement
+WedMar 12,,CAD,Overnight Rate
+WedMar 12,2:30pm,CAD,BOC Press Conference
+ThuMar 13,,USD,Core PPI m/m
+ThuMar 13,,USD,PPI m/m
+ThuMar 13,,USD,Unemployment Claims
+FriMar 14,2:00pm,USD,Prelim UoM Consumer Sentiment
+FriMar 14,,USD,Prelim UoM Inflation Expectations
+MonMar 17,,USD,Core Retail Sales m/m
+MonMar 17,,USD,Retail Sales m/m
+TueMar 18,12:30pm,CAD,CPI m/m
+TueMar 18,,CAD,Median CPI y/y
+TueMar 18,,CAD,Trimmed CPI y/y
+WedMar 19,2:25am,JPY,BOJ Policy Rate
+WedMar 19,,JPY,Monetary Policy Statement
+WedMar 19,6:30am,JPY,BOJ Press Conference
+WedMar 19,6:00pm,USD,Federal Funds Rate
+WedMar 19,,USD,FOMC Economic Projections
+WedMar 19,,USD,FOMC Statement
+WedMar 19,6:30pm,USD,FOMC Press Conference
+ThuMar 20,,USD,Unemployment Claims
+ThuMar 20,4:50pm,CAD,BOC Gov Macklem Speaks
+FriMar 21,12:30pm,CAD,Core Retail Sales m/m
+FriMar 21,,CAD,Retail Sales m/m
+MonMar 24,8:15am,EUR,French Flash Manufacturing PMI
+MonMar 24,,EUR,French Flash Services PMI
+MonMar 24,8:30am,EUR,German Flash Manufacturing PMI
+MonMar 24,,EUR,German Flash Services PMI
+MonMar 24,1:45pm,USD,Flash Manufacturing PMI
+MonMar 24,,USD,Flash Services PMI
+WedMar 26,8:00pm,USD,President Trump Speaks
+ThuMar 27,12:30pm,USD,Final GDP q/q
+ThuMar 27,,USD,Unemployment Claims
+FriMar 28,12:30pm,CAD,GDP m/m
+FriMar 28,,USD,Core PCE Price Index m/m
+MonMar 31,All Day,EUR,German Prelim CPI m/m
+TueApr 1,3:00pm,USD,ISM Manufacturing PMI
+TueApr 1,,USD,JOLTS Job Openings
+WedApr 2,1:15pm,USD,ADP Non-Farm Employment Change
+WedApr 2,9:00pm,USD,President Trump Speaks
+ThuApr 3,,USD,Unemployment Claims
+ThuApr 3,3:00pm,USD,ISM Services PMI
+FriApr 4,1:30pm,CAD,Employment Change
+FriApr 4,,CAD,Unemployment Rate
+FriApr 4,,USD,Average Hourly Earnings m/m
+FriApr 4,,USD,Non-Farm Employment Change
+FriApr 4,,USD,Unemployment Rate
+FriApr 4,4:25pm,USD,Fed Chairman Powell Speaks
+WedApr 9,7:15am,JPY,BOJ Gov Ueda Speaks
+WedApr 9,7:00pm,USD,FOMC Meeting Minutes
+ThuApr 10,,USD,Core CPI m/m
+ThuApr 10,,USD,CPI m/m
+ThuApr 10,,USD,CPI y/y
+ThuApr 10,,USD,Unemployment Claims
+FriApr 11,1:30pm,USD,Core PPI m/m
+FriApr 11,,USD,PPI m/m
+FriApr 11,3:00pm,USD,Prelim UoM Consumer Sentiment
+FriApr 11,,USD,Prelim UoM Inflation Expectations
+TueApr 15,1:30pm,CAD,CPI m/m
+TueApr 15,,CAD,Median CPI y/y
+TueApr 15,,CAD,Trimmed CPI y/y
+WedApr 16,1:30pm,USD,Core Retail Sales m/m
+WedApr 16,,USD,Retail Sales m/m
+WedApr 16,2:45pm,CAD,BOC Monetary Policy Report
+WedApr 16,,CAD,BOC Rate Statement
+WedApr 16,,CAD,Overnight Rate
+WedApr 16,,CAD,BOC Press Conference
+WedApr 16,6:30pm,USD,Fed Chairman Powell Speaks
+ThuApr 17,1:15pm,EUR,Main Refinancing Rate
+ThuApr 17,,EUR,Monetary Policy Statement
+ThuApr 17,,USD,Unemployment Claims
+ThuApr 17,1:45pm,EUR,ECB Press Conference
+WedApr 23,8:15am,EUR,French Flash Manufacturing PMI
+WedApr 23,,EUR,French Flash Services PMI
+WedApr 23,8:30am,EUR,German Flash Manufacturing PMI
+WedApr 23,,EUR,German Flash Services PMI
+WedApr 23,2:45pm,USD,Flash Manufacturing PMI
+WedApr 23,,USD,Flash Services PMI
+ThuApr 24,1:30pm,USD,Unemployment Claims
+FriApr 25,1:30pm,CAD,Core Retail Sales m/m
+FriApr 25,,CAD,Retail Sales m/m
+MonApr 28,All Day,CAD,Federal Election
+TueApr 29,3:00pm,USD,JOLTS Job Openings
+WedApr 30,All Day,EUR,German Prelim CPI m/m
+WedApr 30,1:15pm,USD,ADP Non-Farm Employment Change
+WedApr 30,1:30pm,CAD,GDP m/m
+WedApr 30,,USD,Advance GDP q/q
+WedApr 30,,USD,Employment Cost Index q/q
+WedApr 30,3:00pm,USD,Core PCE Price Index m/m
+ThuMay 1,4:03am,JPY,BOJ Outlook Report
+ThuMay 1,,JPY,BOJ Policy Rate
+ThuMay 1,,JPY,Monetary Policy Statement
+ThuMay 1,,JPY,BOJ Press Conference
+ThuMay 1,1:30pm,USD,Unemployment Claims
+ThuMay 1,3:00pm,USD,ISM Manufacturing PMI
+FriMay 2,1:30pm,USD,Average Hourly Earnings m/m
+FriMay 2,,USD,Non-Farm Employment Change
+FriMay 2,,USD,Unemployment Rate
+MonMay 5,3:00pm,USD,ISM Services PMI
+WedMay 7,7:00pm,USD,Federal Funds Rate
+WedMay 7,,USD,FOMC Statement
+WedMay 7,7:30pm,USD,FOMC Press Conference
+ThuMay 8,1:30pm,USD,Unemployment Claims
+ThuMay 8,,USD,President Trump Speaks
+ThuMay 8,4:00pm,CAD,BOC Press Conference
+FriMay 9,1:30pm,CAD,Employment Change
+FriMay 9,,CAD,Unemployment Rate
+TueMay 13,1:30pm,USD,Core CPI m/m
+TueMay 13,,USD,CPI m/m
+TueMay 13,,USD,CPI y/y
+ThuMay 15,,USD,Core PPI m/m
+ThuMay 15,,USD,Core Retail Sales m/m
+ThuMay 15,,USD,PPI m/m
+ThuMay 15,,USD,Retail Sales m/m
+ThuMay 15,,USD,Unemployment Claims
+ThuMay 15,1:40pm,USD,Fed Chairman Powell Speaks
+FriMay 16,3:00pm,USD,Prelim UoM Consumer Sentiment
+FriMay 16,,USD,Prelim UoM Inflation Expectations
+TueMay 20,1:30pm,CAD,CPI m/m
+TueMay 20,,CAD,Median CPI y/y
+TueMay 20,,CAD,Trimmed CPI y/y
+ThuMay 22,8:15am,EUR,French Flash Manufacturing PMI
+ThuMay 22,,EUR,French Flash Services PMI
+ThuMay 22,8:30am,EUR,German Flash Manufacturing PMI
+ThuMay 22,,EUR,German Flash Services PMI
+ThuMay 22,,USD,Unemployment Claims
+ThuMay 22,2:45pm,USD,Flash Manufacturing PMI
+ThuMay 22,,USD,Flash Services PMI
+ThuMay 22,7:30pm,CAD,BOC Gov Macklem Speaks
+FriMay 23,1:30pm,CAD,Core Retail Sales m/m
+FriMay 23,,CAD,Retail Sales m/m
+TueMay 27,1:00am,JPY,BOJ Gov Ueda Speaks
+WedMay 28,7:00pm,USD,FOMC Meeting Minutes
+ThuMay 29,,USD,Prelim GDP q/q
+ThuMay 29,,USD,Unemployment Claims
+FriMay 30,All Day,EUR,German Prelim CPI m/m
+FriMay 30,1:30pm,CAD,GDP m/m
+FriMay 30,,USD,Core PCE Price Index m/m
+MonJun 2,3:00pm,USD,ISM Manufacturing PMI
+MonJun 2,,USD,Fed Chairman Powell Speaks
+TueJun 3,8:50am,JPY,BOJ Gov Ueda Speaks
+TueJun 3,3:00pm,USD,JOLTS Job Openings
+WedJun 4,1:15pm,USD,ADP Non-Farm Employment Change
+WedJun 4,2:45pm,CAD,BOC Rate Statement
+WedJun 4,,CAD,Overnight Rate
+WedJun 4,3:00pm,USD,ISM Services PMI
+WedJun 4,3:30pm,CAD,BOC Press Conference
+ThuJun 5,1:15pm,EUR,Main Refinancing Rate
+ThuJun 5,,EUR,Monetary Policy Statement
+ThuJun 5,,USD,Unemployment Claims
+ThuJun 5,1:45pm,EUR,ECB Press Conference
+FriJun 6,1:30pm,CAD,Employment Change
+FriJun 6,,CAD,Unemployment Rate
+FriJun 6,,USD,Average Hourly Earnings m/m
+FriJun 6,,USD,Non-Farm Employment Change
+FriJun 6,,USD,Unemployment Rate
+WedJun 11,,USD,Core CPI m/m
+WedJun 11,,USD,CPI m/m
+WedJun 11,,USD,CPI y/y
+ThuJun 12,1:30pm,USD,Core PPI m/m
+ThuJun 12,,USD,PPI m/m
+ThuJun 12,,USD,Unemployment Claims
+FriJun 13,3:00pm,USD,Prelim UoM Consumer Sentiment
+FriJun 13,,USD,Prelim UoM Inflation Expectations
+TueJun 17,4:30am,JPY,BOJ Policy Rate
+TueJun 17,,JPY,Monetary Policy Statement
+TueJun 17,7:30am,JPY,BOJ Press Conference
+TueJun 17,,USD,Core Retail Sales m/m
+TueJun 17,,USD,Retail Sales m/m
+WedJun 18,1:30pm,USD,Unemployment Claims
+WedJun 18,4:15pm,CAD,BOC Gov Macklem Speaks
+WedJun 18,7:00pm,USD,Federal Funds Rate
+WedJun 18,,USD,FOMC Economic Projections
+WedJun 18,,USD,FOMC Statement
+WedJun 18,7:30pm,USD,FOMC Press Conference
+FriJun 20,7:40am,JPY,BOJ Gov Ueda Speaks
+SunJun 22,3:00am,USD,President Trump Speaks
+MonJun 23,8:15am,EUR,French Flash Manufacturing PMI
+MonJun 23,,EUR,French Flash Services PMI
+MonJun 23,8:30am,EUR,German Flash Manufacturing PMI
+MonJun 23,,EUR,German Flash Services PMI
+MonJun 23,2:45pm,USD,Flash Manufacturing PMI
+MonJun 23,,USD,Flash Services PMI
+TueJun 24,1:30pm,CAD,CPI m/m
+TueJun 24,,CAD,Median CPI y/y
+TueJun 24,,CAD,Trimmed CPI y/y
+TueJun 24,,USD,Fed Chairman Powell Testifies
+WedJun 25,3:00pm,USD,Fed Chairman Powell Testifies
+ThuJun 26,1:30pm,USD,Final GDP q/q
+ThuJun 26,,USD,Unemployment Claims
+FriJun 27,1:30pm,CAD,GDP m/m
+FriJun 27,,USD,Core PCE Price Index m/m
+TueJul 1,,JPY,BOJ Gov Ueda Speaks
+TueJul 1,,USD,Fed Chairman Powell Speaks
+TueJul 1,3:00pm,USD,ISM Manufacturing PMI
+TueJul 1,,USD,JOLTS Job Openings
+WedJul 2,1:15pm,USD,ADP Non-Farm Employment Change
+ThuJul 3,,USD,Average Hourly Earnings m/m
+ThuJul 3,,USD,Non-Farm Employment Change
+ThuJul 3,,USD,Unemployment Rate
+ThuJul 3,3:00pm,USD,ISM Services PMI
+WedJul 9,7:00pm,USD,FOMC Meeting Minutes
+ThuJul 10,1:30pm,USD,Unemployment Claims
+FriJul 11,1:30pm,CAD,Employment Change
+FriJul 11,,CAD,Unemployment Rate
+TueJul 15,1:30pm,CAD,CPI m/m
+TueJul 15,,CAD,Median CPI y/y
+TueJul 15,,CAD,Trimmed CPI y/y
+TueJul 15,,USD,Core CPI m/m
+TueJul 15,,USD,CPI m/m
+TueJul 15,,USD,CPI y/y
+WedJul 16,1:30pm,USD,Core PPI m/m
+WedJul 16,,USD,PPI m/m
+ThuJul 17,,USD,Core Retail Sales m/m
+ThuJul 17,,USD,Retail Sales m/m
+ThuJul 17,,USD,Unemployment Claims
+SunJul 20,All Day,JPY,Upper House Elections
+ThuJul 24,8:15am,EUR,French Flash Manufacturing PMI
+ThuJul 24,,EUR,French Flash Services PMI
+ThuJul 24,8:30am,EUR,German Flash Manufacturing PMI
+ThuJul 24,,EUR,German Flash Services PMI
+ThuJul 24,1:15pm,EUR,Main Refinancing Rate
+ThuJul 24,,EUR,Monetary Policy Statement
+ThuJul 24,,USD,Unemployment Claims
+ThuJul 24,1:45pm,EUR,ECB Press Conference
+ThuJul 24,2:45pm,USD,Flash Manufacturing PMI
+ThuJul 24,,USD,Flash Services PMI
+TueJul 29,3:00pm,USD,JOLTS Job Openings
+WedJul 30,,EUR,German Prelim GDP q/q
+WedJul 30,1:15pm,USD,ADP Non-Farm Employment Change
+WedJul 30,1:30pm,USD,Advance GDP q/q
+WedJul 30,2:45pm,CAD,BOC Monetary Policy Report
+WedJul 30,,CAD,BOC Rate Statement
+WedJul 30,,CAD,Overnight Rate
+WedJul 30,3:30pm,CAD,BOC Press Conference
+WedJul 30,7:00pm,USD,Federal Funds Rate
+WedJul 30,,USD,FOMC Statement
+WedJul 30,7:30pm,USD,FOMC Press Conference
+ThuJul 31,3:57am,JPY,BOJ Outlook Report
+ThuJul 31,,JPY,BOJ Policy Rate
+ThuJul 31,,JPY,Monetary Policy Statement
+ThuJul 31,,JPY,BOJ Press Conference
+ThuJul 31,1:30pm,CAD,GDP m/m
+ThuJul 31,,USD,Core PCE Price Index m/m
+ThuJul 31,,USD,Employment Cost Index q/q
+ThuJul 31,,USD,Unemployment Claims
+FriAug 1,1:30pm,USD,Average Hourly Earnings m/m
+FriAug 1,,USD,Non-Farm Employment Change
+FriAug 1,,USD,Unemployment Rate
+FriAug 1,3:00pm,USD,ISM Manufacturing PMI
+TueAug 5,3:00pm,USD,ISM Services PMI
+ThuAug 7,1:30pm,USD,Unemployment Claims
+FriAug 8,1:30pm,CAD,Employment Change
+FriAug 8,,CAD,Unemployment Rate
+TueAug 12,,USD,Core CPI m/m
+TueAug 12,,USD,CPI m/m
+TueAug 12,,USD,CPI y/y
+ThuAug 14,1:30pm,USD,Core PPI m/m
+ThuAug 14,,USD,PPI m/m
+ThuAug 14,,USD,Unemployment Claims
+FriAug 15,,USD,Core Retail Sales m/m
+FriAug 15,,USD,Retail Sales m/m
+FriAug 15,3:00pm,USD,Prelim UoM Consumer Sentiment
+FriAug 15,,USD,Prelim UoM Inflation Expectations
+FriAug 15,11:55pm,USD,President Trump Speaks
+TueAug 19,1:30pm,CAD,CPI m/m
+TueAug 19,,CAD,Median CPI y/y
+TueAug 19,,CAD,Trimmed CPI y/y
+WedAug 20,7:00pm,USD,FOMC Meeting Minutes
+ThuAug 21,8:30am,EUR,German Flash Manufacturing PMI
+ThuAug 21,,EUR,German Flash Services PMI
+ThuAug 21,,USD,Unemployment Claims
+ThuAug 21,2:45pm,USD,Flash Manufacturing PMI
+ThuAug 21,,USD,Flash Services PMI
+FriAug 22,3:00pm,USD,Fed Chairman Powell Speaks
+FriAug 22,6:05pm,USD,President Trump Speaks
+SatAug 23,5:25pm,EUR,ECB President Lagarde Speaks
+SatAug 23,,JPY,BOJ Gov Ueda Speaks
+TueAug 26,7:30pm,CAD,BOC Gov Macklem Speaks
+ThuAug 28,,USD,Prelim GDP q/q
+ThuAug 28,,USD,Unemployment Claims
+FriAug 29,1:30pm,CAD,GDP m/m
+FriAug 29,,USD,Core PCE Price Index m/m
+TueSep 2,,USD,ISM Manufacturing PMI
+WedSep 3,3:00pm,USD,JOLTS Job Openings
+ThuSep 4,1:15pm,USD,ADP Non-Farm Employment Change
+ThuSep 4,,USD,Unemployment Claims
+ThuSep 4,3:00pm,USD,Fed Gov Nomination Hearings
+ThuSep 4,,USD,ISM Services PMI
+FriSep 5,1:30pm,CAD,Employment Change
+FriSep 5,,CAD,Unemployment Rate
+FriSep 5,,USD,Average Hourly Earnings m/m
+FriSep 5,,USD,Non-Farm Employment Change
+FriSep 5,,USD,Unemployment Rate
+TueSep 9,3:00pm,USD,Prelim Benchmark Payrolls Revision
+WedSep 10,1:30pm,USD,Core PPI m/m
+WedSep 10,,USD,PPI m/m
+ThuSep 11,1:15pm,EUR,Main Refinancing Rate
+ThuSep 11,,EUR,Monetary Policy Statement
+ThuSep 11,1:30pm,USD,Core CPI m/m
+ThuSep 11,,USD,CPI m/m
+ThuSep 11,,USD,CPI y/y
+ThuSep 11,,USD,Unemployment Claims
+ThuSep 11,1:45pm,EUR,ECB Press Conference
+FriSep 12,3:00pm,USD,Prelim UoM Consumer Sentiment
+FriSep 12,,USD,Prelim UoM Inflation Expectations
+TueSep 16,1:30pm,CAD,CPI m/m
+TueSep 16,,CAD,Median CPI y/y
+TueSep 16,,CAD,Trimmed CPI y/y
+TueSep 16,,USD,Core Retail Sales m/m
+TueSep 16,,USD,Retail Sales m/m
+WedSep 17,2:45pm,CAD,BOC Rate Statement
+WedSep 17,,CAD,Overnight Rate
+WedSep 17,3:30pm,CAD,BOC Press Conference
+WedSep 17,7:00pm,USD,Federal Funds Rate
+WedSep 17,,USD,FOMC Economic Projections
+WedSep 17,,USD,FOMC Statement
+WedSep 17,7:30pm,USD,FOMC Press Conference
+ThuSep 18,1:30pm,USD,Unemployment Claims
+FriSep 19,4:47am,JPY,BOJ Policy Rate
+FriSep 19,,JPY,Monetary Policy Statement
+FriSep 19,7:30am,JPY,BOJ Press Conference
+TueSep 23,8:30am,EUR,German Flash Manufacturing PMI
+TueSep 23,,EUR,German Flash Services PMI
+TueSep 23,2:45pm,USD,Flash Manufacturing PMI
+TueSep 23,,USD,Flash Services PMI
+TueSep 23,5:35pm,USD,Fed Chairman Powell Speaks
+TueSep 23,7:15pm,CAD,BOC Gov Macklem Speaks
+ThuSep 25,1:30pm,USD,Final GDP q/q
+ThuSep 25,,USD,Unemployment Claims
+FriSep 26,1:30pm,CAD,GDP m/m
+FriSep 26,,USD,Core PCE Price Index m/m
+TueSep 30,3:00pm,USD,JOLTS Job Openings
+WedOct 1,1:15pm,USD,ADP Non-Farm Employment Change
+WedOct 1,3:00pm,USD,ISM Manufacturing PMI
+FriOct 3,2:05am,JPY,BOJ Gov Ueda Speaks
+FriOct 3,3:00pm,USD,ISM Services PMI
+MonOct 6,6:00pm,EUR,ECB President Lagarde Speaks
+WedOct 8,7:00pm,USD,FOMC Meeting Minutes
+FriOct 10,1:30pm,CAD,Employment Change
+FriOct 10,,CAD,Unemployment Rate
+FriOct 10,3:00pm,USD,Prelim UoM Consumer Sentiment
+FriOct 10,,USD,Prelim UoM Inflation Expectations
+TueOct 14,5:20pm,USD,Fed Chairman Powell Speaks
+ThuOct 16,6:30pm,CAD,BOC Gov Macklem Speaks
+TueOct 21,1:30pm,CAD,CPI m/m
+TueOct 21,,CAD,Median CPI y/y
+TueOct 21,,CAD,Trimmed CPI y/y
+FriOct 24,8:30am,EUR,German Flash Manufacturing PMI
+FriOct 24,,EUR,German Flash Services PMI
+FriOct 24,,USD,Core CPI m/m
+FriOct 24,,USD,CPI m/m
+FriOct 24,,USD,CPI y/y
+FriOct 24,2:45pm,USD,Flash Manufacturing PMI
+FriOct 24,,USD,Flash Services PMI
+WedOct 29,1:45pm,CAD,BOC Monetary Policy Report
+WedOct 29,,CAD,BOC Rate Statement
+WedOct 29,,CAD,Overnight Rate
+WedOct 29,2:30pm,CAD,BOC Press Conference
+WedOct 29,6:00pm,USD,Federal Funds Rate
+WedOct 29,,USD,FOMC Statement
+WedOct 29,6:30pm,USD,FOMC Press Conference
+ThuOct 30,3:15am,JPY,BOJ Outlook Report
+ThuOct 30,,JPY,BOJ Policy Rate
+ThuOct 30,,JPY,Monetary Policy Statement
+ThuOct 30,,JPY,BOJ Press Conference
+ThuOct 30,1:15pm,EUR,Main Refinancing Rate
+ThuOct 30,,EUR,Monetary Policy Statement
+ThuOct 30,1:45pm,EUR,ECB Press Conference
+FriOct 31,12:30pm,CAD,GDP m/m
+MonNov 3,3:00pm,USD,ISM Manufacturing PMI
+MonNov 3,6:30pm,CAD,BOC Gov Macklem Speaks
+WedNov 5,1:15pm,USD,ADP Non-Farm Employment Change
+WedNov 5,3:00pm,USD,ISM Services PMI
+WedNov 5,9:30pm,CAD,BOC Gov Macklem Speaks
+ThuNov 6,3:30pm,CAD,BOC Gov Macklem Speaks
+FriNov 7,1:30pm,CAD,Employment Change
+FriNov 7,,CAD,Unemployment Rate
+MonNov 17,1:30pm,CAD,CPI m/m
+MonNov 17,,CAD,Median CPI y/y
+MonNov 17,,CAD,Trimmed CPI y/y
+TueNov 18,8:10am,USD,Unemployment Claims
+WedNov 19,7:00pm,USD,FOMC Meeting Minutes
+ThuNov 20,,USD,Average Hourly Earnings m/m
+ThuNov 20,,USD,Non-Farm Employment Change
+ThuNov 20,,USD,Unemployment Claims
+ThuNov 20,,USD,Unemployment Rate
+FriNov 21,8:30am,EUR,German Flash Manufacturing PMI
+FriNov 21,,EUR,German Flash Services PMI
+FriNov 21,2:45pm,USD,Flash Manufacturing PMI
+FriNov 21,,USD,Flash Services PMI
+TueNov 25,1:30pm,USD,Core PPI m/m
+TueNov 25,,USD,Core Retail Sales m/m
+TueNov 25,,USD,PPI m/m
+TueNov 25,,USD,Retail Sales m/m
+WedNov 26,1:30pm,USD,Unemployment Claims
+FriNov 28,1:30pm,CAD,GDP m/m
+MonDec 1,1:05am,JPY,BOJ Gov Ueda Speaks
+MonDec 1,3:00pm,USD,ISM Manufacturing PMI
+WedDec 3,1:15pm,USD,ADP Non-Farm Employment Change
+WedDec 3,3:00pm,USD,ISM Services PMI
+ThuDec 4,1:30pm,USD,Unemployment Claims
+FriDec 5,1:30pm,CAD,Employment Change
+FriDec 5,,CAD,Unemployment Rate
+FriDec 5,3:00pm,USD,Core PCE Price Index m/m
+FriDec 5,,USD,Prelim UoM Consumer Sentiment
+FriDec 5,,USD,Prelim UoM Inflation Expectations
+TueDec 9,9:00am,JPY,BOJ Gov Ueda Speaks
+TueDec 9,1:15pm,USD,ADP Weekly Employment Change
+TueDec 9,3:00pm,USD,JOLTS Job Openings
+WedDec 10,1:30pm,USD,Employment Cost Index q/q
+WedDec 10,2:45pm,CAD,BOC Rate Statement
+WedDec 10,,CAD,Overnight Rate
+WedDec 10,3:30pm,CAD,BOC Press Conference
+WedDec 10,7:00pm,USD,Federal Funds Rate
+WedDec 10,,USD,FOMC Economic Projections
+WedDec 10,,USD,FOMC Statement
+WedDec 10,7:30pm,USD,FOMC Press Conference
+ThuDec 11,,USD,Unemployment Claims
+MonDec 15,1:30pm,CAD,CPI m/m
+MonDec 15,,CAD,Median CPI y/y
+MonDec 15,,CAD,Trimmed CPI y/y
+TueDec 16,8:30am,EUR,German Flash Manufacturing PMI
+TueDec 16,,EUR,German Flash Services PMI
+TueDec 16,1:15pm,USD,ADP Weekly Employment Change
+TueDec 16,1:30pm,USD,Average Hourly Earnings m/m
+TueDec 16,,USD,Core Retail Sales m/m
+TueDec 16,,USD,Non-Farm Employment Change
+TueDec 16,,USD,Retail Sales m/m
+TueDec 16,,USD,Unemployment Rate
+TueDec 16,2:45pm,USD,Flash Manufacturing PMI
+TueDec 16,,USD,Flash Services PMI
+ThuDec 18,1:15pm,EUR,Main Refinancing Rate
+ThuDec 18,,EUR,Monetary Policy Statement
+ThuDec 18,1:30pm,USD,CPI y/y
+ThuDec 18,,USD,Unemployment Claims
+ThuDec 18,1:45pm,EUR,ECB Press Conference
+FriDec 19,3:19am,JPY,BOJ Policy Rate
+FriDec 19,,JPY,Monetary Policy Statement
+FriDec 19,6:30am,JPY,BOJ Press Conference
+TueDec 23,1:30pm,CAD,GDP m/m
+TueDec 23,,USD,Prelim GDP q/q
+WedDec 24,1:30pm,USD,Unemployment Claims
+TueDec 30,7:00pm,USD,FOMC Meeting Minutes
+WedDec 31,1:30pm,USD,Unemployment Claims
+MonJan 5,3:00pm,USD,ISM Manufacturing PMI
+WedJan 7,1:15pm,USD,ADP Non-Farm Employment Change
+WedJan 7,,USD,ISM Services PMI
+WedJan 7,,USD,JOLTS Job Openings
+ThuJan 8,,USD,Unemployment Claims
+FriJan 9,1:30pm,CAD,Employment Change
+FriJan 9,,CAD,Unemployment Rate
+FriJan 9,,USD,Average Hourly Earnings m/m
+FriJan 9,,USD,Non-Farm Employment Change
+FriJan 9,,USD,Unemployment Rate
+FriJan 9,3:00pm,USD,Prelim UoM Consumer Sentiment
+FriJan 9,,USD,Prelim UoM Inflation Expectations
+TueJan 13,,USD,Core CPI m/m
+TueJan 13,,USD,CPI m/m
+TueJan 13,,USD,CPI y/y
+WedJan 14,1:30pm,USD,Core PPI m/m
+WedJan 14,,USD,Core Retail Sales m/m
+WedJan 14,,USD,PPI m/m
+WedJan 14,,USD,Retail Sales m/m
+ThuJan 15,,USD,Unemployment Claims
+MonJan 19,1:30pm,CAD,CPI m/m
+MonJan 19,,CAD,Median CPI y/y
+MonJan 19,,CAD,Trimmed CPI y/y
+WedJan 21,,USD,President Trump Speaks
+ThuJan 22,,USD,Final GDP q/q
+ThuJan 22,,USD,Unemployment Claims
+ThuJan 22,,USD,Core PCE Price Index m/m
+FriJan 23,3:07am,JPY,BOJ Outlook Report
+FriJan 23,,JPY,BOJ Policy Rate
+FriJan 23,,JPY,Monetary Policy Statement
+FriJan 23,6:30am,JPY,BOJ Press Conference
+FriJan 23,8:30am,EUR,German Flash Manufacturing PMI
+FriJan 23,,EUR,German Flash Services PMI
+FriJan 23,2:45pm,USD,Flash Manufacturing PMI
+FriJan 23,,USD,Flash Services PMI
+WedJan 28,2:45pm,CAD,BOC Monetary Policy Report
+WedJan 28,,CAD,BOC Rate Statement
+WedJan 28,,CAD,Overnight Rate
+WedJan 28,3:30pm,CAD,BOC Press Conference
+WedJan 28,7:00pm,USD,Federal Funds Rate
+WedJan 28,,USD,FOMC Statement
+WedJan 28,7:30pm,USD,FOMC Press Conference
+ThuJan 29,,USD,Unemployment Claims
+FriJan 30,1:30pm,CAD,GDP m/m
+FriJan 30,,USD,Core PPI m/m
+FriJan 30,,USD,PPI m/m
+MonFeb 2,3:00pm,USD,ISM Manufacturing PMI
+WedFeb 4,1:15pm,USD,ADP Non-Farm Employment Change
+WedFeb 4,3:00pm,USD,ISM Services PMI
+ThuFeb 5,1:15pm,EUR,Main Refinancing Rate
+ThuFeb 5,,EUR,Monetary Policy Statement
+ThuFeb 5,1:30pm,USD,Unemployment Claims
+ThuFeb 5,1:45pm,EUR,ECB Press Conference
+ThuFeb 5,3:00pm,USD,JOLTS Job Openings
+ThuFeb 5,5:25pm,CAD,BOC Gov Macklem Speaks
+FriFeb 6,1:30pm,CAD,Employment Change
+FriFeb 6,,CAD,Unemployment Rate
+FriFeb 6,,USD,Prelim UoM Consumer Sentiment
+FriFeb 6,,USD,Prelim UoM Inflation Expectations
+SunFeb 8,All Day,JPY,Lower House Elections
+TueFeb 10,1:30pm,USD,Core Retail Sales m/m
+TueFeb 10,,USD,Retail Sales m/m
+WedFeb 11,,USD,Average Hourly Earnings m/m
+WedFeb 11,,USD,Non-Farm Employment Change
+WedFeb 11,,USD,Unemployment Rate
+ThuFeb 12,1:30pm,USD,Unemployment Claims
+FriFeb 13,1:30pm,USD,Core CPI m/m
+FriFeb 13,,USD,CPI m/m
+FriFeb 13,,USD,CPI y/y
+TueFeb 17,1:30pm,CAD,CPI m/m
+TueFeb 17,,CAD,Median CPI y/y
+TueFeb 17,,CAD,Trimmed CPI y/y
+WedFeb 18,7:00pm,USD,FOMC Meeting Minutes
+ThuFeb 19,,USD,Unemployment Claims
+FriFeb 20,8:30am,EUR,German Flash Manufacturing PMI
+FriFeb 20,,EUR,German Flash Services PMI
+FriFeb 20,,USD,Advance GDP q/q
+FriFeb 20,,USD,Core PCE Price Index m/m
+FriFeb 20,2:45pm,USD,Flash Manufacturing PMI
+FriFeb 20,,USD,Flash Services PMI
+FriFeb 20,5:45pm,USD,President Trump Speaks
+WedFeb 25,2:00am,USD,President Trump Speaks
+ThuFeb 26,,USD,Unemployment Claims
+FriFeb 27,1:30pm,CAD,GDP m/m
+FriFeb 27,,USD,Core PPI m/m
+FriFeb 27,,USD,PPI m/m
+MonMar 2,3:00pm,USD,ISM Manufacturing PMI
+TueMar 3,4:00am,JPY,BOJ Gov Ueda Speaks
+WedMar 4,1:15pm,USD,ADP Non-Farm Employment Change
+WedMar 4,3:00pm,USD,ISM Services PMI
+ThuMar 5,1:30pm,USD,Unemployment Claims
+FriMar 6,1:30pm,USD,Average Hourly Earnings m/m
+FriMar 6,,USD,Core Retail Sales m/m
+FriMar 6,,USD,Non-Farm Employment Change
+FriMar 6,,USD,Retail Sales m/m
+FriMar 6,,USD,Unemployment Rate
+WedMar 11,12:30pm,USD,Core CPI m/m
+WedMar 11,,USD,CPI m/m
+WedMar 11,,USD,CPI y/y
+ThuMar 12,,USD,Unemployment Claims
+FriMar 13,12:30pm,CAD,Employment Change
+FriMar 13,,CAD,Unemployment Rate
+FriMar 13,,USD,Core PCE Price Index m/m
+FriMar 13,,USD,Prelim GDP q/q
+FriMar 13,2:00pm,USD,JOLTS Job Openings
+MonMar 16,12:30pm,CAD,CPI m/m
+MonMar 16,,CAD,Median CPI y/y
+MonMar 16,,CAD,Trimmed CPI y/y
+WedMar 18,,USD,Core PPI m/m
+WedMar 18,,USD,PPI m/m
+WedMar 18,1:45pm,CAD,BOC Rate Statement
+WedMar 18,,CAD,Overnight Rate
+WedMar 18,2:30pm,CAD,BOC Press Conference
+WedMar 18,6:00pm,USD,Federal Funds Rate
+WedMar 18,,USD,FOMC Economic Projections
+WedMar 18,,USD,FOMC Statement
+WedMar 18,6:30pm,USD,FOMC Press Conference
+ThuMar 19,2:46am,JPY,BOJ Policy Rate
+ThuMar 19,,JPY,Monetary Policy Statement
+ThuMar 19,6:30am,JPY,BOJ Press Conference
+ThuMar 19,12:30pm,USD,Unemployment Claims
+ThuMar 19,1:15pm,EUR,Main Refinancing Rate
+ThuMar 19,,EUR,Monetary Policy Statement
+ThuMar 19,1:45pm,EUR,ECB Press Conference
+TueMar 24,8:30am,EUR,German Flash Manufacturing PMI
+TueMar 24,,EUR,German Flash Services PMI
+TueMar 24,1:45pm,USD,Flash Manufacturing PMI
+TueMar 24,,USD,Flash Services PMI
+ThuMar 26,12:30pm,USD,Unemployment Claims
+MonMar 30,3:30pm,USD,Fed Chairman Powell Speaks
+TueMar 31,1:30pm,CAD,GDP m/m
+TueMar 31,3:00pm,USD,JOLTS Job Openings
+WedApr 1,1:15pm,USD,ADP Non-Farm Employment Change
+WedApr 1,1:30pm,USD,Core Retail Sales m/m
+WedApr 1,,USD,Retail Sales m/m
+WedApr 1,3:00pm,USD,ISM Manufacturing PMI
+ThuApr 2,2:00am,USD,President Trump Speaks
+ThuApr 2,,USD,Unemployment Claims
+FriApr 3,1:30pm,USD,Average Hourly Earnings m/m
+FriApr 3,,USD,Non-Farm Employment Change
+FriApr 3,,USD,Unemployment Rate
+MonApr 6,3:00pm,USD,ISM Services PMI
+MonApr 6,6:00pm,USD,President Trump Speaks
+WedApr 8,7:00pm,USD,FOMC Meeting Minutes
+ThuApr 9,1:30pm,USD,Core PCE Price Index m/m
+ThuApr 9,,USD,Final GDP q/q
+FriApr 10,1:30pm,CAD,Employment Change
+FriApr 10,,CAD,Unemployment Rate
+FriApr 10,,USD,Core CPI m/m
+FriApr 10,,USD,CPI m/m
+FriApr 10,,USD,CPI y/y
+TueApr 14,1:30pm,USD,Core PPI m/m
+TueApr 14,,USD,PPI m/m
+MonApr 20,1:30pm,CAD,CPI m/m
+MonApr 20,,CAD,Median CPI y/y
+MonApr 20,,CAD,Trimmed CPI y/y
+TueApr 21,1:30pm,USD,Core Retail Sales m/m
+TueApr 21,,USD,Retail Sales m/m
+TueApr 21,3:00pm,USD,Fed Chairman-Designate Warsh Testifies
+ThuApr 23,8:30am,EUR,German Flash Manufacturing PMI
+ThuApr 23,,EUR,German Flash Services PMI
+TueApr 28,4:04am,JPY,BOJ Outlook Report
+TueApr 28,,JPY,BOJ Policy Rate
+TueApr 28,,JPY,Monetary Policy Statement
+TueApr 28,7:30am,JPY,BOJ Press Conference
+WedApr 29,2:45pm,CAD,BOC Monetary Policy Report
+WedApr 29,,CAD,BOC Rate Statement
+WedApr 29,,CAD,Overnight Rate
+WedApr 29,3:30pm,CAD,BOC Press Conference
+WedApr 29,7:00pm,USD,Federal Funds Rate
+WedApr 29,,USD,FOMC Statement
+WedApr 29,7:30pm,USD,FOMC Press Conference
+ThuApr 30,1:15pm,EUR,Main Refinancing Rate
+ThuApr 30,,EUR,Monetary Policy Statement
+ThuApr 30,1:30pm,CAD,GDP m/m
+ThuApr 30,,USD,Advance GDP q/q
+ThuApr 30,,USD,Core PCE Price Index m/m
+ThuApr 30,,USD,Employment Cost Index q/q
+ThuApr 30,1:45pm,EUR,ECB Press Conference
+TueMay 5,3:00pm,USD,ISM Services PMI
+TueMay 5,,USD,JOLTS Job Openings
+FriMay 8,1:30pm,CAD,Employment Change
+FriMay 8,,CAD,Unemployment Rate
+FriMay 8,,USD,Average Hourly Earnings m/m
+FriMay 8,,USD,Non-Farm Employment Change
+FriMay 8,,USD,Unemployment Rate
+TueMay 12,1:30pm,USD,Core CPI m/m
+TueMay 12,,USD,CPI m/m
+TueMay 12,,USD,CPI y/y
+WedMay 13,1:30pm,USD,Core PPI m/m
+WedMay 13,,USD,PPI m/m
+WedMay 13,7:40pm,USD,Fed Chair Nomination Vote
+ThuMay 14,,USD,Core Retail Sales m/m
+ThuMay 14,,USD,Retail Sales m/m
+TueMay 19,1:30pm,CAD,CPI m/m
+WedMay 20,7:00pm,USD,FOMC Meeting Minutes

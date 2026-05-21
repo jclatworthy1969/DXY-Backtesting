@@ -1,0 +1,287 @@
+================================================================================
+BRICE STREBLER DXY STRATEGY - ATTRACTION TRADE ANALYSIS
+Generated: 2026-05-21
+Source: Brice Strebler DXY - Strategy Results.xlsx
+================================================================================
+
+FILE STRUCTURE
+------------------------------------------------------------
+Sheets: Forex, Forex Yen, Stocks & Indices
+Analysis sheet: Forex (primary DXY log; Forex Yen and Stocks & Indices have
+only a single example row each -- no real backtested data).
+
+Forex sheet columns (19 total):
+  Col 0  | # (trade number; blank for pair sub-rows)
+  Col 1  | TICKER (DXY, GBPUSD, USDJPY, AUSUSD, USDCAD)
+  Col 2  | Order (Long / Short)
+  Col 3  | Entry time/pending order bar (HH:MM:SS)
+  Col 4  | Date Entered (datetime)
+  Col 5  | Date Exit (datetime)
+  Col 6  | Entry price
+  Col 7  | Stop Loss price
+  Col 8  | % Risk (decimal, e.g. 0.01 = 1%)
+  Col 9  | Pip Risk (pip distance x10000 for DXY)
+  Col 10 | Exit price
+  Col 11 | Pip Gain (positive = profit, negative = loss)
+  Col 12 | Trade RR (actual R achieved, e.g. +1.005 win, -1.000 full loss)
+  Col 13 | % Return
+  Col 14 | Win/Loss
+  Col 15 | Duration (days held)
+  Col 16 | Screenshots (TradingView URL)
+  Col 17 | Notes (free-text; ONLY column identifying attraction trades)
+  Col 18 | [always empty]
+
+TRADE STRUCTURE:
+  Each numbered DXY row is the primary entry, followed by 1-3 blank-numbered
+  correlated pair rows (GBPUSD, USDJPY, AUSUSD, USDCAD).
+  Total DXY primary rows: 298
+  Date range: 2021-12-31 to 2024-12-12
+  (Trades 251-300 cover 2021-2022, backtested retrospectively)
+
+
+TYPE IDENTIFICATION - CRITICAL FINDING
+------------------------------------------------------------
+The spreadsheet has NO explicit Type/Setup/ATTR/REV column.
+Attraction trades are identified ONLY via free-text Notes (col 17).
+
+"attraction" appears in notes on exactly 26 DXY trades total;
+15 of those are dated on/after 2023-08-01.
+
+Brice treats attraction as infrequent/notable:
+  "Rare attraction trade" (#89, #91)
+  "Another attraction trade, so few of them" (#36)
+  ~1 attraction trade per month in his real trading.
+
+The 272 unlabelled DXY trades are primarily continuation and reversal setups.
+
+
+ATTRACTION TRADE CRITERIA (extracted from Brice notes)
+------------------------------------------------------------
+
+1. OPENING GAP (primary signal):
+   Price gaps away from the previous session close at the NY/London open.
+   The trade is taken IN THE DIRECTION of the gap fill (toward opening level).
+   "although no gap there were no muddy waters so considered this an
+     attraction trade" (#55) -- gap is the core requirement; exception made
+     only when price action is very clean.
+   "valid attraction trade though only 15pips" (#65) -- small gaps acceptable.
+   "very small opening but still attraction trade, needed to wait to see if
+     there would be enough pips later on. PATIENCE." (#158)
+
+2. DIRECTION (counter to gap):
+   Entry is TOWARD the opening level (counter to the overnight gap direction).
+   Often counter-trend vs HTF momentum, creating risk in strong trends.
+
+3. 4H MA STATE (key filter):
+   "#184: Not pristine but took it as attraction trade 4hr ma flat"
+   4H Bollinger MA should be FLAT or turning, not steeply sloped.
+   Steeply expanding 4H MA = strong trend = skip ATTR.
+
+4. CLEAN PATH (no muddy waters):
+   No significant S/R levels, demand/supply zones, or congestion areas
+   between price and the opening target level.
+
+5. TIMING:
+   Entries primarily at 07:00-08:30 London time (London open window).
+   Late-day entries noted as problematic (tend to become swing trades).
+
+6. PRIOR MOMENTUM FILTER (discretionary):
+   #262 (loss): "such momentum from previous day ... took it and it completely
+     went against me. Next time will be more towards continuation."
+   #272 (loss): "attraction trade, once again there was such momentum but I
+     took it."
+   #276 (win via continuation): "momentum was so strong to the upside for a
+     while, decided to go with it as have been caught out so many times before."
+   LESSON: Skip ATTR when prior session had unusually large momentum/range.
+
+7. OPENING ALREADY MITIGATED:
+   #105: "at London session price already at opening level. Huge momentum from
+     previous day bearish -- made sense to take continuation direction;
+     otherwise attraction entry later would have been a loss."
+   If price has already returned to opening before entry, ATTR setup is void.
+
+8. NEWS AVOIDANCE:
+   #212 (loss): "valid attraction trade stopped out by ISM news"
+   #174, #175, #138 reference NFP/CPI avoidance.
+   Attraction trades are particularly vulnerable to news stop-outs.
+
+
+STATISTICS: ALL DXY TRADES (full dataset)
+------------------------------------------------------------
+
+ALL DXY (N=298, 2021-12-31 to 2024-12-12):
+  N              : 298
+  Wins           : 243
+  Losses         : 55
+  Win Rate       : 81.5%
+  Net R          : +201.631
+  Avg Win R      : 1.055
+  Avg Loss R     : -0.996
+  Profit Factor  : 4.680
+
+ATTR (all dates, N=26, explicitly noted):
+  N              : 26
+  Wins           : 13
+  Losses         : 13
+  Win Rate       : 50.0%
+  Net R          : +0.312
+  Avg Win R      : 0.947
+  Avg Loss R     : -0.923
+  Profit Factor  : 1.026
+
+Non-ATTR (all dates, N=272):
+  N              : 272
+  Wins           : 230
+  Losses         : 42
+  Win Rate       : 84.6%
+  Net R          : +201.320
+  Avg Win R      : 1.061
+  Avg Loss R     : -1.019
+  Profit Factor  : 5.705
+
+
+STATISTICS: POST 2023-08-01 (primary comparison window)
+------------------------------------------------------------
+
+ALL DXY (post Aug-2023, N=196):
+  N              : 196
+  Wins           : 159
+  Losses         : 37
+  Win Rate       : 81.1%
+  Net R          : +133.723
+  Avg Win R      : 1.063
+  Avg Loss R     : -0.956
+  Profit Factor  : 4.780
+
+ATTR (post Aug-2023, N=15, explicitly noted):
+  N              : 15
+  Wins           : 8
+  Losses         : 7
+  Win Rate       : 53.3%
+  Net R          : +1.289
+  Avg Win R      : 0.911
+  Avg Loss R     : -0.857
+  Profit Factor  : 1.215
+
+Non-ATTR (post Aug-2023, N=181):
+  N              : 181
+  Wins           : 151
+  Losses         : 30
+  Win Rate       : 83.4%
+  Net R          : +132.435
+  Avg Win R      : 1.072
+  Avg Loss R     : -0.979
+  Profit Factor  : 5.509
+
+
+STATISTICS: PRE 2023-08-01
+------------------------------------------------------------
+
+ALL DXY (pre Aug-2023, N=102):
+  N              : 102
+  Wins           : 84
+  Losses         : 18
+  Win Rate       : 82.4%
+  Net R          : +67.908
+  Avg Win R      : 1.040
+  Avg Loss R     : -1.079
+  Profit Factor  : 4.497
+
+ATTR (pre Aug-2023, N=11):
+  N              : 11
+  Wins           : 5
+  Losses         : 6
+  Win Rate       : 45.5%
+  Net R          : -0.977
+  Avg Win R      : 1.005
+  Avg Loss R     : -1.000
+  Profit Factor  : 0.837
+
+
+FULL LIST: ALL 26 EXPLICITLY-LABELLED ATTRACTION TRADES
+------------------------------------------------------------
+Trade#   Date         W/L     RR      Notes
+--------------------------------------------------------------------------------
+#1       2023-03-02   Loss    -1.000  Started with attraction trade for a loss
+#2       2023-03-03   Win     +1.005  Another attraction trade win but both pairs are losses
+#8       2023-03-23   Win     +0.995  Attraction trade that actually went to TP
+#10      2023-03-28   Loss    -1.000  Another attraction trade not going to profit
+#23      2023-05-04   Win     +1.012  once again caught up in a swing for days there was also an e
+#36      2023-06-08   Loss    -1.000  Another attraction trade so few of them and this one too did
+#55      2023-08-02   Loss    -1.000  although no gap there were no muddy waters so considered thi
+#65      2023-08-25   Win     +0.994  valid attraction trade though only 15pips
+#86      2023-10-31   Win     +1.018  attraction trade worked!! would have held onto this but look
+#89      2023-11-02   Loss    -1.000  Rare attraction tade but was a loss. There was flat consolid
+#91      2023-11-07   Loss    -1.000  Another rare attraction trade that lost urgh!!
+#104     2023-12-12   Loss    -1.000  another attraction trade loss
+#105     2023-12-14   Win     +1.036  so was attraction trade opening but at London session price 
+#115     2024-01-16   Loss    -0.000  Antoher clear attraction trade that failed
+#116     2024-01-16   Loss    -1.000  So took another entry on above attraction trade which ended 
+#158     2024-05-28   Win     +1.010  very small opening but still attraction trade needed to wait
+#172     2024-07-01   Win     +0.969  Attraction trade worked
+#184     2024-08-08   Win     +0.996  Not pristine but took it as attraction trade 4hr ma flat
+#203     2024-09-16   Win     +0.263  40 pip attraction trade turned into swing but got out before
+#212     2024-10-03   Loss    -1.000  valid attraction trade stopped out by ISM news
+#221     2024-10-23   Win     +1.004  attraction but so big and although worked some of the trades
+#262     2022-01-27   Loss    -1.000  Attraction trade there was so much momentum from previous da
+#272     2022-02-22   Loss    -1.000  attraction trade gone against me, once again there was such 
+#273     2022-02-28   Loss    -1.000  too many losses all around attractions this was a very large
+#276     2022-03-07   Win     +1.004  was a clean attraction opening but momentum was so strong to
+#288     2022-03-30   Win     +1.006  Interesting although price was short we were in a demand zon
+
+
+COMPARISON: BRICE (REAL) vs PYTHON BACKTEST
+------------------------------------------------------------
+
+                          Brice (post Aug-23)       Python Backtest (33mo)
+----------------------------------------------------------------------
+ATTR  N                   15                         ~?? (likely over-detected)
+ATTR  Win Rate            53.3% (8W/7L)             ~37% (net losing)
+ATTR  Net R               +1.29R (15 trades)         -12.2R (33 months)
+Non-ATTR N                181                        N/A
+Non-ATTR Win Rate         83.4%                       82%+
+Non-ATTR Net R            +132.4R                     +37.1R
+
+
+KEY INSIGHTS FOR FIXING THE ATTR BACKTEST FILTER
+------------------------------------------------------------
+
+1. FREQUENCY MISMATCH (most critical):
+   Brice takes ~1 ATTR trade/month (15 in 17 months post Aug-2023).
+   If the Python backtest identifies far more than ~1/month, the signal
+   thresholds are too loose. Extra signals are likely false positives that
+   dilute performance and explain the -12.2R backtest result.
+
+2. 4H MA FLATNESS FILTER:
+   The single most actionable missing filter. Require 4H Bollinger Band MA
+   to be within a flatness threshold (e.g. slope < X pips/bar) before
+   taking any ATTR signal. Strong-trending MAs should block ATTR entries.
+
+3. PRIOR-DAY MOMENTUM LIMIT:
+   Measure the previous session pip range. If it exceeds a threshold,
+   skip ATTR (take continuation instead or skip entirely).
+   Several of the worst ATTR losses in the real data had large prior moves.
+
+4. GAP SIZE BOUNDS:
+   A minimum gap (~15-20 DXY pips) ensures there are enough pips to TP.
+   A maximum gap filter would avoid the high-momentum gap scenarios.
+   Both thresholds need to be found by optimisation.
+
+5. NEWS DAY FILTER:
+   ISM, NFP, CPI days produced several ATTR stop-outs.
+   The news-day filter already implemented for REV trades should also
+   apply to ATTR trades (or be made stricter for ATTR).
+
+6. OPENING ALREADY MITIGATED:
+   At the time of entry, price should not have already returned to the
+   previous opening level. If it has, the ATTR opportunity is gone.
+
+7. OVERALL ASSESSMENT:
+   Even with Brice applying all his discretionary filters, ATTR only
+   achieves 53.3% win rate and +1.29R over 15 trades (+0.09R/trade).
+   Compare to his non-ATTR trades: 83.4% win rate, +132R over 181 trades.
+   ATTR is a marginal setup at best. Reversal/continuation is the edge.
+   The Python backtest losing -12.2R on ATTR confirms the setup requires
+   very tight criteria to be viable, not just a looser gap threshold.
+
+================================================================================
