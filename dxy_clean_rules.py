@@ -756,8 +756,9 @@ def print_variant_dxy_exit(label, dxy_signals, all_pair_trades, raw_rev):
     print("  -- DXY signal quality (unchanged) --")
     for key, subset in [
         ("ALL",        dxy_signals),
-        ("ATTR",       [s for s in dxy_signals if 'ATTR' in s['type']]),
-        ("REV",        [s for s in dxy_signals if 'REV'  in s['type']]),
+        ("ATTR",       [s for s in dxy_signals if s['type'].startswith('ATTR')]),
+        ("GAP_REJ",    [s for s in dxy_signals if s['type'].startswith('GAP_REJ')]),
+        ("REV",        [s for s in dxy_signals if s['type'].startswith('REV')]),
     ]:
         print_stats(stats(subset, f"  DXY {key}"))
 
@@ -774,11 +775,12 @@ def print_variant_dxy_exit(label, dxy_signals, all_pair_trades, raw_rev):
               f"{s['WR%']:>5.1f}%  {pf_str:>6}  {s['NetR']:>+8.1f}R"
               f"  {s['AvgW']:>+5.2f}R  {s['AvgL']:>-5.2f}R")
 
-    sp = stats_r(all_pair_trades, "PORTFOLIO")
-    sa = stats_r([t for t in all_pair_trades if 'ATTR' in t['dxy_type']], "ATTR")
-    sr = stats_r([t for t in all_pair_trades if 'REV'  in t['dxy_type']], "REV")
+    sp  = stats_r(all_pair_trades, "PORTFOLIO")
+    sa  = stats_r([t for t in all_pair_trades if t['dxy_type'].startswith('ATTR')],    "ATTR")
+    sgr = stats_r([t for t in all_pair_trades if t['dxy_type'].startswith('GAP_REJ')], "GAP_REJ")
+    sr  = stats_r([t for t in all_pair_trades if t['dxy_type'].startswith('REV')],     "REV")
     print()
-    for s in [sp, sa, sr]:
+    for s in [sp, sa, sgr, sr]:
         print_stats_r(s)
 
 def profit_estimate_r(label, all_pair_trades, account=100_000, risk_pct=0.0025):

@@ -7,7 +7,7 @@
 //
 // TRADE LOGIC (mirrors DXYZoneStrategy / DXYTradeAlert):
 //   REV  : DXY moves away from London session opening level, returns to it,
-//          confirmation candle fires, 1H & 4H DXY BB expanding in trade direction.
+//          confirmation candle fires, 1H DXY BB expanding in trade direction.
 //          SL = prior DXY calendar day high/low ± buffer, capped at max_sl_pts.
 //          SL distance converted to pair price via tick_factor.
 //
@@ -61,11 +61,11 @@ grp_disp = "Display"
 
 // Attraction
 attr_enabled        = input.bool(true,  "Enable Attraction Trades",                          group=grp_zone)
-attr_min_gap        = input.int(150,    "Attraction — Min Gap at London Open (pts)",          group=grp_zone, minval=50,  step=25,  tooltip="DXY London open must differ from prior bar's close by at least this many pts.")
+attr_min_gap        = input.int(150,    "Attraction — Min Gap at Tokyo Open (pts)",           group=grp_zone, minval=50,  step=25,  tooltip="Gap between DXY 23:15 UTC close (candle prior to 23:30 phantom) and the 23:45 Tokyo open. Fallback: body of 23:45 candle. ~45% of sessions produce a gap >= 150 pts.")
 attr_min_reward     = input.int(100,    "Attraction — Min Reward to TP (pts)",                group=grp_zone, minval=50,  step=25)
 attr_near_buf       = input.int(50,     "Attraction — Near-Edge TP Buffer (pts)",             group=grp_zone, minval=0,   step=10,  tooltip="TP = DXY London open ± this buffer. Converted to pair price via tick_factor.")
 attr_use_near_tp    = input.bool(true,  "Attraction — Use Near-Edge TP (vs full gap fill)",   group=grp_zone)
-attr_max_prev_range = input.int(2000,   "Attraction — Max Prior Session Range (pts)",         group=grp_zone, minval=500, step=250, tooltip="Skip attraction trades if prior DXY session range exceeded this.")
+attr_max_prev_range = input.int(8000,   "Attraction — Max Prior Session Range (pts)",         group=grp_zone, minval=500, step=500, tooltip="Skip attraction if prior DXY session range exceeded this. Median DXY daily range ~4800 pts; 8000 passes ~85% of days.")
 
 // Reversal
 rev_enabled    = input.bool(true, "Enable Reversal Trades",                                   group=grp_zone)
@@ -75,13 +75,15 @@ struct_sl_buf  = input.int(50,    "Reversal — Structural SL Buffer (pts)",    
 max_sl_pts     = input.int(3000,  "Reversal — Max SL Distance (pts)",                         group=grp_zone, minval=500, step=250)
 
 // Session
-entry_start_h = input.int(7,  "Entry Start Hour (GMT)",             group=grp_sess, minval=0, maxval=23)
-entry_start_m = input.int(0,  "Entry Start Minute (GMT)",           group=grp_sess, minval=0, maxval=59)
+entry_start_h = input.int(7,  "REV Entry Start Hour (GMT)",         group=grp_sess, minval=0, maxval=23, tooltip="London open — start of REV entry window. 07:00 GMT on Tue-Fri.")
+entry_start_m = input.int(0,  "REV Entry Start Minute (GMT)",       group=grp_sess, minval=0, maxval=59)
+attr_start_h  = input.int(6,  "ATTR Entry Start Hour (GMT)",        group=grp_sess, minval=0, maxval=23, tooltip="ATTR entry window opens 1 hour before London on Tue-Fri (Ash's rule: 06:00 GMT). Monday uses the Monday start time.")
+attr_start_m  = input.int(0,  "ATTR Entry Start Minute (GMT)",      group=grp_sess, minval=0, maxval=59)
 entry_end_h   = input.int(19, "Entry End Hour (GMT)",               group=grp_sess, minval=0, maxval=23)
 entry_end_m   = input.int(30, "Entry End Minute (GMT)",             group=grp_sess, minval=0, maxval=59)
 rev_end_h     = input.int(12, "Reversal — Entry End Hour (GMT)",    group=grp_sess, minval=6, maxval=19)
 rev_end_m     = input.int(0,  "Reversal — Entry End Min (GMT)",     group=grp_sess, minval=0, maxval=59)
-monday_start  = input.int(6,  "Monday Start Hour (GMT)",            group=grp_sess, minval=0, maxval=23)
+monday_start  = input.int(6,  "Monday Start Hour (GMT)",            group=grp_sess, minval=0, maxval=23, tooltip="Monday session starts at 06:30 GMT.")
 japan_end_h   = input.int(6,  "Japan Session End Hour (GMT)",       group=grp_sess, minval=1, maxval=8)
 
 // Candle patterns (evaluated on DXY)
@@ -109,12 +111,14 @@ dxy_c = request.security("TVC:DXY", "15", close, lookahead=barmerge.lookahead_of
 h_gmt       = hour(time, "UTC")
 m_gmt       = minute(time, "UTC")
 is_mon      = dayofweek(time, "UTC") == dayofweek.monday
-s_min       = (is_mon ? monday_start : entry_start_h) * 60 + (is_mon ? 30 : entry_start_m)
+mon_min     = monday_start * 60 + 30
 c_min       = h_gmt * 60 + m_gmt
 e_min       = entry_end_h * 60 + entry_end_m
 r_end_min   = rev_end_h   * 60 + rev_end_m
-in_sess     = c_min >= s_min and c_min <= e_min
-in_rev_sess = c_min >= s_min and c_min <= r_end_min
+rev_s_min   = is_mon ? mon_min : entry_start_h * 60 + entry_start_m
+attr_s_min  = is_mon ? mon_min : attr_start_h  * 60 + attr_start_m
+in_sess     = c_min >= attr_s_min and c_min <= e_min
+in_rev_sess = c_min >= rev_s_min  and c_min <= r_end_min
 in_japan    = (h_gmt == 23 and m_gmt >= 45) or (h_gmt >= 0 and h_gmt < japan_end_h)
 
 is_london_open_bar = not in_japan and
@@ -141,23 +145,43 @@ else
     dxy_today_high := na(dxy_today_high) ? dxy_h : math.max(dxy_today_high, dxy_h)
     dxy_today_low  := na(dxy_today_low)  ? dxy_l : math.min(dxy_today_low,  dxy_l)
 
-// ─── DXY LONDON OPEN LEVEL + ATTR GAP ────────────────────────────────────────
+// ─── DXY LONDON OPEN LEVEL ───────────────────────────────────────────────────
 var float dxy_london_open  = na
-var float dxy_attr_target  = na   // prior session close (full gap-fill TP)
-var float dxy_attr_gap_pts = 0.0  // +ve = gap up, -ve = gap down
 var float dxy_max_move_up  = 0.0
 var float dxy_max_move_down= 0.0
-var bool  rev_traded       = false
-var bool  attr_traded      = false
 
 if is_london_open_bar
     dxy_london_open  := dxy_o
-    dxy_attr_target  := dxy_c[1]
-    dxy_attr_gap_pts := (dxy_o - dxy_c[1]) * 10000
     dxy_max_move_up  := 0.0
     dxy_max_move_down:= 0.0
-    rev_traded       := false
+
+// ─── DXY TOKYO OPEN ATTR GAP (23:45 UTC) ─────────────────────────────────────
+// Gap = DXY 23:45 open vs DXY 23:15 close (prior to 23:30 phantom candle).
+// Fallback: body of DXY 23:45 candle.
+bool is_tokyo_open = h_gmt == 23 and m_gmt == 45
+
+var float dxy_attr_target  = na
+var float dxy_attr_gap_pts = 0.0
+var bool  attr_traded      = false
+var bool  attr_gap_touched = false  // latches true once price crosses the gap target this session
+
+if is_tokyo_open
+    float raw_gap = (dxy_o - dxy_c[2]) * 10000   // 23:45 open vs 23:15 close
+    if math.abs(raw_gap) >= 10
+        dxy_attr_gap_pts := raw_gap
+        dxy_attr_target  := dxy_c[2]
+    else
+        dxy_attr_gap_pts := (dxy_c - dxy_o) * 10000
+        dxy_attr_target  := dxy_o
     attr_traded      := false
+    attr_gap_touched := false   // zone is fresh/pristine at Tokyo open
+
+// Latch: once the gap target is reached, zone is permanently filled for this session
+if not na(dxy_attr_target)
+    if dxy_attr_gap_pts < 0 and dxy_c >= dxy_attr_target
+        attr_gap_touched := true
+    else if dxy_attr_gap_pts > 0 and dxy_c <= dxy_attr_target
+        attr_gap_touched := true
 
 if not na(dxy_london_open) and not in_japan
     float above = (dxy_c - dxy_london_open) * 10000
@@ -209,8 +233,13 @@ dxy_b2r  = math.abs(dxy_c[2] - dxy_o[2])
 dxy_ind  = dxy_bs1 <= dxy_b2r * 0.5
 bull_3b  = use_3bar and dxy_c[2] < dxy_o[2] and dxy_ind and dxy_c > dxy_o and dxy_c > dxy_o[2]
 bear_3b  = use_3bar and dxy_c[2] > dxy_o[2] and dxy_ind and dxy_c < dxy_o and dxy_c < dxy_o[2]
-dxy_bull_sig = bull_eng or bull_pin or bull_3b
-dxy_bear_sig = bear_eng or bear_pin or bear_3b
+// Raw signals before mutual-exclusivity check
+bool _dxy_bull_raw = bull_eng or bull_pin or bull_3b
+bool _dxy_bear_raw = bear_eng or bear_pin or bear_3b
+// Body direction tiebreaker: bullish body (dxy_c>dxy_o) → keep bull; bearish → keep bear; doji → suppress both
+bool _dxy_both     = _dxy_bull_raw and _dxy_bear_raw
+dxy_bull_sig = _dxy_bull_raw and not (_dxy_both and dxy_c <= dxy_o)
+dxy_bear_sig = _dxy_bear_raw and not (_dxy_both and dxy_c >= dxy_o)
 
 // ─── DXY DISTANCE FROM OPENING LEVEL ─────────────────────────────────────────
 float dxy_dist_from_open = not na(dxy_london_open) ? (dxy_c - dxy_london_open) * 10000 : na
@@ -225,53 +254,76 @@ float dxy_rs_sl      = math.min(dxy_rs_raw_sl, dxy_c + max_sl_pts / 10000.0)
 float dxy_rs_sl_d    = dxy_rs_sl - dxy_c          // DXY pts (decimal)
 
 // ─── DXY ATTRACTION SL/TP ────────────────────────────────────────────────────
-float dxy_al_tp     = attr_use_near_tp ? dxy_london_open + attr_near_buf / 10000.0 : dxy_attr_target
-float dxy_as_tp     = attr_use_near_tp ? dxy_london_open - attr_near_buf / 10000.0 : dxy_attr_target
+// Near-edge TP stops just short of the gap-fill target
+float dxy_al_tp     = attr_use_near_tp ? dxy_attr_target - attr_near_buf / 10000.0 : dxy_attr_target
+float dxy_as_tp     = attr_use_near_tp ? dxy_attr_target + attr_near_buf / 10000.0 : dxy_attr_target
 float dxy_al_sl_d   = not na(dxy_al_tp) ? dxy_al_tp - dxy_c : na   // +ve → long (TP above)
 float dxy_as_sl_d   = not na(dxy_as_tp) ? dxy_c - dxy_as_tp : na   // +ve → short (TP below)
 float dxy_al_reward = not na(dxy_al_sl_d) ? dxy_al_sl_d * 10000 : 0.0
 float dxy_as_reward = not na(dxy_as_sl_d) ? dxy_as_sl_d * 10000 : 0.0
 
 // ─── REVERSAL CONDITIONS (DXY) ────────────────────────────────────────────────
-bool rev_long_cond  = (rev_enabled and not na(dxy_london_open) and not rev_traded and
+bool rev_long_cond  = (rev_enabled and not na(dxy_london_open) and
     in_rev_sess and not in_japan and
     dxy_max_move_down >= rev_min_move and
     dxy_at_open_level and
     dxy_bull_sig and
-    dxy_bb_1h == 1 and dxy_bb_4h == 1 and
+    dxy_bb_1h == 1 and
     not na(dxy_pd_low) and dxy_rl_sl_d > 0)
 
-bool rev_short_cond = (rev_enabled and not na(dxy_london_open) and not rev_traded and
+bool rev_short_cond = (rev_enabled and not na(dxy_london_open) and
     in_rev_sess and not in_japan and
     dxy_max_move_up >= rev_min_move and
     dxy_at_open_level and
     dxy_bear_sig and
-    dxy_bb_1h == -1 and dxy_bb_4h == -1 and
+    dxy_bb_1h == -1 and
     not na(dxy_pd_high) and dxy_rs_sl_d > 0)
 
 // ─── ATTRACTION CONDITIONS (DXY) ─────────────────────────────────────────────
-bool attr_long_cond  = (attr_enabled and not na(dxy_london_open) and not attr_traded and
+bool attr_long_cond  = (attr_enabled and not na(dxy_attr_target) and not attr_traded and not attr_gap_touched and
     in_sess and not in_japan and
     dxy_attr_gap_pts < -attr_min_gap and
+    dxy_c < dxy_attr_target and
     dxy_pd_range <= attr_max_prev_range and
     dxy_bb_4h == 0 and
     dxy_bull_sig and
     dxy_al_reward >= attr_min_reward and
     not na(dxy_al_sl_d) and dxy_al_sl_d > 0)
 
-bool attr_short_cond = (attr_enabled and not na(dxy_london_open) and not attr_traded and
+bool attr_short_cond = (attr_enabled and not na(dxy_attr_target) and not attr_traded and not attr_gap_touched and
     in_sess and not in_japan and
     dxy_attr_gap_pts > attr_min_gap and
+    dxy_c > dxy_attr_target and
     dxy_pd_range <= attr_max_prev_range and
     dxy_bb_4h == 0 and
     dxy_bear_sig and
     dxy_as_reward >= attr_min_reward and
     not na(dxy_as_sl_d) and dxy_as_sl_d > 0)
 
-// Block further signals once traded this session
-if rev_long_cond or rev_short_cond
-    rev_traded := true
-if attr_long_cond or attr_short_cond
+// ─── GAP REJECTION CONDITIONS (DXY) ──────────────────────────────────────────
+// Same filters as ATTR but fires AFTER gap has been filled (attr_gap_touched = true)
+bool gap_rej_long_cond  = (attr_enabled and not na(dxy_attr_target) and not attr_traded and attr_gap_touched and
+    in_sess and not in_japan and
+    dxy_attr_gap_pts < -attr_min_gap and
+    dxy_c < dxy_attr_target and
+    dxy_pd_range <= attr_max_prev_range and
+    dxy_bb_4h == 0 and
+    dxy_bull_sig and
+    dxy_al_reward >= attr_min_reward and
+    not na(dxy_al_sl_d) and dxy_al_sl_d > 0)
+
+bool gap_rej_short_cond = (attr_enabled and not na(dxy_attr_target) and not attr_traded and attr_gap_touched and
+    in_sess and not in_japan and
+    dxy_attr_gap_pts > attr_min_gap and
+    dxy_c > dxy_attr_target and
+    dxy_pd_range <= attr_max_prev_range and
+    dxy_bb_4h == 0 and
+    dxy_bear_sig and
+    dxy_as_reward >= attr_min_reward and
+    not na(dxy_as_sl_d) and dxy_as_sl_d > 0)
+
+// Block further ATTR/GAP_REJ signals once traded this session
+if attr_long_cond or attr_short_cond or gap_rej_long_cond or gap_rej_short_cond
     attr_traded := true
 
 // ─── HELPER: CONVERT DXY DISTANCE TO PAIR PRICE ──────────────────────────────
@@ -284,7 +336,7 @@ float cr_px = high - low  // pair candle range for label offset
 // ─── ENTRIES ─────────────────────────────────────────────────────────────────
 
 // — ATTRACTION LONG (DXY gap down → fill up) ————————————————————————————————
-if in_window and strategy.position_size == 0 and attr_long_cond
+if in_window and attr_long_cond
     float pair_dist = dxy_al_sl_d * 10000 * tick_factor
     int   tdir = pair_dir          // DXY long → pair follows pair_dir
     if tdir == 1
@@ -299,7 +351,7 @@ if in_window and strategy.position_size == 0 and attr_long_cond
             color=color.new(color.green, 10), textcolor=color.white, style=label.style_label_down, size=size.small)
 
 // — ATTRACTION SHORT (DXY gap up → fill down) ————————————————————————————————
-if in_window and strategy.position_size == 0 and attr_short_cond
+if in_window and attr_short_cond
     float pair_dist = dxy_as_sl_d * 10000 * tick_factor
     int   tdir = -1 * pair_dir     // DXY short inverts direction
     if tdir == 1
@@ -313,8 +365,38 @@ if in_window and strategy.position_size == 0 and attr_short_cond
         label.new(bar_index, high + cr_px, "▼ ATTR↓\n" + str.tostring(math.round(dxy_attr_gap_pts)) + " pt gap",
             color=color.new(color.red, 10), textcolor=color.white, style=label.style_label_down, size=size.small)
 
+// — GAP REJECTION LONG (DXY gap filled, price pulled back, bull signal) ────────
+if in_window and gap_rej_long_cond
+    float pair_dist = dxy_al_sl_d * 10000 * tick_factor
+    int   tdir = pair_dir
+    if tdir == 1
+        strategy.entry("GapRej Long", strategy.long)
+        strategy.exit("GRL X", "GapRej Long", limit=close + pair_dist, stop=close - pair_dist)
+        label.new(bar_index, low - cr_px, "▲ GAP REJ↑\n" + str.tostring(math.round(math.abs(dxy_attr_gap_pts))) + " pt gap",
+            color=color.new(color.orange, 10), textcolor=color.white, style=label.style_label_up, size=size.small)
+    else
+        strategy.entry("GapRej Long", strategy.short)
+        strategy.exit("GRL X", "GapRej Long", limit=close - pair_dist, stop=close + pair_dist)
+        label.new(bar_index, high + cr_px, "▼ GAP REJ↑\n" + str.tostring(math.round(math.abs(dxy_attr_gap_pts))) + " pt gap",
+            color=color.new(color.orange, 10), textcolor=color.white, style=label.style_label_down, size=size.small)
+
+// — GAP REJECTION SHORT (DXY gap filled, price pulled back, bear signal) ───────
+if in_window and gap_rej_short_cond
+    float pair_dist = dxy_as_sl_d * 10000 * tick_factor
+    int   tdir = -1 * pair_dir
+    if tdir == 1
+        strategy.entry("GapRej Short", strategy.long)
+        strategy.exit("GRS X", "GapRej Short", limit=close + pair_dist, stop=close - pair_dist)
+        label.new(bar_index, low - cr_px, "▲ GAP REJ↓\n" + str.tostring(math.round(dxy_attr_gap_pts)) + " pt gap",
+            color=color.new(color.orange, 10), textcolor=color.white, style=label.style_label_up, size=size.small)
+    else
+        strategy.entry("GapRej Short", strategy.short)
+        strategy.exit("GRS X", "GapRej Short", limit=close - pair_dist, stop=close + pair_dist)
+        label.new(bar_index, high + cr_px, "▼ GAP REJ↓\n" + str.tostring(math.round(dxy_attr_gap_pts)) + " pt gap",
+            color=color.new(color.orange, 10), textcolor=color.white, style=label.style_label_down, size=size.small)
+
 // — REVERSAL LONG (DXY bouncing up at opening level) ─────────────────────────
-if in_window and strategy.position_size == 0 and rev_long_cond
+if in_window and rev_long_cond
     float pair_dist = dxy_rl_sl_d * 10000 * tick_factor
     int   tdir = pair_dir
     if tdir == 1
@@ -329,7 +411,7 @@ if in_window and strategy.position_size == 0 and rev_long_cond
             color=color.new(color.teal, 10), textcolor=color.white, style=label.style_label_down, size=size.small)
 
 // — REVERSAL SHORT (DXY rejecting down at opening level) ──────────────────────
-if in_window and strategy.position_size == 0 and rev_short_cond
+if in_window and rev_short_cond
     float pair_dist = dxy_rs_sl_d * 10000 * tick_factor
     int   tdir = -1 * pair_dir
     if tdir == 1

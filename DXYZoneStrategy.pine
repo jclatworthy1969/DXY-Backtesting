@@ -7,7 +7,7 @@
 //
 // TRADE LOGIC SUMMARY:
 //   REV  : Price moves away from London session opening level, returns to it,
-//          confirmation candle fires + 1H & 4H BB expanding in trade direction.
+//          confirmation candle fires + 1H BB expanding in trade direction.
 //          SL = prior calendar day low/high ± buffer (structural), capped at max.
 //
 //   ATTR : London opened with a gap vs prior bar's close. 4H BB must be FLAT.
@@ -46,11 +46,11 @@ grp_disp = "Display"
 
 // Attraction
 attr_enabled        = input.bool(true,  "Enable Attraction Trades",                          group=grp_zone)
-attr_min_gap        = input.int(150,    "Attraction — Min Gap at London Open (pts)",          group=grp_zone, minval=50,  step=25,  tooltip="London open price must differ from the prior bar's close by at least this many pts. Confirms a meaningful overnight gap exists to fill.")
+attr_min_gap        = input.int(150,    "Attraction — Min Gap at Tokyo Open (pts)",           group=grp_zone, minval=50,  step=25,  tooltip="Gap between the 23:15 UTC bar close (candle prior to 23:30 phantom) and the 23:45 Tokyo open. Fallback: body of the 23:45 candle. ~45% of sessions produce a gap >= 150 pts.")
 attr_min_reward     = input.int(100,    "Attraction — Min Reward to TP (pts)",                group=grp_zone, minval=50,  step=25,  tooltip="Minimum distance (pts) from entry close to TP at the time of the signal.")
 attr_near_buf       = input.int(50,     "Attraction — Near-Edge TP Buffer (pts)",             group=grp_zone, minval=0,   step=10,  tooltip="TP = London open ± this buffer. Reduces exposure to full gap-fill failure.")
 attr_use_near_tp    = input.bool(true,  "Attraction — Use Near-Edge TP (vs full gap fill)",   group=grp_zone,                      tooltip="On: TP = London open ± near buffer. Off: TP = prior session close (full gap fill).")
-attr_max_prev_range = input.int(2000,   "Attraction — Max Prior Session Range (pts)",         group=grp_zone, minval=500, step=250, tooltip="Skip attraction trades if the prior session had a very large range.")
+attr_max_prev_range = input.int(8000,   "Attraction — Max Prior Session Range (pts)",         group=grp_zone, minval=500, step=500, tooltip="Skip attraction if prior session DXY range exceeded this. Median DXY daily range ~4800 pts; 8000 passes ~85% of days.")
 
 // Reversal
 rev_enabled    = input.bool(true, "Enable Reversal Trades",                                   group=grp_zone)
@@ -60,13 +60,15 @@ struct_sl_buf  = input.int(50,    "Reversal — Structural SL Buffer (pts)",    
 max_sl_pts     = input.int(3000,  "Reversal — Max SL Distance (pts)",                         group=grp_zone, minval=500, step=250, tooltip="Hard cap on SL distance. If prior session range is very large, SL is capped here.")
 
 // Session
-entry_start_h = input.int(7,  "Entry Start Hour (GMT)",             group=grp_sess, minval=0, maxval=23)
-entry_start_m = input.int(0,  "Entry Start Minute (GMT)",           group=grp_sess, minval=0, maxval=59)
+entry_start_h = input.int(7,  "REV Entry Start Hour (GMT)",         group=grp_sess, minval=0, maxval=23, tooltip="London open — start of REV entry window. 07:00 GMT on Tue-Fri.")
+entry_start_m = input.int(0,  "REV Entry Start Minute (GMT)",       group=grp_sess, minval=0, maxval=59)
+attr_start_h  = input.int(6,  "ATTR Entry Start Hour (GMT)",        group=grp_sess, minval=0, maxval=23, tooltip="ATTR entry window opens 1 hour before London on Tue-Fri (Ash's rule: 06:00 GMT). Monday uses the Monday start time.")
+attr_start_m  = input.int(0,  "ATTR Entry Start Minute (GMT)",      group=grp_sess, minval=0, maxval=59)
 entry_end_h   = input.int(19, "Entry End Hour (GMT)",               group=grp_sess, minval=0, maxval=23)
 entry_end_m   = input.int(30, "Entry End Minute (GMT)",             group=grp_sess, minval=0, maxval=59)
 rev_end_h     = input.int(12, "Reversal — Entry End Hour (GMT)",    group=grp_sess, minval=6, maxval=19, tooltip="Reversals fire only during London morning session.")
 rev_end_m     = input.int(0,  "Reversal — Entry End Min (GMT)",     group=grp_sess, minval=0, maxval=59)
-monday_start  = input.int(6,  "Monday Start Hour (GMT)",            group=grp_sess, minval=0, maxval=23)
+monday_start  = input.int(6,  "Monday Start Hour (GMT)",            group=grp_sess, minval=0, maxval=23, tooltip="Monday session starts at 06:30 GMT. Applies to both REV and ATTR.")
 japan_end_h   = input.int(6,  "Japan Session End Hour (GMT)",       group=grp_sess, minval=1, maxval=8)
 
 // Candle patterns
@@ -89,12 +91,14 @@ show_session  = input.bool(true, "Show London Session Background",   group=grp_d
 h           = hour(time, "UTC")
 m           = minute(time, "UTC")
 is_mon      = dayofweek(time, "UTC") == dayofweek.monday
-start_min   = (is_mon ? monday_start : entry_start_h) * 60 + (is_mon ? 30 : entry_start_m)
+mon_min     = monday_start * 60 + 30
 curr_min    = h * 60 + m
 end_min     = entry_end_h   * 60 + entry_end_m
 rev_end_min = rev_end_h     * 60 + rev_end_m
-in_sess     = curr_min >= start_min and curr_min <= end_min
-in_rev_sess = curr_min >= start_min and curr_min <= rev_end_min
+rev_start_min  = is_mon ? mon_min : entry_start_h * 60 + entry_start_m
+attr_start_min = is_mon ? mon_min : attr_start_h  * 60 + attr_start_m
+in_sess     = curr_min >= attr_start_min and curr_min <= end_min
+in_rev_sess = curr_min >= rev_start_min  and curr_min <= rev_end_min
 in_japan    = (h == 23 and m >= 45) or (h >= 0 and h < japan_end_h)
 
 // London open bar: 07:00 UTC (Tue–Fri) or 06:30 UTC (Monday)
@@ -122,23 +126,43 @@ else
     today_high := na(today_high) ? high : math.max(today_high, high)
     today_low  := na(today_low)  ? low  : math.min(today_low,  low)
 
-// ─── LONDON OPEN LEVEL + ATTR GAP ────────────────────────────────────────────
+// ─── LONDON OPEN LEVEL ───────────────────────────────────────────────────────
 var float london_open_price = na
-var float attr_gap_target   = na
-var float attr_gap_pts      = 0.0
 var float max_move_up       = 0.0
 var float max_move_down     = 0.0
-var bool  rev_traded        = false
-var bool  attr_traded       = false
 
 if is_london_open_bar
     london_open_price := open
-    attr_gap_target   := close[1]
-    attr_gap_pts      := (open - close[1]) * 10000   // +ve = gap up, -ve = gap down
     max_move_up       := 0.0
     max_move_down     := 0.0
-    rev_traded        := false
-    attr_traded       := false
+
+// ─── TOKYO OPEN ATTR GAP (23:45 UTC) ─────────────────────────────────────────
+// Gap = 23:45 open vs 23:15 close (candle prior to 23:30 phantom).
+// Fallback: body of the 23:45 candle itself.
+bool  is_tokyo_open = h == 23 and m == 45
+
+var float attr_gap_target  = na
+var float attr_gap_pts     = 0.0
+var bool  attr_traded      = false
+var bool  attr_gap_touched = false  // latches true once price crosses the gap target this session
+
+if is_tokyo_open
+    float raw_gap = (open - close[2]) * 10000   // 23:45 open vs 23:15 close
+    if math.abs(raw_gap) >= 10
+        attr_gap_pts    := raw_gap
+        attr_gap_target := close[2]
+    else
+        attr_gap_pts    := (close - open) * 10000
+        attr_gap_target := open
+    attr_traded      := false
+    attr_gap_touched := false   // zone is fresh/pristine at Tokyo open
+
+// Latch: once the gap target is reached, zone is permanently filled for this session
+if not na(attr_gap_target)
+    if attr_gap_pts < 0 and close >= attr_gap_target
+        attr_gap_touched := true
+    else if attr_gap_pts > 0 and close <= attr_gap_target
+        attr_gap_touched := true
 
 if not na(london_open_price) and not in_japan
     float above = (close - london_open_price) * 10000
@@ -190,8 +214,13 @@ bar2_range  = math.abs(close[2] - open[2])
 indecision  = body_sz[1] <= bar2_range * 0.5
 bull_3bar   = use_3bar and close[2] < open[2] and indecision and close > open and close > open[2]
 bear_3bar   = use_3bar and close[2] > open[2] and indecision and close < open and close < open[2]
-bull_sig    = bull_engulf or bull_pin or bull_3bar
-bear_sig    = bear_engulf or bear_pin or bear_3bar
+// Raw signals before mutual-exclusivity check
+bool _bull_raw = bull_engulf or bull_pin or bull_3bar
+bool _bear_raw = bear_engulf or bear_pin or bear_3bar
+// Body direction tiebreaker: bullish body → keep bull; bearish → keep bear; doji → suppress both
+bool _both     = _bull_raw and _bear_raw
+bull_sig    = _bull_raw and not (_both and close <= open)
+bear_sig    = _bear_raw and not (_both and close >= open)
 
 // ─── DISTANCE FROM OPENING LEVEL ─────────────────────────────────────────────
 float dist_from_open = not na(london_open_price) ? (close - london_open_price) * 10000 : na
@@ -209,8 +238,9 @@ float rev_short_sl_d   = rev_short_sl - close
 float rev_short_tp     = close - rev_short_sl_d
 
 // ─── ATTRACTION TP / SL ───────────────────────────────────────────────────────
-float attr_long_tp  = attr_use_near_tp ? london_open_price + attr_near_buf / 10000.0 : attr_gap_target
-float attr_short_tp = attr_use_near_tp ? london_open_price - attr_near_buf / 10000.0 : attr_gap_target
+// Near-edge TP stops just short of the full gap-fill target
+float attr_long_tp  = attr_use_near_tp ? attr_gap_target - attr_near_buf / 10000.0 : attr_gap_target
+float attr_short_tp = attr_use_near_tp ? attr_gap_target + attr_near_buf / 10000.0 : attr_gap_target
 float attr_long_reward  = not na(attr_long_tp)  ? (attr_long_tp  - close) * 10000 : 0.0
 float attr_short_reward = not na(attr_short_tp) ? (close - attr_short_tp) * 10000 : 0.0
 float attr_long_sl_d    = not na(attr_long_tp)  ? attr_long_tp  - close : na
@@ -219,53 +249,74 @@ float attr_long_sl      = not na(attr_long_sl_d)  ? close - attr_long_sl_d  : na
 float attr_short_sl     = not na(attr_short_sl_d) ? close + attr_short_sl_d : na
 
 // ─── REVERSAL CONDITIONS ─────────────────────────────────────────────────────
-rev_long  = (rev_enabled and not na(london_open_price) and not rev_traded and
+rev_long  = (rev_enabled and not na(london_open_price) and
     in_rev_sess and not in_japan and
     max_move_down >= rev_min_move and
     at_open_level and
     bull_sig and
-    bb_1h == 1 and bb_4h == 1 and
+    bb_1h == 1 and
     not na(pd_low) and
     rev_long_sl_d > 0)
 
-rev_short = (rev_enabled and not na(london_open_price) and not rev_traded and
+rev_short = (rev_enabled and not na(london_open_price) and
     in_rev_sess and not in_japan and
     max_move_up >= rev_min_move and
     at_open_level and
     bear_sig and
-    bb_1h == -1 and bb_4h == -1 and
+    bb_1h == -1 and
     not na(pd_high) and
     rev_short_sl_d > 0)
 
 // ─── ATTRACTION CONDITIONS ───────────────────────────────────────────────────
-attr_long  = (attr_enabled and not na(london_open_price) and not attr_traded and
+attr_long  = (attr_enabled and not na(attr_gap_target) and not attr_traded and not attr_gap_touched and
     in_sess and not in_japan and
     attr_gap_pts < -attr_min_gap and
+    close < attr_gap_target and
     pd_range <= attr_max_prev_range and
     bb_4h == 0 and
     bull_sig and
     attr_long_reward >= attr_min_reward and
     not na(attr_long_sl_d) and attr_long_sl_d > 0)
 
-attr_short = (attr_enabled and not na(london_open_price) and not attr_traded and
+attr_short = (attr_enabled and not na(attr_gap_target) and not attr_traded and not attr_gap_touched and
     in_sess and not in_japan and
     attr_gap_pts > attr_min_gap and
+    close > attr_gap_target and
     pd_range <= attr_max_prev_range and
     bb_4h == 0 and
     bear_sig and
     attr_short_reward >= attr_min_reward and
     not na(attr_short_sl_d) and attr_short_sl_d > 0)
 
-// Block further signals once traded this session
-if rev_long or rev_short
-    rev_traded := true
-if attr_long or attr_short
+// ─── GAP REJECTION CONDITIONS ─────────────────────────────────────────────────
+gap_rej_long  = (attr_enabled and not na(attr_gap_target) and not attr_traded and attr_gap_touched and
+    in_sess and not in_japan and
+    attr_gap_pts < -attr_min_gap and
+    close < attr_gap_target and
+    pd_range <= attr_max_prev_range and
+    bb_4h == 0 and
+    bull_sig and
+    attr_long_reward >= attr_min_reward and
+    not na(attr_long_sl_d) and attr_long_sl_d > 0)
+
+gap_rej_short = (attr_enabled and not na(attr_gap_target) and not attr_traded and attr_gap_touched and
+    in_sess and not in_japan and
+    attr_gap_pts > attr_min_gap and
+    close > attr_gap_target and
+    pd_range <= attr_max_prev_range and
+    bb_4h == 0 and
+    bear_sig and
+    attr_short_reward >= attr_min_reward and
+    not na(attr_short_sl_d) and attr_short_sl_d > 0)
+
+// Block further gap-window signals once any one has traded this session
+if attr_long or attr_short or gap_rej_long or gap_rej_short
     attr_traded := true
 
 // ─── STRATEGY ENTRIES ────────────────────────────────────────────────────────
 
 // — ATTRACTION LONG ——————————————————————————————————————————————————————————
-if in_window and strategy.position_size == 0 and attr_long
+if in_window and attr_long
     strategy.entry("Attr Long", strategy.long)
     strategy.exit("AL Exit", "Attr Long", limit=attr_long_tp, stop=attr_long_sl)
     label.new(bar_index, low - cndl_range,
@@ -274,7 +325,7 @@ if in_window and strategy.position_size == 0 and attr_long
         style=label.style_label_up, size=size.small)
 
 // — ATTRACTION SHORT ——————————————————————————————————————————————————————————
-if in_window and strategy.position_size == 0 and attr_short
+if in_window and attr_short
     strategy.entry("Attr Short", strategy.short)
     strategy.exit("AS Exit", "Attr Short", limit=attr_short_tp, stop=attr_short_sl)
     label.new(bar_index, high + cndl_range,
@@ -282,8 +333,26 @@ if in_window and strategy.position_size == 0 and attr_short
         color=color.new(color.red, 10), textcolor=color.white,
         style=label.style_label_down, size=size.small)
 
+// — GAP REJECTION LONG ———————————————————————————————————————————————————————
+if in_window and gap_rej_long
+    strategy.entry("GapRej Long", strategy.long)
+    strategy.exit("GRL Exit", "GapRej Long", limit=attr_long_tp, stop=attr_long_sl)
+    label.new(bar_index, low - cndl_range,
+        "▲ GAP REJ LONG\nGap: " + str.tostring(math.round(math.abs(attr_gap_pts))) + " pts",
+        color=color.new(color.orange, 10), textcolor=color.white,
+        style=label.style_label_up, size=size.small)
+
+// — GAP REJECTION SHORT ——————————————————————————————————————————————————————
+if in_window and gap_rej_short
+    strategy.entry("GapRej Short", strategy.short)
+    strategy.exit("GRS Exit", "GapRej Short", limit=attr_short_tp, stop=attr_short_sl)
+    label.new(bar_index, high + cndl_range,
+        "▼ GAP REJ SHORT\nGap: " + str.tostring(math.round(attr_gap_pts)) + " pts",
+        color=color.new(color.orange, 10), textcolor=color.white,
+        style=label.style_label_down, size=size.small)
+
 // — REVERSAL LONG ─────────────────────────────────────────────────────────────
-if in_window and strategy.position_size == 0 and rev_long
+if in_window and rev_long
     strategy.entry("Rev Long", strategy.long)
     strategy.exit("RL Exit", "Rev Long", limit=rev_long_tp, stop=rev_long_sl)
     label.new(bar_index, low - cndl_range,
@@ -292,7 +361,7 @@ if in_window and strategy.position_size == 0 and rev_long
         style=label.style_label_up, size=size.small)
 
 // — REVERSAL SHORT ────────────────────────────────────────────────────────────
-if in_window and strategy.position_size == 0 and rev_short
+if in_window and rev_short
     strategy.entry("Rev Short", strategy.short)
     strategy.exit("RS Exit", "Rev Short", limit=rev_short_tp, stop=rev_short_sl)
     label.new(bar_index, high + cndl_range,

@@ -25,9 +25,12 @@
         "use": "Structural stop-loss reference for REV trades. Prior day low − buffer = long SL; prior day high + buffer = short SL."
       },
       "attr_gap": {
-        "definition": "Signed gap in indicator points between the London open price and the close of the bar immediately preceding the London open bar. +ve = gap up (London opened above prior close). −ve = gap down (London opened below prior close).",
-        "formula": "(london_open_price − prior_bar_close) × 10000",
-        "significance": "The gap-fill target is the London open price itself (plus/minus a near-edge buffer). The motivation is that institutional flows frequently close overnight gaps during the London open."
+        "definition": "Signed gap at the Tokyo open (23:45 UTC). Reference price = close of the 23:15 UTC bar (the candle prior to the 23:30 phantom/session-closing candle). +ve = Tokyo opened ABOVE reference (gap up → ATTR SHORT). −ve = Tokyo opened BELOW reference (gap down → ATTR LONG). Fallback: if gap < 10 pts, uses the body of the 23:45 candle.",
+        "formula": "(23:45_open − 23:15_close) × 10000",
+        "gap_fill_target": "The 23:15 reference close price. Price is attracted back to this level during the London session.",
+        "distribution": "Median gap ~120 pts; ~45% of sessions produce a gap ≥ 150 pts. Max observed: ~1070 pts.",
+        "session_timing": "Gap established at 23:45 UTC (Tokyo open). Trade fires during London session (07:00–19:30 UTC) once a confirmation candle appears and gap is still open (price still on the gap side of the target).",
+        "significance": "DXY is a continuous market — there are no real price gaps between adjacent 15m bars. The meaningful gap exists between the pre-Asian-session close (23:15 UTC) and the Tokyo open (23:45 UTC), driven by the transition from the NY session close to Asian opening flows."
       },
       "visual": "Yellow horizontal line at London open price, updated each trading day. Dashed red/green lines at prior day high/low. Orange background when 4H BB is flat (ATTR zone)."
     }
@@ -87,31 +90,35 @@
     },
 
     "attraction": {
-      "description": "London opens with a meaningful gap vs the prior bar's close. Price is expected to fill (be attracted back toward) that gap. Requires a flat/consolidating 4H BB regime and a modest prior session range. Confirmation candle fires in the gap-fill direction.",
+      "description": "At the Tokyo open (23:45 UTC), DXY gaps away from the pre-session reference level (23:15 UTC close). During the subsequent London session, price is expected to be attracted back to fill that gap. Requires a flat/consolidating 4H BB regime and that the gap is still open (price still on the gap side of the target) when a confirmation candle fires.",
       "setup_sequence": [
-        "1. London opens. Compute gap: (london_open_price − prior_bar_close) × 10000.",
-        "2. Gap must be ≥ attr_min_gap pts (default 150) in the gap-fill direction.",
-        "3. Prior session range (pd_range) must be ≤ attr_max_prev_range pts (default 2000). Large prior range indicates strong momentum — skip.",
-        "4. 4H BB regime must equal 0 (flat/consolidating). Trending 4H market suppresses ATTR.",
-        "5. A valid directional confirmation candle fires (engulfing, directional pin bar, or 3-bar reversal) in the gap-fill direction.",
-        "6. Reward to TP must be ≥ attr_min_reward pts (default 100).",
-        "7. attr_long_sl_d must be > 0."
+        "1. At 23:45 UTC (Tokyo open): compute gap = (23:45_open − 23:15_close) × 10000. If gap < 10 pts, fallback = body of the 23:45 candle.",
+        "2. Gap must be ≥ attr_min_gap pts (default 150) in absolute terms.",
+        "3. attr_gap_target (= 23:15 close, or 23:45 open for fallback) is the gap-fill TP level.",
+        "4. During London session: prior session range (pd_range) must be ≤ attr_max_prev_range pts (default 8000).",
+        "5. 4H BB regime must equal 0 (flat/consolidating). Trending 4H market suppresses ATTR.",
+        "6. Price must still be on the gap side of attr_gap_target (gap not already filled during Asian session).",
+        "7. A valid directional confirmation candle fires (engulfing, directional pin bar, or 3-bar reversal) in the gap-fill direction.",
+        "8. Reward to TP must be ≥ attr_min_reward pts (default 100).",
+        "9. attr_long_sl_d must be > 0."
       ],
       "htf_bias_requirement": "4H BB flat (regime = 0) REQUIRED. 1H BB not checked for ATTR.",
       "direction_logic": {
-        "long_setup": "Gap DOWN (attr_gap_pts < −attr_min_gap): London opened below prior close. Bullish confirmation candle → go LONG (fill gap up toward London open).",
-        "short_setup": "Gap UP (attr_gap_pts > +attr_min_gap): London opened above prior close. Bearish confirmation candle → go SHORT (fill gap down toward London open)."
+        "long_setup": "Gap DOWN (attr_gap_pts < −attr_min_gap): Tokyo opened below 23:15 reference. Price still below target. Bullish confirmation → LONG toward gap-fill target.",
+        "short_setup": "Gap UP (attr_gap_pts > +attr_min_gap): Tokyo opened above 23:15 reference. Price still above target. Bearish confirmation → SHORT toward gap-fill target."
       },
       "tp_modes": {
-        "near_edge_tp": "TP = london_open_price ± attr_near_buf (default 50 pts). Recommended. Reduces exposure to full gap-fill failure.",
-        "full_gap_fill_tp": "TP = prior bar's close (attr_gap_target). Higher reward but lower probability."
+        "near_edge_tp": "TP = attr_gap_target ∓ attr_near_buf (default 50 pts). Stops just short of the full gap-fill level. Recommended — reduces exposure to full-fill failure.",
+        "full_gap_fill_tp": "TP = attr_gap_target (the 23:15 reference close). Higher reward but lower probability."
       },
       "stop_loss": "1:1 RR — SL = entry − SL_distance (long) where SL_distance = TP − entry. Mirror for short.",
       "prior_session_range_filter": {
-        "threshold_pts": 2000,
-        "rationale": "Brice's note: 'so much momentum from the previous day' = skip attraction. Large prior session range indicates carry-over directional momentum that may not allow a gap fill."
+        "threshold_pts": 8000,
+        "rationale": "Skip ATTR on extreme momentum days. Median DXY daily range is ~4800 pts; 8000 pts passes ~85% of days. Lower threshold (5000) passes ~55% of days.",
+        "brice_note": "'So much momentum from the previous day' = skip attraction."
       },
-      "one_per_session": "attr_traded flag blocks further attraction signals for the remainder of the day. Resets at next London open.",
+      "gap_still_open_check": "At the time of the ATTR entry bar during London session, price must still be on the correct side of attr_gap_target. If price already crossed the target during the Asian session, the gap is filled and no ATTR trade fires.",
+      "one_per_session": "attr_traded flag blocks further attraction signals for the day. Resets at next Tokyo open (23:45 UTC).",
       "session_window": "Full London session (07:00–19:30 GMT default). ATTR can fire any time during the session as long as conditions hold."
     }
   },
@@ -160,7 +167,7 @@
     },
     "take_profit": {
       "rev": "1:1 RR — TP = entry ± SL_distance.",
-      "attr": "TP = london_open_price ± attr_near_buf (default near-edge mode). Full gap-fill TP available as alternative.",
+      "attr": "TP = attr_gap_target ∓ attr_near_buf (default near-edge mode, stops just short of gap-fill). Full gap-fill TP (= attr_gap_target exactly) available as alternative.",
       "minimum_rr": "1:1"
     },
     "risk_per_trade": "Maximum 1% of account equity per DXY signal. Each correlated pair trade also risks 1% (separate trades).",
@@ -205,9 +212,10 @@
     "REV: Price has not moved ≥ rev_min_move pts (100 pts) from the opening level before returning.",
     "REV: Price is NOT within rev_proximity pts (150 pts) of the opening level.",
     "REV: Prior day H/L not yet available (first day of data).",
-    "ATTR: Gap < attr_min_gap pts (150 pts) at London open.",
+    "ATTR: Gap < attr_min_gap pts (150 pts) at Tokyo open (23:45 UTC).",
+    "ATTR: Gap already filled during Asian session before London open (price crossed attr_gap_target).",
     "ATTR: 4H BB regime ≠ 0 (market is trending — ATTR suppressed).",
-    "ATTR: Prior session range > attr_max_prev_range pts (2000 pts) — too much carry-over momentum.",
+    "ATTR: Prior session range > attr_max_prev_range pts (8000 pts) — extreme momentum day.",
     "ATTR: Reward to TP < attr_min_reward pts (100 pts).",
     "No valid directional entry signal (engulfing, directional pin bar, or 3-bar reversal).",
     "Pin bar direction does not match trade direction (e.g. bearish pin bar cannot be used for a long entry).",
@@ -221,7 +229,7 @@
     "attr_min_reward": 100,
     "attr_near_buf": 50,
     "attr_use_near_tp": true,
-    "attr_max_prev_range": 2000,
+    "attr_max_prev_range": 8000,
     "rev_enabled": true,
     "rev_proximity": 150,
     "rev_min_move": 100,
@@ -348,8 +356,9 @@
     "SUNDAY: Review weekly fundamentals and high-impact news calendar.",
     "DAILY (Weekly/Daily chart): Check 50/100/200 SMA trend direction.",
     "DAILY (4H chart): Check BB regime direction. Is it expanding or flat? Flat = ATTR day possible. Expanding = REV day.",
-    "07:00 GMT (06:30 Monday): London open bar records. Note london_open_price and attr_gap_pts.",
-    "GAP CHECK: Is there a meaningful gap (≥150 pts)? 4H BB flat? Prior session range modest (≤2000 pts)? → ATTR conditions present.",
+    "23:45 UTC: Tokyo open bar records. Gap computed (23:45 open vs 23:15 close). Note attr_gap_pts and attr_gap_target.",
+    "07:00 GMT (06:30 Monday): London open bar records. Note london_open_price.",
+    "GAP CHECK: Was there a Tokyo open gap ≥150 pts? Is price still on the gap side of attr_gap_target? 4H BB flat? Prior session range ≤8000 pts? → ATTR conditions present.",
     "REV CHECK: Has price moved ≥100 pts from opening? Is it returning toward opening level? BB expanding in trade direction on 1H and 4H? → Watch for REV signal.",
     "SIGNAL: Wait for directional confirmation candle AT the level (engulfing, pin bar, 3-bar). Verify pin bar direction matches trade direction.",
     "REV SL: Prior day low − 50 pts (long) or prior day high + 50 pts (short), capped at 3000 pts from entry.",
