@@ -351,7 +351,7 @@ lbl_pad = math.max(cndl_range, nz(london_open_price, close) * 0.0003)
 
 if attr_long
     label.new(bar_index, low - lbl_pad,
-        "ATTRACTION LONG\n" + bull_sig_name +
+        "⚠ CHECK NEWS!\nATTRACTION LONG\n" + bull_sig_name +
         "  |  Gap down: " + str.tostring(math.round(math.abs(attr_gap_pts))) + " pts\n" +
         "TP: " + str.tostring(attr_long_tp, "#.####") +
             (attr_use_near_tp ? " (London open + buf)" : " (prior session close)") + "\n" +
@@ -370,7 +370,7 @@ if attr_long
 
 if attr_short
     label.new(bar_index, high + lbl_pad,
-        "ATTRACTION SHORT\n" + bear_sig_name +
+        "⚠ CHECK NEWS!\nATTRACTION SHORT\n" + bear_sig_name +
         "  |  Gap up: " + str.tostring(math.round(attr_gap_pts)) + " pts\n" +
         "TP: " + str.tostring(attr_short_tp, "#.####") +
             (attr_use_near_tp ? " (London open - buf)" : " (prior session close)") + "\n" +
@@ -389,7 +389,7 @@ if attr_short
 
 if gap_rej_long
     label.new(bar_index, low - lbl_pad,
-        "GAP REJECTION LONG\n" + bull_sig_name +
+        "⚠ CHECK NEWS!\nGAP REJECTION LONG\n" + bull_sig_name +
         "  |  Gap down (filled): " + str.tostring(math.round(math.abs(attr_gap_pts))) + " pts\n" +
         "TP: " + str.tostring(attr_long_tp, "#.####") +
             (attr_use_near_tp ? " (London open + buf)" : " (prior session close)") + "\n" +
@@ -408,7 +408,7 @@ if gap_rej_long
 
 if gap_rej_short
     label.new(bar_index, high + lbl_pad,
-        "GAP REJECTION SHORT\n" + bear_sig_name +
+        "⚠ CHECK NEWS!\nGAP REJECTION SHORT\n" + bear_sig_name +
         "  |  Gap up (filled): " + str.tostring(math.round(attr_gap_pts)) + " pts\n" +
         "TP: " + str.tostring(attr_short_tp, "#.####") +
             (attr_use_near_tp ? " (London open - buf)" : " (prior session close)") + "\n" +
