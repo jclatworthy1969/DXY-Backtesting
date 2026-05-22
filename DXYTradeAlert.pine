@@ -1,5 +1,5 @@
 //@version=6
-indicator("DXY Trade Alert", overlay=true, max_labels_count=500, max_lines_count=500)
+indicator("DXY Trade Alert", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=100)
 
 // ─── INPUTS ──────────────────────────────────────────────────────────────────
 grp_zone = "Signal Parameters"
@@ -57,6 +57,7 @@ show_open_lvl  = input.bool(true, "Show London Opening Level",       group=grp_d
 show_gap_zone  = input.bool(true, "Show DXY Gap Zone (ATTR)",        group=grp_disp, tooltip="Draws the Tokyo open gap zone — the area between the 23:45 UTC open and the 23:15 reference close. Green = gap down (ATTR LONG possible). Red = gap up (ATTR SHORT possible). Fades to grey once gap is filled. This is the 'pristine' zone: trades are only taken while price has not yet crossed back through the zone.")
 show_prev_hl   = input.bool(true, "Show Prior Day High/Low",         group=grp_disp, tooltip="Dashed lines at prior calendar day's high and low. These are used as structural SL reference levels.")
 show_session   = input.bool(true, "Show London Session Background",  group=grp_disp)
+show_lon_zone  = input.bool(true, "Show London Open Zone (LON_ATTR)", group=grp_disp, tooltip="Yellow box spanning the body of the London open candle — the LON_ATTR pristine zone (zone_bot to zone_top). Yellow = zone intact (pristine). Grey = zone violated (a candle has closed through zone_top or zone_bot).")
 show_exit_lvls = input.bool(true, "Show Exit TP/SL Lines",           group=grp_disp)
 
 // ─── SESSION TIMING ──────────────────────────────────────────────────────────
@@ -113,6 +114,7 @@ var float lon_zone_top       = na    // body top  = math.max(open, close) of Lon
 var float lon_zone_bot       = na    // body bot  = math.min(open, close) of London open bar
 var bool  lon_pristine_long  = true  // false once any candle open/close >= zone top
 var bool  lon_pristine_short = true  // false once any candle open/close <= zone bot
+var box   lon_zone_box       = na    // yellow box: body of London open candle, greys out when zone violated
 
 if is_london_open_bar
     london_open_price  := open
@@ -123,6 +125,11 @@ if is_london_open_bar
     lon_zone_bot       := math.min(open, close)
     lon_pristine_long  := true
     lon_pristine_short := true
+    if show_lon_zone
+        box.delete(lon_zone_box)
+        lon_zone_box := box.new(bar_index, lon_zone_top, bar_index + 1, lon_zone_bot,
+            bgcolor=color.new(color.yellow, 75), border_color=color.new(color.yellow, 40),
+            border_width=1, extend=extend.none)
 
 // ─── TOKYO OPEN ATTR GAP (23:45 UTC) ─────────────────────────────────────────
 // Gap = 23:45 open vs 23:15 close (the candle prior to the 23:30 phantom/
@@ -176,6 +183,14 @@ if not in_japan and not is_london_open_bar and not na(lon_zone_top)
         lon_pristine_long  := false   // zone top breached — no longer pristine for LONG
     if open <= lon_zone_bot or close <= lon_zone_bot
         lon_pristine_short := false   // zone bot breached — no longer pristine for SHORT
+
+// LON_ATTR zone box: extend right edge each bar and update colour to reflect pristine state
+// Yellow = at least one direction still pristine; grey = zone fully violated both ways
+if show_lon_zone and not na(lon_zone_box)
+    bool _any_pristine = lon_pristine_long or lon_pristine_short
+    box.set_right(lon_zone_box, bar_index + 1)
+    box.set_bgcolor(lon_zone_box,       _any_pristine ? color.new(color.yellow, 75) : color.new(color.gray, 82))
+    box.set_border_color(lon_zone_box,  _any_pristine ? color.new(color.yellow, 40) : color.new(color.gray, 60))
 
 // ─── HTF BB REGIME (replaces EMA20/50 cross) ─────────────────────────────────
 // Regime values:  +1 = bands EXPANDING, MA sloping UP   → valid for REV LONG
