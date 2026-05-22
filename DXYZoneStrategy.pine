@@ -6,13 +6,15 @@
 // records trades, win rate, duration, and P&L over the selected date range.
 //
 // TRADE LOGIC SUMMARY:
-//   REV  : Price moves away from London session opening level, returns to it,
-//          confirmation candle fires + 1H BB expanding in trade direction.
-//          SL = prior calendar day low/high ± buffer (structural), capped at max.
+//   REV     : Price moves away from London session opening level, returns to it,
+//             confirmation candle fires + 1H BB expanding in trade direction.
+//             SL = prior calendar day low/high ± buffer (structural), capped at max.
 //
-//   ATTR : London opened with a gap vs prior bar's close. 4H BB must be FLAT.
-//          Prior session range must be modest. Confirmation in gap-fill direction.
-//          SL = 1:1 mirror of reward (TP = London open ± near buffer).
+//   GAP REJ : Gap was filled then price pulled back. 4H BB must be FLAT.
+//             Prior session range must be modest. Confirmation in gap-fill direction.
+//             SL = 1:1 mirror of reward (TP = London open ± near buffer).
+//             NOTE: Attraction (pristine gap) trades are intentionally excluded —
+//             managed manually. GAP_REJ only fires after the zone has been touched.
 //
 // POSITION SIZING NOTE:
 //   qty = 1 DXY unit.  Every trade is 1:1 RR, so:
@@ -44,8 +46,8 @@ grp_sig  = "Entry Signals"
 grp_htf  = "HTF Bias (BB Regime)"
 grp_disp = "Display"
 
-// Attraction
-attr_enabled        = input.bool(true,  "Enable Attraction Trades",                          group=grp_zone)
+// Gap Rejection (Attraction trades removed — managed manually)
+attr_enabled        = input.bool(true,  "Enable Gap Rejection Trades",                       group=grp_zone)
 attr_min_gap        = input.int(150,    "Attraction — Min Gap at Tokyo Open (pts)",           group=grp_zone, minval=50,  step=25,  tooltip="Gap between the 23:15 UTC bar close (candle prior to 23:30 phantom) and the 23:45 Tokyo open. Fallback: body of the 23:45 candle. ~45% of sessions produce a gap >= 150 pts.")
 attr_min_reward     = input.int(100,    "Attraction — Min Reward to TP (pts)",                group=grp_zone, minval=50,  step=25,  tooltip="Minimum distance (pts) from entry close to TP at the time of the signal.")
 attr_near_buf       = input.int(50,     "Attraction — Near-Edge TP Buffer (pts)",             group=grp_zone, minval=0,   step=10,  tooltip="TP = London open ± this buffer. Reduces exposure to full gap-fill failure.")
@@ -267,27 +269,6 @@ rev_short = (rev_enabled and not na(london_open_price) and
     not na(pd_high) and
     rev_short_sl_d > 0)
 
-// ─── ATTRACTION CONDITIONS ───────────────────────────────────────────────────
-attr_long  = (attr_enabled and not na(attr_gap_target) and not attr_traded and not attr_gap_touched and
-    in_sess and not in_japan and
-    attr_gap_pts < -attr_min_gap and
-    close < attr_gap_target and
-    pd_range <= attr_max_prev_range and
-    bb_4h == 0 and
-    bull_sig and
-    attr_long_reward >= attr_min_reward and
-    not na(attr_long_sl_d) and attr_long_sl_d > 0)
-
-attr_short = (attr_enabled and not na(attr_gap_target) and not attr_traded and not attr_gap_touched and
-    in_sess and not in_japan and
-    attr_gap_pts > attr_min_gap and
-    close > attr_gap_target and
-    pd_range <= attr_max_prev_range and
-    bb_4h == 0 and
-    bear_sig and
-    attr_short_reward >= attr_min_reward and
-    not na(attr_short_sl_d) and attr_short_sl_d > 0)
-
 // ─── GAP REJECTION CONDITIONS ─────────────────────────────────────────────────
 gap_rej_long  = (attr_enabled and not na(attr_gap_target) and not attr_traded and attr_gap_touched and
     in_sess and not in_japan and
@@ -310,28 +291,10 @@ gap_rej_short = (attr_enabled and not na(attr_gap_target) and not attr_traded an
     not na(attr_short_sl_d) and attr_short_sl_d > 0)
 
 // Block further gap-window signals once any one has traded this session
-if attr_long or attr_short or gap_rej_long or gap_rej_short
+if gap_rej_long or gap_rej_short
     attr_traded := true
 
 // ─── STRATEGY ENTRIES ────────────────────────────────────────────────────────
-
-// — ATTRACTION LONG ——————————————————————————————————————————————————————————
-if in_window and attr_long
-    strategy.entry("Attr Long", strategy.long)
-    strategy.exit("AL Exit", "Attr Long", limit=attr_long_tp, stop=attr_long_sl)
-    label.new(bar_index, low - cndl_range,
-        "▲ ATTR LONG\nGap: " + str.tostring(math.round(math.abs(attr_gap_pts))) + " pts",
-        color=color.new(color.green, 10), textcolor=color.white,
-        style=label.style_label_up, size=size.small)
-
-// — ATTRACTION SHORT ——————————————————————————————————————————————————————————
-if in_window and attr_short
-    strategy.entry("Attr Short", strategy.short)
-    strategy.exit("AS Exit", "Attr Short", limit=attr_short_tp, stop=attr_short_sl)
-    label.new(bar_index, high + cndl_range,
-        "▼ ATTR SHORT\nGap: " + str.tostring(math.round(attr_gap_pts)) + " pts",
-        color=color.new(color.red, 10), textcolor=color.white,
-        style=label.style_label_down, size=size.small)
 
 // — GAP REJECTION LONG ———————————————————————————————————————————————————————
 if in_window and gap_rej_long
