@@ -1,0 +1,251 @@
+{
+  "_meta": {
+    "description": "Active trading rules for the DXY-based pair strategy. ATTR (pristine gap fill) was tested in Python and produced -9.5R over 32 months; it was never implemented in Pine and is excluded from all active rules.",
+    "last_updated": "2026-05-22",
+    "backtest_period": "Aug 2023 – Apr 2026 (32.4 months)",
+    "instruments": ["EURUSD", "USDJPY", "USDCAD", "XAUUSD"],
+    "pair_config": {
+      "EURUSD": { "direction": -1, "tick_factor": 0.01 },
+      "USDJPY": { "direction":  1, "tick_factor": 1.0  },
+      "USDCAD": { "direction":  1, "tick_factor": 0.01 },
+      "XAUUSD": { "direction": -1, "tick_factor": 100.0 }
+    },
+    "exit_approach": "DXY-exit: pair positions are entered at the DXY signal bar close and exited at the pair close on the bar where DXY hits its own TP or SL level. No pair-level TP/SL targets.",
+    "optimised_parameters": {
+      "GAP_REJ_attr_min_gap_pts":  75,
+      "REV_rev_proximity_pts":    250,
+      "REV_rev_min_move_pts":     400,
+      "LON_ATTR_min_distance_pts": 1000
+    },
+    "portfolio_performance_at_original_params": {
+      "note": "Pre-optimisation baseline (gap=150, prox=150, move=100, lon_attr=1000)",
+      "total_net_R": 165.7,
+      "win_rate_pct": 56.4,
+      "profit_factor": 1.68,
+      "dollar_estimate_32mo": 41420,
+      "annualised_return_pct": 15.3,
+      "risk_per_trade_pct": 0.25,
+      "initial_capital": 100000
+    }
+  },
+
+  "rules": {
+
+    "GAP_REJ": {
+      "description": "Gap Rejection. Tokyo session opens with a gap. Price fills the gap (touching the reference close), then pulls back. A confirmation candle in the gap-fill direction is required. The 4H BB must be flat (non-expanding) to avoid trending markets.",
+      "pine_enabled_by": "attr_enabled input (Enable Gap Rejection)",
+      "active": true,
+
+      "entry_conditions": {
+        "gap_direction_long":  "attr_gap_pts < -attr_min_gap (gap DOWN at Tokyo open)",
+        "gap_direction_short": "attr_gap_pts >  attr_min_gap (gap UP at Tokyo open)",
+        "zone_state":          "attr_gap_touched == true (gap target already reached this session)",
+        "price_side_long":     "close < attr_gap_target (price is below the gap fill level)",
+        "price_side_short":    "close > attr_gap_target (price is above the gap fill level)",
+        "confirmation_long":   "bullish confirmation candle (engulfing, bull pin, or 3-bar reversal)",
+        "confirmation_short":  "bearish confirmation candle (engulfing, bear pin, or 3-bar reversal)",
+        "bb_4h_regime":        "bb_4h == 0 (4H Bollinger Bands flat / non-expanding)",
+        "prev_range_filter":   "prior session DXY range <= attr_max_prev_range (default 8000 pts)",
+        "min_reward":          "distance from entry to TP >= attr_min_reward (default 100 pts)",
+        "session_window":      "06:00–19:30 UTC (Tue–Fri), 06:30–19:30 UTC (Monday)",
+        "japan_excluded":      "23:45–06:00 UTC excluded",
+        "one_per_session":     "attr_traded flag resets at each Tokyo open; one signal per session"
+      },
+
+      "tp_sl": {
+        "tp_long":  "attr_gap_target - attr_near_buf (near-edge mode, default on) OR attr_gap_target (full fill mode)",
+        "tp_short": "attr_gap_target + attr_near_buf (near-edge mode) OR attr_gap_target (full fill mode)",
+        "sl_long":  "1:1 mirror of TP distance below entry",
+        "sl_short": "1:1 mirror of TP distance above entry",
+        "near_buf_default_pts": 50,
+        "rr_ratio": "1:1"
+      },
+
+      "parameters": {
+        "attr_min_gap_pts":        75,
+        "attr_min_reward_pts":     100,
+        "attr_near_buf_pts":        50,
+        "attr_use_near_tp":        true,
+        "attr_max_prev_range_pts": 8000
+      },
+
+      "parameter_sweep_notes": {
+        "method": "Single scan with min_gap=0, filtering by gap size per threshold. One signal per session.",
+        "25pts":  "+77.9R pair net R, 50.8% WR, N=185 pair trades (best net R)",
+        "75pts":  "chosen default — balances signal count with meaningful gap size",
+        "150pts": "+51.1R pair net R, 44.9% WR, N=78 pair trades (previous default)",
+        "600pts": "+58.9R pair net R, 71.4% WR, N=14 pair trades (best WR but very small N)"
+      },
+
+      "backtest_performance": {
+        "note": "At optimised 75 pt threshold. Previous default (150 pts) shown in sweep notes.",
+        "dxy_win_rate_pct": 43.5,
+        "dxy_net_R":        -3,
+        "pair_net_R_total_at_150pts": 51.1,
+        "by_pair_at_150pts": {
+          "EURUSD": "+10.2R",
+          "USDJPY": "+16.7R",
+          "USDCAD": "+12.0R",
+          "XAUUSD": "+12.2R"
+        }
+      }
+    },
+
+    "REV": {
+      "description": "Reversal. DXY moves away from the London session opening level and returns to it. A confirmation candle at the opening level triggers the trade. The 1H BB must be expanding in the trade direction (bullish expansion for LONG, bearish for SHORT). SL is structural (prior calendar day extreme).",
+      "pine_enabled_by": "rev_enabled input (Enable Reversal Trades)",
+      "active": true,
+
+      "entry_conditions": {
+        "min_move_away_long":  "max_move_down >= rev_min_move (price moved at least rev_min_move pts below open before returning)",
+        "min_move_away_short": "max_move_up   >= rev_min_move (price moved at least rev_min_move pts above open before returning)",
+        "at_open_level":       "abs(close - london_open_price) * 10000 <= rev_proximity (default 250 pts)",
+        "confirmation_long":   "bullish confirmation candle (engulfing, bull pin, or 3-bar reversal)",
+        "confirmation_short":  "bearish confirmation candle (engulfing, bear pin, or 3-bar reversal)",
+        "bb_1h_regime_long":   "bb_1h == 1 (1H BB expanding, MA slope up)",
+        "bb_1h_regime_short":  "bb_1h == -1 (1H BB expanding, MA slope down)",
+        "prior_day_required":  "pd_low not na (LONG) / pd_high not na (SHORT) for structural SL",
+        "session_window":      "07:00–12:00 UTC (Tue–Fri), 06:30–12:00 UTC (Monday)",
+        "japan_excluded":      "23:45–06:00 UTC excluded"
+      },
+
+      "tp_sl": {
+        "sl_long":  "prior calendar day low - struct_sl_buf, capped at close - max_sl_pts",
+        "sl_short": "prior calendar day high + struct_sl_buf, capped at close + max_sl_pts",
+        "tp_long":  "close + (close - sl_long)  — 1:1 mirror of SL distance above entry",
+        "tp_short": "close - (sl_short - close) — 1:1 mirror of SL distance below entry",
+        "rr_ratio": "1:1",
+        "sl_type":  "structural (prior day high / low)"
+      },
+
+      "parameters": {
+        "rev_proximity_pts":  250,
+        "rev_min_move_pts":   400,
+        "struct_sl_buf_pts":   50,
+        "max_sl_pts":        3000,
+        "rev_end_hour_utc":    12
+      },
+
+      "parameter_sweep_notes": {
+        "method": "Single scan with proximity=9999 and min_move=0, filtering independently. Sweeps held other param at prior default.",
+        "proximity_sweep": {
+          "150pts_current": "+27.5R, 54.9% WR, N=164 pair trades",
+          "250pts_chosen":  "+69.4R, 56.8% WR, N=294 pair trades — captures early approach entries",
+          "500pts_best_net":"+177.4R, 59.1% WR, N=562 — but proximity of 500 pts changes trade character significantly"
+        },
+        "min_move_sweep": {
+          "100pts_current": "+27.5R, 54.9% WR, N=164 pair trades",
+          "400pts_chosen":  "+55.9R, 68.2% WR, N=85 pair trades — fewer but genuinely better reversals",
+          "575pts_best_wr": "+42.6R, 72.1% WR, N=61 pair trades"
+        }
+      },
+
+      "backtest_performance": {
+        "note": "At optimised parameters (proximity=250, min_move=400). Previous defaults shown in sweep notes.",
+        "dxy_win_rate_pct": 50.0,
+        "dxy_net_R":         0,
+        "pair_net_R_at_250prox_100move": 69.4,
+        "pair_net_R_at_150prox_400move": 55.9,
+        "by_pair_at_150prox_100move": {
+          "EURUSD":  "-3.1R",
+          "USDJPY": "-11.6R",
+          "USDCAD": "+17.3R",
+          "XAUUSD": "+24.8R"
+        },
+        "by_pair_at_150prox_400move": {
+          "EURUSD":  "+8.6R",
+          "USDJPY":  "+5.1R",
+          "USDCAD": "+20.8R",
+          "XAUUSD": "+21.4R"
+        }
+      }
+    },
+
+    "LON_ATTR": {
+      "description": "London Attraction. DXY is at least 1000 pts away from the London session opening level in a pristine zone (price has not crossed back through the open candle body) and prints a pin bar pointing toward the opening level. Trade attracts back toward the open candle body zone.",
+      "pine_enabled_by": "lon_attr_enabled input (Enable London Open Attraction)",
+      "active": true,
+
+      "zone_definition": {
+        "london_open_bar": "First candle of London session: 07:00 UTC (Tue–Fri) or 06:30 UTC (Monday)",
+        "zone_top": "math.max(open, close) of the London open bar",
+        "zone_bot": "math.min(open, close) of the London open bar",
+        "pristine_long":  "true while no subsequent candle (excl. Japan session and London open bar itself) has open or close >= zone_top",
+        "pristine_short": "true while no subsequent candle (excl. Japan session and London open bar itself) has open or close <= zone_bot"
+      },
+
+      "entry_conditions": {
+        "distance_long":      "close <= london_open_price - 1000 pts (at least 1000 pts BELOW London open)",
+        "distance_short":     "close >= london_open_price + 1000 pts (at least 1000 pts ABOVE London open)",
+        "pristine_long":      "lon_pristine_long == true (zone top never breached this session)",
+        "pristine_short":     "lon_pristine_short == true (zone bot never breached this session)",
+        "confirmation_long":  "bull pin bar only (lower wick >= body × 2.0, lower wick >= upper wick × 1.5)",
+        "confirmation_short": "bear pin bar only (upper wick >= body × 2.0, upper wick >= lower wick × 1.5)",
+        "tp_validity_long":   "lon_zone_bot > close (zone_bot must be above entry for a valid LONG TP)",
+        "tp_validity_short":  "lon_zone_bot < close (zone_bot must be below entry for a valid SHORT TP)",
+        "session_window":     "strictly after London open until 18:00 UTC (07:00–18:00 Tue–Fri, 06:30–18:00 Monday)",
+        "japan_excluded":     "23:45–06:00 UTC excluded",
+        "one_per_session":    "lon_attr_traded flag resets at each London open; one signal per session",
+        "no_bb_filter":       "No BB regime filter required for LON_ATTR"
+      },
+
+      "tp_sl": {
+        "tp_long":  "lon_zone_bot — near edge of the London open candle body (lowest body edge; closest edge above a below-open entry)",
+        "tp_short": "lon_zone_bot — far edge of the London open candle body (lowest body edge; furthest edge below an above-open entry)",
+        "sl_long":  "close - (lon_zone_bot - close) — 1:1 mirror below entry",
+        "sl_short": "close + (close - lon_zone_bot) — 1:1 mirror above entry",
+        "rr_ratio": "1:1",
+        "sl_type":  "1:1 mirror of TP distance (zone-based, not structural)"
+      },
+
+      "parameters": {
+        "min_distance_long_pts":  1000,
+        "min_distance_short_pts": 1000,
+        "pin_bar_wick_mult":       2.0,
+        "entry_end_hour_utc":       18
+      },
+
+      "backtest_performance": {
+        "dxy_win_rate_pct": 57.1,
+        "dxy_net_R":        12,
+        "pair_net_R_total": 95.1,
+        "by_pair": {
+          "EURUSD":  "+7.6R",
+          "USDJPY": "+37.8R",
+          "USDCAD": "+13.3R",
+          "XAUUSD": "+36.4R"
+        },
+        "threshold_sweep_notes": {
+          "long_1000pts":  "61.9% WR, N=42, Net +10R (best WR with N>=10)",
+          "long_500pts":   "60.8% WR, N=51, Net +11R (best net R)",
+          "short_1000pts": "53.7% WR, N=41, Net +3R (best net R)",
+          "short_1100pts": "53.8% WR, N=39, Net +3R (best WR)"
+        }
+      }
+    }
+  },
+
+  "excluded_rules": {
+    "ATTR": {
+      "description": "Pristine gap fill. Fires when the Tokyo gap has NOT yet been touched (attr_gap_touched == false). Enters in the direction of the gap fill.",
+      "reason_excluded": "Backtested at -9.5R over 32 months (30.0% WR). Never implemented in Pine scripts. GAP_REJ (post-fill pullback) is the implemented and profitable variant.",
+      "pine_status": "Not present in any Pine script. Pine only implements GAP_REJ (attr_gap_touched == true).",
+      "backtest_performance": {
+        "dxy_win_rate_pct": 30.0,
+        "pair_net_R_total": -9.5
+      }
+    }
+  },
+
+  "shared_parameters": {
+    "bb_period": 20,
+    "bb_std_mult": 2.0,
+    "bb_lookback_bars": 20,
+    "pin_wick_mult": 2.0,
+    "japan_session_end_hour_utc": 6,
+    "entry_end_hour_utc": 19,
+    "entry_end_minute_utc": 30,
+    "monday_start_hour_utc": 6,
+    "monday_start_minute_utc": 30
+  }
+}

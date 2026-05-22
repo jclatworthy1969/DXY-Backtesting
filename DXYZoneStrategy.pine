@@ -46,9 +46,14 @@ grp_sig  = "Entry Signals"
 grp_htf  = "HTF Bias (BB Regime)"
 grp_disp = "Display"
 
+// London Open Attraction (LON_ATTR)
+lon_attr_enabled   = input.bool(true,  "Enable London Open Attraction (LON_ATTR)",            group=grp_zone, tooltip="Pin bar attraction trade toward the London session open level. Long: price >= min pts below open, pristine (never crossed above open this session), bull pin bar. Short: price >= min pts above open, pristine (never crossed below open), bear pin bar. TP = London open. SL = structural stop (prior session extreme).")
+lon_attr_min_long  = input.int(1000,   "LON_ATTR — Min Distance Long (pts below open)",       group=grp_zone, minval=50, step=10,  tooltip="Long fires when DXY close is at least this many pts below London open. Backtest optimum: 1000 pts (61.9% WR, +10R net over 32 months).")
+lon_attr_min_short = input.int(1000,   "LON_ATTR — Min Distance Short (pts above open)",      group=grp_zone, minval=50, step=10,  tooltip="Short fires when DXY close is at least this many pts above London open. Backtest optimum: 1000 pts (53.7% WR, +3R net over 32 months).")
+
 // Gap Rejection (Attraction trades removed — managed manually)
 attr_enabled        = input.bool(true,  "Enable Gap Rejection Trades",                       group=grp_zone)
-attr_min_gap        = input.int(150,    "Attraction — Min Gap at Tokyo Open (pts)",           group=grp_zone, minval=50,  step=25,  tooltip="Gap between the 23:15 UTC bar close (candle prior to 23:30 phantom) and the 23:45 Tokyo open. Fallback: body of the 23:45 candle. ~45% of sessions produce a gap >= 150 pts.")
+attr_min_gap        = input.int(75,     "Attraction — Min Gap at Tokyo Open (pts)",           group=grp_zone, minval=10,  step=25,  tooltip="Gap between the 23:15 UTC bar close (candle prior to 23:30 phantom) and the 23:45 Tokyo open. Fallback: body of the 23:45 candle. Backtest optimum: 75 pts (+77.9R pair net R at 25 pts vs +51.1R at 150 pts; 75 pts balances signal count with meaningful gap size).")
 attr_min_reward     = input.int(100,    "Attraction — Min Reward to TP (pts)",                group=grp_zone, minval=50,  step=25,  tooltip="Minimum distance (pts) from entry close to TP at the time of the signal.")
 attr_near_buf       = input.int(50,     "Attraction — Near-Edge TP Buffer (pts)",             group=grp_zone, minval=0,   step=10,  tooltip="TP = London open ± this buffer. Reduces exposure to full gap-fill failure.")
 attr_use_near_tp    = input.bool(true,  "Attraction — Use Near-Edge TP (vs full gap fill)",   group=grp_zone,                      tooltip="On: TP = London open ± near buffer. Off: TP = prior session close (full gap fill).")
@@ -56,8 +61,8 @@ attr_max_prev_range = input.int(8000,   "Attraction — Max Prior Session Range 
 
 // Reversal
 rev_enabled    = input.bool(true, "Enable Reversal Trades",                                   group=grp_zone)
-rev_proximity  = input.int(150,   "Reversal — Max Distance from Opening Level (pts)",         group=grp_zone, minval=25,  step=25,  tooltip="Entry fires when price is within this many pts of the London session opening price.")
-rev_min_move   = input.int(100,   "Reversal — Min Move Away from Opening (pts)",              group=grp_zone, minval=25,  step=25,  tooltip="Price must have moved at least this many pts from the London open before a reversal is valid.")
+rev_proximity  = input.int(250,   "Reversal — Max Distance from Opening Level (pts)",         group=grp_zone, minval=25,  step=25,  tooltip="Entry fires when price is within this many pts of the London session opening price. Backtest optimum: 250 pts (+69.4R pair net R, 56.8% WR). Captures early approach entries while price moves toward the opening level.")
+rev_min_move   = input.int(400,   "Reversal — Min Move Away from Opening (pts)",              group=grp_zone, minval=25,  step=25,  tooltip="Price must have moved at least this many pts from the London open before a reversal is valid. Backtest optimum: 400 pts (68.2% WR, +55.9R pair net R vs 54.9% at 100 pts). Larger prior move = genuine reversal, not noise.")
 struct_sl_buf  = input.int(50,    "Reversal — Structural SL Buffer (pts)",                    group=grp_zone, minval=0,   step=10,  tooltip="Buffer beyond the prior session high/low for the structural stop.")
 max_sl_pts     = input.int(3000,  "Reversal — Max SL Distance (pts)",                         group=grp_zone, minval=500, step=250, tooltip="Hard cap on SL distance. If prior session range is very large, SL is capped here.")
 
@@ -72,6 +77,7 @@ rev_end_h     = input.int(12, "Reversal — Entry End Hour (GMT)",    group=grp_
 rev_end_m     = input.int(0,  "Reversal — Entry End Min (GMT)",     group=grp_sess, minval=0, maxval=59)
 monday_start  = input.int(6,  "Monday Start Hour (GMT)",            group=grp_sess, minval=0, maxval=23, tooltip="Monday session starts at 06:30 GMT. Applies to both REV and ATTR.")
 japan_end_h   = input.int(6,  "Japan Session End Hour (GMT)",       group=grp_sess, minval=1, maxval=8)
+lon_attr_end_h= input.int(18, "LON_ATTR — Entry End Hour (GMT)",    group=grp_sess, minval=7, maxval=22, tooltip="LON_ATTR entries close at this hour UTC. Default 18:00 — after this, London open reversals are less reliable.")
 
 // Candle patterns
 use_engulf    = input.bool(true,  "Engulfing Candle",                group=grp_sig)
@@ -99,9 +105,11 @@ end_min     = entry_end_h   * 60 + entry_end_m
 rev_end_min = rev_end_h     * 60 + rev_end_m
 rev_start_min  = is_mon ? mon_min : entry_start_h * 60 + entry_start_m
 attr_start_min = is_mon ? mon_min : attr_start_h  * 60 + attr_start_m
-in_sess     = curr_min >= attr_start_min and curr_min <= end_min
-in_rev_sess = curr_min >= rev_start_min  and curr_min <= rev_end_min
-in_japan    = (h == 23 and m >= 45) or (h >= 0 and h < japan_end_h)
+in_sess          = curr_min >= attr_start_min and curr_min <= end_min
+in_rev_sess      = curr_min >= rev_start_min  and curr_min <= rev_end_min
+in_japan         = (h == 23 and m >= 45) or (h >= 0 and h < japan_end_h)
+lon_attr_end_min = lon_attr_end_h * 60
+in_lon_attr_sess = curr_min > rev_start_min and curr_min <= lon_attr_end_min   // strictly after London open
 
 // London open bar: 07:00 UTC (Tue–Fri) or 06:30 UTC (Monday)
 is_london_open_bar = not in_japan and
@@ -132,11 +140,22 @@ else
 var float london_open_price = na
 var float max_move_up       = 0.0
 var float max_move_down     = 0.0
+var bool  lon_attr_traded   = false   // one LON_ATTR signal per session
+// LON_ATTR pristine zone — body of the first London session candle
+var float lon_zone_top      = na     // body top  = math.max(open, close) of London open bar
+var float lon_zone_bot      = na     // body bot  = math.min(open, close) of London open bar
+var bool  lon_pristine_long  = true  // false once any candle open/close >= zone top
+var bool  lon_pristine_short = true  // false once any candle open/close <= zone bot
 
 if is_london_open_bar
-    london_open_price := open
-    max_move_up       := 0.0
-    max_move_down     := 0.0
+    london_open_price  := open
+    max_move_up        := 0.0
+    max_move_down      := 0.0
+    lon_attr_traded    := false
+    lon_zone_top       := math.max(open, close)
+    lon_zone_bot       := math.min(open, close)
+    lon_pristine_long  := true
+    lon_pristine_short := true
 
 // ─── TOKYO OPEN ATTR GAP (23:45 UTC) ─────────────────────────────────────────
 // Gap = 23:45 open vs 23:15 close (candle prior to 23:30 phantom).
@@ -172,6 +191,13 @@ if not na(london_open_price) and not in_japan
         max_move_up   := math.max(max_move_up,    above)
     else if above < 0
         max_move_down := math.max(max_move_down, -above)
+
+// LON_ATTR pristine zone violation tracking
+if not in_japan and not is_london_open_bar and not na(lon_zone_top)
+    if open >= lon_zone_top or close >= lon_zone_top
+        lon_pristine_long  := false
+    if open <= lon_zone_bot or close <= lon_zone_bot
+        lon_pristine_short := false
 
 // ─── HTF BB REGIME ────────────────────────────────────────────────────────────
 // +1 = expanding & MA slope up   → REV LONG
@@ -224,6 +250,15 @@ bool _both     = _bull_raw and _bear_raw
 bull_sig    = _bull_raw and not (_both and close <= open)
 bear_sig    = _bear_raw and not (_both and close >= open)
 
+// ─── LON_ATTR PIN BAR (always active — independent of use_pin input) ──────────
+// LON_ATTR uses pin bars only. Computed separately so the use_pin toggle does
+// not affect LON_ATTR entries.
+la_bull_pin_r = lower_wick >= body_sz * pin_wick_mult and lower_wick >= upper_wick * 1.5 and cndl_range > 0
+la_bear_pin_r = upper_wick >= body_sz * pin_wick_mult and upper_wick >= lower_wick * 1.5 and cndl_range > 0
+bool _la_pb   = la_bull_pin_r and la_bear_pin_r
+la_bull_pin   = la_bull_pin_r and not (_la_pb and close <= open)   // body tiebreaker
+la_bear_pin   = la_bear_pin_r and not (_la_pb and close >= open)
+
 // ─── DISTANCE FROM OPENING LEVEL ─────────────────────────────────────────────
 float dist_from_open = not na(london_open_price) ? (close - london_open_price) * 10000 : na
 bool  at_open_level  = not na(dist_from_open) and math.abs(dist_from_open) <= rev_proximity
@@ -249,6 +284,21 @@ float attr_long_sl_d    = not na(attr_long_tp)  ? attr_long_tp  - close : na
 float attr_short_sl_d   = not na(attr_short_tp) ? close - attr_short_tp : na
 float attr_long_sl      = not na(attr_long_sl_d)  ? close - attr_long_sl_d  : na
 float attr_short_sl     = not na(attr_short_sl_d) ? close + attr_short_sl_d : na
+
+// ─── LON_ATTR TP / SL (1:1 R:R) ─────────────────────────────────────────────
+// TP  = lon_zone_bot (near edge of the London session open candle body)
+//         LONG  : zone_bot is the nearest body edge above a below-open entry
+//         SHORT : zone_bot is the far body edge below an above-open entry
+// SL  = 1:1 mirror of TP distance on the opposite side of entry
+//   Long : entry BELOW zone_bot → sl_d = zone_bot − close (> 0 required) → SL = close − sl_d
+//   Short: entry ABOVE zone_bot → sl_d = close − zone_bot (> 0 required) → SL = close + sl_d
+// Condition guard (sl_d > 0) ensures TP is in the correct direction before firing.
+float lon_attr_long_tp    = lon_zone_bot
+float lon_attr_long_sl_d  = lon_zone_bot - close               // TP distance (must be > 0)
+float lon_attr_long_sl    = close - lon_attr_long_sl_d         // 1:1 mirror below entry
+float lon_attr_short_tp   = lon_zone_bot
+float lon_attr_short_sl_d = close - lon_zone_bot               // TP distance (must be > 0)
+float lon_attr_short_sl   = close + lon_attr_short_sl_d        // 1:1 mirror above entry
 
 // ─── REVERSAL CONDITIONS ─────────────────────────────────────────────────────
 rev_long  = (rev_enabled and not na(london_open_price) and
@@ -294,6 +344,33 @@ gap_rej_short = (attr_enabled and not na(attr_gap_target) and not attr_traded an
 if gap_rej_long or gap_rej_short
     attr_traded := true
 
+// ─── LON_ATTR CONDITIONS ─────────────────────────────────────────────────────
+// Pristine is detected via max_move_up / max_move_down:
+//   max_move_up   == 0  → price has never been above London open this session
+//   max_move_down == 0  → price has never been below London open this session
+// One signal per session (lon_attr_traded flag). No BB regime filter required.
+
+bool lon_attr_long = (lon_attr_enabled and
+    not lon_attr_traded and
+    not na(london_open_price) and
+    in_lon_attr_sess and not in_japan and
+    dist_from_open <= -lon_attr_min_long and   // price >= min_long pts BELOW London open
+    lon_pristine_long and                       // pristine: no candle open/close has touched zone top
+    lon_attr_long_sl_d > 0 and                 // zone_bot must be above entry (valid TP)
+    la_bull_pin)                                // bull pin bar only
+
+bool lon_attr_short = (lon_attr_enabled and
+    not lon_attr_traded and
+    not na(london_open_price) and
+    in_lon_attr_sess and not in_japan and
+    dist_from_open >= lon_attr_min_short and   // price >= min_short pts ABOVE London open
+    lon_pristine_short and                      // pristine: no candle open/close has touched zone bot
+    lon_attr_short_sl_d > 0 and                // zone_bot must be below entry (valid TP)
+    la_bear_pin)                                // bear pin bar only
+
+if lon_attr_long or lon_attr_short
+    lon_attr_traded := true
+
 // ─── STRATEGY ENTRIES ────────────────────────────────────────────────────────
 
 // — GAP REJECTION LONG ———————————————————————————————————————————————————————
@@ -330,6 +407,24 @@ if in_window and rev_short
     label.new(bar_index, high + cndl_range,
         "▼ REV SHORT\nSL: " + str.tostring(math.round(rev_short_sl_d * 10000)) + " pts",
         color=color.new(color.purple, 10), textcolor=color.white,
+        style=label.style_label_down, size=size.small)
+
+// — LON_ATTR LONG ─────────────────────────────────────────────────────────────
+if in_window and lon_attr_long
+    strategy.entry("LonAttr Long", strategy.long)
+    strategy.exit("LAL Exit", "LonAttr Long", limit=lon_attr_long_tp, stop=lon_attr_long_sl)
+    label.new(bar_index, low - cndl_range,
+        "▲ LON_ATTR LONG\n" + str.tostring(math.round(-dist_from_open)) + " pts below open\nTP: zone near edge  |  SL: " + str.tostring(math.round(lon_attr_long_sl_d * 10000)) + " pts (1:1)",
+        color=color.new(color.navy, 10), textcolor=color.white,
+        style=label.style_label_up, size=size.small)
+
+// — LON_ATTR SHORT ────────────────────────────────────────────────────────────
+if in_window and lon_attr_short
+    strategy.entry("LonAttr Short", strategy.short)
+    strategy.exit("LAS Exit", "LonAttr Short", limit=lon_attr_short_tp, stop=lon_attr_short_sl)
+    label.new(bar_index, high + cndl_range,
+        "▼ LON_ATTR SHORT\n" + str.tostring(math.round(dist_from_open)) + " pts above open\nTP: zone far edge  |  SL: " + str.tostring(math.round(lon_attr_short_sl_d * 10000)) + " pts (1:1)",
+        color=color.new(color.maroon, 10), textcolor=color.white,
         style=label.style_label_down, size=size.small)
 
 // ─── VISUALS ─────────────────────────────────────────────────────────────────
