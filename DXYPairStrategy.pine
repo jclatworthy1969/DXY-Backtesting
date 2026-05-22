@@ -183,6 +183,15 @@ if not na(dxy_attr_target)
     else if dxy_attr_gap_pts > 0 and dxy_c <= dxy_attr_target
         attr_gap_touched := true
 
+// ─── DXY EXIT TRACKING ────────────────────────────────────────────────────────
+// Positions are closed when DXY crosses its TP or SL level (not pair price levels).
+// This replicates the Python backtest DXY-exit approach and produces correct R outcomes.
+var float dxy_tp_lvl     = na     // DXY price level: close pair at profit when crossed
+var float dxy_sl_lvl     = na     // DXY price level: close pair at loss when crossed
+var bool  dxy_trade_long = true   // true = DXY direction is LONG for this trade
+var bool  dxy_exit_track = false  // true = position is open and tracking DXY exit
+var int   dxy_entry_bar  = -1     // bar_index of last entry (prevents same-bar exit check)
+
 if not na(dxy_london_open) and not in_japan
     float above = (dxy_c - dxy_london_open) * 10000
     if above > 0
@@ -326,104 +335,139 @@ bool gap_rej_short_cond = (attr_enabled and not na(dxy_attr_target) and not attr
 if attr_long_cond or attr_short_cond or gap_rej_long_cond or gap_rej_short_cond
     attr_traded := true
 
-// ─── HELPER: CONVERT DXY DISTANCE TO PAIR PRICE ──────────────────────────────
-// dxy_d = SL/TP distance in DXY decimal price units
-// pair_dist = dxy_d * 10000 * tick_factor  → pair price units
-// trade_dir = dxy_direction × pair_dir  (+1 = go long on pair, -1 = go short on pair)
-
 float cr_px = high - low  // pair candle range for label offset
 
-// ─── ENTRIES ─────────────────────────────────────────────────────────────────
+// ─── ENTRIES — DXY-EXIT APPROACH ─────────────────────────────────────────────
+// Positions are entered on the pair chart but CLOSED when DXY crosses its own
+// TP or SL level (see DXY EXIT block below). No pair-price strategy.exit calls.
+// tick_factor input retained for display purposes but no longer used for exit calc.
 
 // — ATTRACTION LONG (DXY gap down → fill up) ————————————————————————————————
 if in_window and attr_long_cond
-    float pair_dist = dxy_al_sl_d * 10000 * tick_factor
-    int   tdir = pair_dir          // DXY long → pair follows pair_dir
+    dxy_tp_lvl     := dxy_al_tp                // DXY TP = near-gap target (above entry)
+    dxy_sl_lvl     := dxy_c - dxy_al_sl_d      // DXY SL = 1:1 mirror below entry
+    dxy_trade_long := true
+    dxy_exit_track := true
+    dxy_entry_bar  := bar_index
+    int tdir = pair_dir
     if tdir == 1
         strategy.entry("Attr Long", strategy.long)
-        strategy.exit("AL X", "Attr Long", limit=close + pair_dist, stop=close - pair_dist)
         label.new(bar_index, low - cr_px, "▲ ATTR↑\n" + str.tostring(math.round(math.abs(dxy_attr_gap_pts))) + " pt gap",
             color=color.new(color.green, 10), textcolor=color.white, style=label.style_label_up, size=size.small)
     else
         strategy.entry("Attr Long", strategy.short)
-        strategy.exit("AL X", "Attr Long", limit=close - pair_dist, stop=close + pair_dist)
         label.new(bar_index, high + cr_px, "▼ ATTR↑\n" + str.tostring(math.round(math.abs(dxy_attr_gap_pts))) + " pt gap",
             color=color.new(color.green, 10), textcolor=color.white, style=label.style_label_down, size=size.small)
 
 // — ATTRACTION SHORT (DXY gap up → fill down) ————————————————————————————————
 if in_window and attr_short_cond
-    float pair_dist = dxy_as_sl_d * 10000 * tick_factor
-    int   tdir = -1 * pair_dir     // DXY short inverts direction
+    dxy_tp_lvl     := dxy_as_tp                // DXY TP = near-gap target (below entry)
+    dxy_sl_lvl     := dxy_c + dxy_as_sl_d      // DXY SL = 1:1 mirror above entry
+    dxy_trade_long := false
+    dxy_exit_track := true
+    dxy_entry_bar  := bar_index
+    int tdir = -1 * pair_dir
     if tdir == 1
         strategy.entry("Attr Short", strategy.long)
-        strategy.exit("AS X", "Attr Short", limit=close + pair_dist, stop=close - pair_dist)
         label.new(bar_index, low - cr_px, "▲ ATTR↓\n" + str.tostring(math.round(dxy_attr_gap_pts)) + " pt gap",
             color=color.new(color.red, 10), textcolor=color.white, style=label.style_label_up, size=size.small)
     else
         strategy.entry("Attr Short", strategy.short)
-        strategy.exit("AS X", "Attr Short", limit=close - pair_dist, stop=close + pair_dist)
         label.new(bar_index, high + cr_px, "▼ ATTR↓\n" + str.tostring(math.round(dxy_attr_gap_pts)) + " pt gap",
             color=color.new(color.red, 10), textcolor=color.white, style=label.style_label_down, size=size.small)
 
 // — GAP REJECTION LONG (DXY gap filled, price pulled back, bull signal) ────────
 if in_window and gap_rej_long_cond
-    float pair_dist = dxy_al_sl_d * 10000 * tick_factor
-    int   tdir = pair_dir
+    dxy_tp_lvl     := dxy_al_tp
+    dxy_sl_lvl     := dxy_c - dxy_al_sl_d
+    dxy_trade_long := true
+    dxy_exit_track := true
+    dxy_entry_bar  := bar_index
+    int tdir = pair_dir
     if tdir == 1
         strategy.entry("GapRej Long", strategy.long)
-        strategy.exit("GRL X", "GapRej Long", limit=close + pair_dist, stop=close - pair_dist)
         label.new(bar_index, low - cr_px, "▲ GAP REJ↑\n" + str.tostring(math.round(math.abs(dxy_attr_gap_pts))) + " pt gap",
             color=color.new(color.orange, 10), textcolor=color.white, style=label.style_label_up, size=size.small)
     else
         strategy.entry("GapRej Long", strategy.short)
-        strategy.exit("GRL X", "GapRej Long", limit=close - pair_dist, stop=close + pair_dist)
         label.new(bar_index, high + cr_px, "▼ GAP REJ↑\n" + str.tostring(math.round(math.abs(dxy_attr_gap_pts))) + " pt gap",
             color=color.new(color.orange, 10), textcolor=color.white, style=label.style_label_down, size=size.small)
 
 // — GAP REJECTION SHORT (DXY gap filled, price pulled back, bear signal) ───────
 if in_window and gap_rej_short_cond
-    float pair_dist = dxy_as_sl_d * 10000 * tick_factor
-    int   tdir = -1 * pair_dir
+    dxy_tp_lvl     := dxy_as_tp
+    dxy_sl_lvl     := dxy_c + dxy_as_sl_d
+    dxy_trade_long := false
+    dxy_exit_track := true
+    dxy_entry_bar  := bar_index
+    int tdir = -1 * pair_dir
     if tdir == 1
         strategy.entry("GapRej Short", strategy.long)
-        strategy.exit("GRS X", "GapRej Short", limit=close + pair_dist, stop=close - pair_dist)
         label.new(bar_index, low - cr_px, "▲ GAP REJ↓\n" + str.tostring(math.round(dxy_attr_gap_pts)) + " pt gap",
             color=color.new(color.orange, 10), textcolor=color.white, style=label.style_label_up, size=size.small)
     else
         strategy.entry("GapRej Short", strategy.short)
-        strategy.exit("GRS X", "GapRej Short", limit=close - pair_dist, stop=close + pair_dist)
         label.new(bar_index, high + cr_px, "▼ GAP REJ↓\n" + str.tostring(math.round(dxy_attr_gap_pts)) + " pt gap",
             color=color.new(color.orange, 10), textcolor=color.white, style=label.style_label_down, size=size.small)
 
 // — REVERSAL LONG (DXY bouncing up at opening level) ─────────────────────────
 if in_window and rev_long_cond
-    float pair_dist = dxy_rl_sl_d * 10000 * tick_factor
-    int   tdir = pair_dir
+    dxy_tp_lvl     := dxy_c + dxy_rl_sl_d      // DXY TP = entry + SL distance (1:1 above)
+    dxy_sl_lvl     := dxy_rl_sl                 // DXY SL = structural (prior day low − buf)
+    dxy_trade_long := true
+    dxy_exit_track := true
+    dxy_entry_bar  := bar_index
+    int tdir = pair_dir
     if tdir == 1
         strategy.entry("Rev Long", strategy.long)
-        strategy.exit("RL X", "Rev Long", limit=close + pair_dist, stop=close - pair_dist)
         label.new(bar_index, low - cr_px, "▲ REV↑\nSL " + str.tostring(math.round(dxy_rl_sl_d * 10000)) + " pts",
             color=color.new(color.teal, 10), textcolor=color.white, style=label.style_label_up, size=size.small)
     else
         strategy.entry("Rev Long", strategy.short)
-        strategy.exit("RL X", "Rev Long", limit=close - pair_dist, stop=close + pair_dist)
         label.new(bar_index, high + cr_px, "▼ REV↑\nSL " + str.tostring(math.round(dxy_rl_sl_d * 10000)) + " pts",
             color=color.new(color.teal, 10), textcolor=color.white, style=label.style_label_down, size=size.small)
 
 // — REVERSAL SHORT (DXY rejecting down at opening level) ──────────────────────
 if in_window and rev_short_cond
-    float pair_dist = dxy_rs_sl_d * 10000 * tick_factor
-    int   tdir = -1 * pair_dir
+    dxy_tp_lvl     := dxy_c - dxy_rs_sl_d      // DXY TP = entry − SL distance (1:1 below)
+    dxy_sl_lvl     := dxy_rs_sl                 // DXY SL = structural (prior day high + buf)
+    dxy_trade_long := false
+    dxy_exit_track := true
+    dxy_entry_bar  := bar_index
+    int tdir = -1 * pair_dir
     if tdir == 1
         strategy.entry("Rev Short", strategy.long)
-        strategy.exit("RS X", "Rev Short", limit=close + pair_dist, stop=close - pair_dist)
         label.new(bar_index, low - cr_px, "▲ REV↓\nSL " + str.tostring(math.round(dxy_rs_sl_d * 10000)) + " pts",
             color=color.new(color.purple, 10), textcolor=color.white, style=label.style_label_up, size=size.small)
     else
         strategy.entry("Rev Short", strategy.short)
-        strategy.exit("RS X", "Rev Short", limit=close - pair_dist, stop=close + pair_dist)
         label.new(bar_index, high + cr_px, "▼ REV↓\nSL " + str.tostring(math.round(dxy_rs_sl_d * 10000)) + " pts",
             color=color.new(color.purple, 10), textcolor=color.white, style=label.style_label_down, size=size.small)
+
+// ─── DXY EXIT ────────────────────────────────────────────────────────────────
+// Close all pair positions when DXY crosses its TP or SL level.
+// bar_index > dxy_entry_bar prevents same-bar entry + exit conflict.
+if dxy_exit_track and not na(dxy_tp_lvl) and not na(dxy_sl_lvl) and bar_index > dxy_entry_bar
+    bool dxy_tp_cross = dxy_trade_long ? dxy_h >= dxy_tp_lvl : dxy_l <= dxy_tp_lvl
+    bool dxy_sl_cross = dxy_trade_long ? dxy_l <= dxy_sl_lvl : dxy_h >= dxy_sl_lvl
+    if dxy_tp_cross
+        strategy.close_all(comment="DXY TP")
+        dxy_exit_track := false
+        dxy_tp_lvl     := na
+        dxy_sl_lvl     := na
+        label.new(bar_index, dxy_trade_long ? low - cr_px : high + cr_px,
+            "✔ DXY TP",
+            color=color.new(color.lime, 10), textcolor=color.black,
+            style=dxy_trade_long ? label.style_label_up : label.style_label_down, size=size.small)
+    else if dxy_sl_cross
+        strategy.close_all(comment="DXY SL")
+        dxy_exit_track := false
+        dxy_tp_lvl     := na
+        dxy_sl_lvl     := na
+        label.new(bar_index, dxy_trade_long ? low - cr_px : high + cr_px,
+            "✘ DXY SL",
+            color=color.new(color.red, 10), textcolor=color.white,
+            style=dxy_trade_long ? label.style_label_up : label.style_label_down, size=size.small)
 
 // ─── VISUALS ─────────────────────────────────────────────────────────────────
 bgcolor(show_session and in_sess ? color.new(color.blue, 93) : na, title="London Session")
