@@ -9,9 +9,8 @@ grp_htf  = "HTF Bias (BB Regime)"
 grp_disp = "Display"
 
 // London Open Attraction (LON_ATTR)
-lon_attr_enabled   = input.bool(true,  "Enable London Open Attraction (LON_ATTR)",            group=grp_zone, tooltip="Pin bar attraction trade toward the London session open level. Long: price >= min pts below open, pristine (never crossed above open this session), bull pin bar. Short: price >= min pts above open, pristine (never crossed below open), bear pin bar. TP = London open. SL = structural stop (prior session extreme).")
-lon_attr_min_long  = input.int(1000,   "LON_ATTR — Min Distance Long (pts below open)",       group=grp_zone, minval=50, step=10,  tooltip="Long fires when DXY close is at least this many pts below London open. Backtest optimum: 1000 pts (61.9% WR, +10R net over 32 months).")
-lon_attr_min_short = input.int(1000,   "LON_ATTR — Min Distance Short (pts above open)",      group=grp_zone, minval=50, step=10,  tooltip="Short fires when DXY close is at least this many pts above London open. Backtest optimum: 1000 pts (53.7% WR, +3R net over 32 months).")
+lon_attr_enabled   = input.bool(true,  "Enable London Open Attraction (LON_ATTR — LONG only)", group=grp_zone, tooltip="Pin bar attraction trade toward the London session open level. LONG only: price >= min pts below open, zone pristine (never crossed above open this session), bull pin bar, 4H BB flat. SHORT direction dropped — HTF analysis shows SHORT trades are negative across all regimes.")
+lon_attr_min_long  = input.int(1000,   "LON_ATTR — Min Distance Long (pts below open)",       group=grp_zone, minval=50, step=10,  tooltip="Long fires when DXY close is at least this many pts below London open. 4H BB must be flat. HTF analysis: 4H flat gives +25.1R vs -22.2R counter-trend over 32 months. Best WR threshold: 1725 pts (62.4% WR, +47.9R pair net R).")
 
 // Gap Rejection (Attraction trades removed — managed manually)
 attr_enabled        = input.bool(true,  "Enable Gap Rejection Alerts",                       group=grp_zone)
@@ -112,9 +111,8 @@ var bool  lon_attr_traded    = false  // one LON_ATTR signal per session
 // LON_ATTR pristine zone — body of the first London session candle
 var float lon_zone_top       = na    // body top  = math.max(open, close) of London open bar
 var float lon_zone_bot       = na    // body bot  = math.min(open, close) of London open bar
-var bool  lon_pristine_long  = true  // false once any candle open/close >= zone top
-var bool  lon_pristine_short = true  // false once any candle open/close <= zone bot
-var box   lon_zone_box       = na    // yellow box: body of London open candle, greys out when zone violated
+var bool  lon_pristine_long  = true  // false once any candle open/close >= zone top (kills LONG setup)
+var box   lon_zone_box       = na    // yellow box: body of London open candle, greys out when LONG zone violated
 
 if is_london_open_bar
     london_open_price  := open
@@ -124,7 +122,6 @@ if is_london_open_bar
     lon_zone_top       := math.max(open, close)
     lon_zone_bot       := math.min(open, close)
     lon_pristine_long  := true
-    lon_pristine_short := true
     if show_lon_zone
         box.delete(lon_zone_box)
         lon_zone_box := box.new(bar_index, lon_zone_top, bar_index + 1, lon_zone_bot,
@@ -180,17 +177,14 @@ if not na(london_open_price) and not in_japan
 // Japan session candles and the London open bar itself are excluded.
 if not in_japan and not is_london_open_bar and not na(lon_zone_top)
     if open >= lon_zone_top or close >= lon_zone_top
-        lon_pristine_long  := false   // zone top breached — no longer pristine for LONG
-    if open <= lon_zone_bot or close <= lon_zone_bot
-        lon_pristine_short := false   // zone bot breached — no longer pristine for SHORT
+        lon_pristine_long  := false   // zone top breached — LONG setup no longer valid
 
 // LON_ATTR zone box: extend right edge each bar and update colour to reflect pristine state
 // Yellow = at least one direction still pristine; grey = zone fully violated both ways
 if show_lon_zone and not na(lon_zone_box)
-    bool _any_pristine = lon_pristine_long or lon_pristine_short
     box.set_right(lon_zone_box, bar_index + 1)
-    box.set_bgcolor(lon_zone_box,       _any_pristine ? color.new(color.yellow, 75) : color.new(color.gray, 82))
-    box.set_border_color(lon_zone_box,  _any_pristine ? color.new(color.yellow, 40) : color.new(color.gray, 60))
+    box.set_bgcolor(lon_zone_box,       lon_pristine_long ? color.new(color.yellow, 75) : color.new(color.gray, 82))
+    box.set_border_color(lon_zone_box,  lon_pristine_long ? color.new(color.yellow, 40) : color.new(color.gray, 60))
 
 // ─── HTF BB REGIME (replaces EMA20/50 cross) ─────────────────────────────────
 // Regime values:  +1 = bands EXPANDING, MA sloping UP   → valid for REV LONG
@@ -297,9 +291,6 @@ float attr_short_sl     = not na(attr_short_sl_d) ? close + attr_short_sl_d : na
 float lon_attr_long_tp    = lon_zone_bot
 float lon_attr_long_sl_d  = lon_zone_bot - close               // TP distance (must be > 0)
 float lon_attr_long_sl    = close - lon_attr_long_sl_d         // 1:1 mirror below entry
-float lon_attr_short_tp   = lon_zone_bot
-float lon_attr_short_sl_d = close - lon_zone_bot               // TP distance (must be > 0)
-float lon_attr_short_sl   = close + lon_attr_short_sl_d        // 1:1 mirror above entry
 
 // ─── REVERSAL CONDITIONS ─────────────────────────────────────────────────────
 // Price moved away from London open then RETURNED to it.
@@ -351,10 +342,10 @@ if gap_rej_long or gap_rej_short
     attr_traded := true
 
 // ─── LON_ATTR CONDITIONS ─────────────────────────────────────────────────────
-// Pristine is detected via max_move_up / max_move_down:
-//   max_move_up   == 0  → price has never been above London open this session
-//   max_move_down == 0  → price has never been below London open this session
-// One signal per session (lon_attr_traded flag). No BB regime filter required.
+// LONG only. SHORT direction dropped — HTF analysis shows SHORT negative across all regimes.
+// Pristine: no candle open/close has touched zone_top since London open.
+// 4H BB must be flat — counter-trend 4H environments responsible for -22.2R drag.
+// One signal per session (lon_attr_traded flag).
 
 bool lon_attr_long = (lon_attr_enabled and
     not lon_attr_traded and
@@ -362,19 +353,11 @@ bool lon_attr_long = (lon_attr_enabled and
     in_lon_attr_sess and not in_japan and
     dist_from_open <= -lon_attr_min_long and   // price >= min_long pts BELOW London open
     lon_pristine_long and                       // pristine: no candle open/close has touched zone top
+    bb_4h == 0 and                             // 4H BB flat — eliminates counter-trend drag
     lon_attr_long_sl_d > 0 and                 // zone_bot must be above entry (valid TP)
     la_bull_pin)                                // bull pin bar only
 
-bool lon_attr_short = (lon_attr_enabled and
-    not lon_attr_traded and
-    not na(london_open_price) and
-    in_lon_attr_sess and not in_japan and
-    dist_from_open >= lon_attr_min_short and   // price >= min_short pts ABOVE London open
-    lon_pristine_short and                      // pristine: no candle open/close has touched zone bot
-    lon_attr_short_sl_d > 0 and                // zone_bot must be below entry (valid TP)
-    la_bear_pin)                                // bear pin bar only
-
-if lon_attr_long or lon_attr_short
+if lon_attr_long
     lon_attr_traded := true
 
 // ─── PLOTS ───────────────────────────────────────────────────────────────────
@@ -504,7 +487,7 @@ if lon_attr_long
         "TP: " + str.tostring(lon_attr_long_tp, "#.####") + " (zone near edge)\n" +
         "SL: " + str.tostring(lon_attr_long_sl, "#.####") +
         "  (" + str.tostring(math.round(lon_attr_long_sl_d * 10000)) + " pts, 1:1)\n" +
-        "Go LONG: USDCAD, USDJPY  |  Go SHORT: EURUSD, XAUUSD",
+        "4H BB: flat  |  Go LONG: USDCAD, USDJPY  |  Go SHORT: EURUSD, XAUUSD",
         color=color.new(color.navy, 5), textcolor=color.white,
         style=label.style_label_up, size=size.normal)
     line.delete(tp_line)
@@ -516,33 +499,13 @@ if lon_attr_long
                         extend=extend.right, color=color.new(color.red, 0),
                         style=line.style_dashed, width=2)
 
-if lon_attr_short
-    label.new(bar_index, high + lbl_pad,
-        "LON_ATTR SHORT (Pin Bar)\n" +
-        str.tostring(math.round(dist_from_open)) + " pts above London open — zone intact\n" +
-        "TP: " + str.tostring(lon_attr_short_tp, "#.####") + " (zone far edge)\n" +
-        "SL: " + str.tostring(lon_attr_short_sl, "#.####") +
-        "  (" + str.tostring(math.round(lon_attr_short_sl_d * 10000)) + " pts, 1:1)\n" +
-        "Go SHORT: USDCAD, USDJPY  |  Go LONG: EURUSD, XAUUSD",
-        color=color.new(color.maroon, 5), textcolor=color.white,
-        style=label.style_label_down, size=size.normal)
-    line.delete(tp_line)
-    line.delete(sl_line)
-    tp_line := line.new(bar_index, lon_attr_short_tp, bar_index + 1, lon_attr_short_tp,
-                        extend=extend.right, color=color.new(color.lime, 0),
-                        style=line.style_dashed, width=2)
-    sl_line := line.new(bar_index, lon_attr_short_sl, bar_index + 1, lon_attr_short_sl,
-                        extend=extend.right, color=color.new(color.red, 0),
-                        style=line.style_dashed, width=2)
-
 // ─── ENTRY ALERTS ────────────────────────────────────────────────────────────
 alertcondition(gap_rej_long,   title="DXY Gap Rejection LONG",   message="DXY GAP REJECTION LONG\n⚠ CHECK NEWS!\nGap filled then price pulled back. 4H BB flat. Bullish confirmation candle.\nTP: London open + buffer | SL: 1:1 mirror\nGo LONG: USDCAD, USDJPY | Go SHORT: EURUSD, XAUUSD\nLondon open: {{plot_0}} | Price: {{close}} | {{time}}")
 alertcondition(gap_rej_short,  title="DXY Gap Rejection SHORT",  message="DXY GAP REJECTION SHORT\n⚠ CHECK NEWS!\nGap filled then price pulled back. 4H BB flat. Bearish confirmation candle.\nTP: London open - buffer | SL: 1:1 mirror\nGo SHORT: USDCAD, USDJPY | Go LONG: EURUSD, XAUUSD\nLondon open: {{plot_0}} | Price: {{close}} | {{time}}")
 alertcondition(rev_long,       title="DXY Reversal LONG",        message="DXY REVERSAL LONG\nPrice returned to London open level. 1H BB expanding bullish.\nStructural SL at prior day low.\nGo LONG: USDCAD, USDJPY | Go SHORT: EURUSD, XAUUSD\nOpening level: {{plot_0}} | Price: {{close}} | {{time}}")
 alertcondition(rev_short,      title="DXY Reversal SHORT",       message="DXY REVERSAL SHORT\nPrice returned to London open level. 1H BB expanding bearish.\nStructural SL at prior day high.\nGo SHORT: USDCAD, USDJPY | Go LONG: EURUSD, XAUUSD\nOpening level: {{plot_0}} | Price: {{close}} | {{time}}")
-alertcondition(lon_attr_long,  title="DXY LON_ATTR LONG",           message="DXY LON_ATTR LONG (Pin Bar)\nPrice is pristine — zone top never touched this session.\nBull pin bar >= 1000 pts below London open. TP = zone near edge (zone_bot). SL = 1:1 mirror.\nGo LONG: USDCAD, USDJPY | Go SHORT: EURUSD, XAUUSD\nLondon open: {{plot_0}} | Price: {{close}} | {{time}}")
-alertcondition(lon_attr_short, title="DXY LON_ATTR SHORT",          message="DXY LON_ATTR SHORT (Pin Bar)\nPrice is pristine — zone bot never touched this session.\nBear pin bar >= 1000 pts above London open. TP = zone far edge (zone_bot). SL = 1:1 mirror.\nGo SHORT: USDCAD, USDJPY | Go LONG: EURUSD, XAUUSD\nLondon open: {{plot_0}} | Price: {{close}} | {{time}}")
-alertcondition(gap_rej_long or gap_rej_short or rev_long or rev_short or lon_attr_long or lon_attr_short, title="DXY Trade Alert - Any Setup", message="DXY TRADE ALERT — Setup detected. Check direction and levels.\nPrice: {{close}} | {{time}}")
+alertcondition(lon_attr_long,  title="DXY LON_ATTR LONG",           message="DXY LON_ATTR LONG (Pin Bar)\nZone top pristine. 4H BB flat. Bull pin bar >= 1000 pts below London open.\nTP = zone near edge (zone_bot). SL = 1:1 mirror.\nGo LONG: USDCAD, USDJPY | Go SHORT: EURUSD, XAUUSD\nLondon open: {{plot_0}} | Price: {{close}} | {{time}}")
+alertcondition(gap_rej_long or gap_rej_short or rev_long or rev_short or lon_attr_long, title="DXY Trade Alert - Any Setup", message="DXY TRADE ALERT — Setup detected. Check direction and levels.\nPrice: {{close}} | {{time}}")
 
 // ─── EXIT TRACKING ────────────────────────────────────────────────────────────
 var float exit_tp_lvl    = na
@@ -590,13 +553,6 @@ if lon_attr_long
     exit_sl_lvl    := lon_attr_long_sl
     exit_tracking  := true
     exit_is_long   := true
-    exit_entry_bar := bar_index
-
-if lon_attr_short
-    exit_tp_lvl    := lon_attr_short_tp
-    exit_sl_lvl    := lon_attr_short_sl
-    exit_tracking  := true
-    exit_is_long   := false
     exit_entry_bar := bar_index
 
 // Detect TP/SL cross

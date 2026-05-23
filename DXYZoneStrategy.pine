@@ -48,9 +48,8 @@ grp_htf  = "HTF Bias (BB Regime)"
 grp_disp = "Display"
 
 // London Open Attraction (LON_ATTR)
-lon_attr_enabled   = input.bool(true,  "Enable London Open Attraction (LON_ATTR)",            group=grp_zone, tooltip="Pin bar attraction trade toward the London session open level. Long: price >= min pts below open, pristine (never crossed above open this session), bull pin bar. Short: price >= min pts above open, pristine (never crossed below open), bear pin bar. TP = London open. SL = structural stop (prior session extreme).")
-lon_attr_min_long  = input.int(1000,   "LON_ATTR — Min Distance Long (pts below open)",       group=grp_zone, minval=50, step=10,  tooltip="Long fires when DXY close is at least this many pts below London open. Backtest optimum: 1000 pts (61.9% WR, +10R net over 32 months).")
-lon_attr_min_short = input.int(1000,   "LON_ATTR — Min Distance Short (pts above open)",      group=grp_zone, minval=50, step=10,  tooltip="Short fires when DXY close is at least this many pts above London open. Backtest optimum: 1000 pts (53.7% WR, +3R net over 32 months).")
+lon_attr_enabled   = input.bool(true,  "Enable London Open Attraction (LON_ATTR — LONG only)", group=grp_zone, tooltip="Pin bar attraction trade toward the London session open level. LONG only: price >= min pts below open, zone pristine (never crossed above open this session), bull pin bar, 4H BB flat. SHORT direction dropped — HTF analysis shows SHORT trades are negative across all regimes.")
+lon_attr_min_long  = input.int(1000,   "LON_ATTR — Min Distance Long (pts below open)",       group=grp_zone, minval=50, step=10,  tooltip="Long fires when DXY close is at least this many pts below London open. 4H BB must be flat. HTF analysis: 4H flat gives +25.1R vs -22.2R counter-trend over 32 months. Best WR threshold: 1725 pts (62.4% WR, +47.9R pair net R).")
 
 // Gap Rejection (Attraction trades removed — managed manually)
 attr_enabled        = input.bool(true,  "Enable Gap Rejection Trades",                       group=grp_zone)
@@ -146,9 +145,8 @@ var bool  lon_attr_traded   = false   // one LON_ATTR signal per session
 // LON_ATTR pristine zone — body of the first London session candle
 var float lon_zone_top      = na     // body top  = math.max(open, close) of London open bar
 var float lon_zone_bot      = na     // body bot  = math.min(open, close) of London open bar
-var bool  lon_pristine_long  = true  // false once any candle open/close >= zone top
-var bool  lon_pristine_short = true  // false once any candle open/close <= zone bot
-var box   lon_zone_box       = na    // yellow box: body of London open candle, greys out when zone violated
+var bool  lon_pristine_long  = true  // false once any candle open/close >= zone top (kills LONG setup)
+var box   lon_zone_box       = na    // yellow box: body of London open candle, greys out when LONG zone violated
 
 if is_london_open_bar
     london_open_price  := open
@@ -158,7 +156,6 @@ if is_london_open_bar
     lon_zone_top       := math.max(open, close)
     lon_zone_bot       := math.min(open, close)
     lon_pristine_long  := true
-    lon_pristine_short := true
     if show_lon_zone
         box.delete(lon_zone_box)
         lon_zone_box := box.new(bar_index, lon_zone_top, bar_index + 1, lon_zone_bot,
@@ -200,20 +197,17 @@ if not na(london_open_price) and not in_japan
     else if above < 0
         max_move_down := math.max(max_move_down, -above)
 
-// LON_ATTR pristine zone violation tracking
+// LON_ATTR pristine zone violation tracking (LONG only)
 if not in_japan and not is_london_open_bar and not na(lon_zone_top)
     if open >= lon_zone_top or close >= lon_zone_top
-        lon_pristine_long  := false
-    if open <= lon_zone_bot or close <= lon_zone_bot
-        lon_pristine_short := false
+        lon_pristine_long  := false   // zone top breached — LONG setup no longer valid
 
 // LON_ATTR zone box: extend right edge each bar and update colour to reflect pristine state
-// Yellow = at least one direction still pristine; grey = zone fully violated both ways
+// Yellow = LONG zone still pristine; grey = zone top violated
 if show_lon_zone and not na(lon_zone_box)
-    bool _any_pristine = lon_pristine_long or lon_pristine_short
     box.set_right(lon_zone_box, bar_index + 1)
-    box.set_bgcolor(lon_zone_box,       _any_pristine ? color.new(color.yellow, 75) : color.new(color.gray, 82))
-    box.set_border_color(lon_zone_box,  _any_pristine ? color.new(color.yellow, 40) : color.new(color.gray, 60))
+    box.set_bgcolor(lon_zone_box,       lon_pristine_long ? color.new(color.yellow, 75) : color.new(color.gray, 82))
+    box.set_border_color(lon_zone_box,  lon_pristine_long ? color.new(color.yellow, 40) : color.new(color.gray, 60))
 
 // ─── HTF BB REGIME ────────────────────────────────────────────────────────────
 // +1 = expanding & MA slope up   → REV LONG
@@ -312,9 +306,6 @@ float attr_short_sl     = not na(attr_short_sl_d) ? close + attr_short_sl_d : na
 float lon_attr_long_tp    = lon_zone_bot
 float lon_attr_long_sl_d  = lon_zone_bot - close               // TP distance (must be > 0)
 float lon_attr_long_sl    = close - lon_attr_long_sl_d         // 1:1 mirror below entry
-float lon_attr_short_tp   = lon_zone_bot
-float lon_attr_short_sl_d = close - lon_zone_bot               // TP distance (must be > 0)
-float lon_attr_short_sl   = close + lon_attr_short_sl_d        // 1:1 mirror above entry
 
 // ─── REVERSAL CONDITIONS ─────────────────────────────────────────────────────
 rev_long  = (rev_enabled and not na(london_open_price) and
@@ -361,10 +352,10 @@ if gap_rej_long or gap_rej_short
     attr_traded := true
 
 // ─── LON_ATTR CONDITIONS ─────────────────────────────────────────────────────
-// Pristine is detected via max_move_up / max_move_down:
-//   max_move_up   == 0  → price has never been above London open this session
-//   max_move_down == 0  → price has never been below London open this session
-// One signal per session (lon_attr_traded flag). No BB regime filter required.
+// LONG only. SHORT direction dropped — HTF analysis shows SHORT negative across all regimes.
+// Pristine: no candle open/close has touched zone_top since London open.
+// 4H BB must be flat — counter-trend 4H environments responsible for -22.2R drag.
+// One signal per session (lon_attr_traded flag).
 
 bool lon_attr_long = (lon_attr_enabled and
     not lon_attr_traded and
@@ -372,19 +363,11 @@ bool lon_attr_long = (lon_attr_enabled and
     in_lon_attr_sess and not in_japan and
     dist_from_open <= -lon_attr_min_long and   // price >= min_long pts BELOW London open
     lon_pristine_long and                       // pristine: no candle open/close has touched zone top
+    bb_4h == 0 and                             // 4H BB flat — eliminates counter-trend drag
     lon_attr_long_sl_d > 0 and                 // zone_bot must be above entry (valid TP)
     la_bull_pin)                                // bull pin bar only
 
-bool lon_attr_short = (lon_attr_enabled and
-    not lon_attr_traded and
-    not na(london_open_price) and
-    in_lon_attr_sess and not in_japan and
-    dist_from_open >= lon_attr_min_short and   // price >= min_short pts ABOVE London open
-    lon_pristine_short and                      // pristine: no candle open/close has touched zone bot
-    lon_attr_short_sl_d > 0 and                // zone_bot must be below entry (valid TP)
-    la_bear_pin)                                // bear pin bar only
-
-if lon_attr_long or lon_attr_short
+if lon_attr_long
     lon_attr_traded := true
 
 // ─── STRATEGY ENTRIES ────────────────────────────────────────────────────────
@@ -430,18 +413,9 @@ if in_window and lon_attr_long
     strategy.entry("LonAttr Long", strategy.long)
     strategy.exit("LAL Exit", "LonAttr Long", limit=lon_attr_long_tp, stop=lon_attr_long_sl)
     label.new(bar_index, low - cndl_range,
-        "▲ LON_ATTR LONG\n" + str.tostring(math.round(-dist_from_open)) + " pts below open\nTP: zone near edge  |  SL: " + str.tostring(math.round(lon_attr_long_sl_d * 10000)) + " pts (1:1)",
+        "▲ LON_ATTR LONG\n" + str.tostring(math.round(-dist_from_open)) + " pts below open\n4H BB: flat  |  TP: zone near edge  |  SL: " + str.tostring(math.round(lon_attr_long_sl_d * 10000)) + " pts (1:1)",
         color=color.new(color.navy, 10), textcolor=color.white,
         style=label.style_label_up, size=size.small)
-
-// — LON_ATTR SHORT ────────────────────────────────────────────────────────────
-if in_window and lon_attr_short
-    strategy.entry("LonAttr Short", strategy.short)
-    strategy.exit("LAS Exit", "LonAttr Short", limit=lon_attr_short_tp, stop=lon_attr_short_sl)
-    label.new(bar_index, high + cndl_range,
-        "▼ LON_ATTR SHORT\n" + str.tostring(math.round(dist_from_open)) + " pts above open\nTP: zone far edge  |  SL: " + str.tostring(math.round(lon_attr_short_sl_d * 10000)) + " pts (1:1)",
-        color=color.new(color.maroon, 10), textcolor=color.white,
-        style=label.style_label_down, size=size.small)
 
 // ─── VISUALS ─────────────────────────────────────────────────────────────────
 plot(show_open_lvl and not na(london_open_price) ? london_open_price : na,

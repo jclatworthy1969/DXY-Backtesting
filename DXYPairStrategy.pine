@@ -59,9 +59,8 @@ grp_htf  = "HTF Bias (BB Regime)"
 grp_disp = "Display"
 
 // London Open Attraction (LON_ATTR)
-lon_attr_enabled   = input.bool(true,  "Enable London Open Attraction (LON_ATTR)",            group=grp_zone, tooltip="Pin bar attraction trade toward the DXY London session open level. Long DXY: price >= min pts below DXY open, pristine, bull pin bar. Short DXY: price >= min pts above open, pristine, bear pin bar. DXY TP = London open. DXY SL = structural stop.")
-lon_attr_min_long  = input.int(1000,   "LON_ATTR — Min Distance Long (pts below DXY open)",  group=grp_zone, minval=50, step=10,  tooltip="Long fires when DXY close is at least this many pts below London open. Backtest optimum: 1000 pts (61.9% WR, +10R net over 32 months).")
-lon_attr_min_short = input.int(1000,   "LON_ATTR — Min Distance Short (pts above DXY open)", group=grp_zone, minval=50, step=10,  tooltip="Short fires when DXY close is at least this many pts above London open. Backtest optimum: 1000 pts (53.7% WR, +3R net over 32 months).")
+lon_attr_enabled   = input.bool(true,  "Enable London Open Attraction (LON_ATTR — LONG only)", group=grp_zone, tooltip="Pin bar attraction trade toward the DXY London session open level. LONG only: DXY price >= min pts below DXY open, zone pristine, bull pin bar, 4H BB flat. SHORT direction dropped — HTF analysis shows SHORT trades are negative across all regimes.")
+lon_attr_min_long  = input.int(1000,   "LON_ATTR — Min Distance Long (pts below DXY open)",  group=grp_zone, minval=50, step=10,  tooltip="Long fires when DXY close is at least this many pts below London open. 4H BB must be flat. HTF analysis: 4H flat gives +25.1R vs -22.2R counter-trend over 32 months. Best WR threshold: 1725 pts (62.4% WR, +47.9R pair net R).")
 
 // Attraction / Gap Rejection
 attr_enabled        = input.bool(true,  "Enable Gap Rejection Trades",                       group=grp_zone)
@@ -160,8 +159,7 @@ var bool  lon_attr_traded   = false   // one LON_ATTR signal per session
 // LON_ATTR pristine zone — body of the first DXY London session candle
 var float dxy_lon_zone_top   = na    // body top  = math.max(dxy_o, dxy_c) of London open bar
 var float dxy_lon_zone_bot   = na    // body bot  = math.min(dxy_o, dxy_c) of London open bar
-var bool  dxy_pristine_long  = true  // false once any DXY candle open/close >= zone top
-var bool  dxy_pristine_short = true  // false once any DXY candle open/close <= zone bot
+var bool  dxy_pristine_long  = true  // false once any DXY candle open/close >= zone top (kills LONG setup)
 
 if is_london_open_bar
     dxy_london_open    := dxy_o
@@ -171,7 +169,6 @@ if is_london_open_bar
     dxy_lon_zone_top   := math.max(dxy_o, dxy_c)
     dxy_lon_zone_bot   := math.min(dxy_o, dxy_c)
     dxy_pristine_long  := true
-    dxy_pristine_short := true
 
 // ─── DXY TOKYO OPEN ATTR GAP (23:45 UTC) ─────────────────────────────────────
 // Gap = DXY 23:45 open vs DXY 23:15 close (prior to 23:30 phantom candle).
@@ -217,12 +214,10 @@ if not na(dxy_london_open) and not in_japan
     else if above < 0
         dxy_max_move_down := math.max(dxy_max_move_down, -above)
 
-// LON_ATTR pristine zone violation tracking (DXY candles)
+// LON_ATTR pristine zone violation tracking (DXY candles — LONG only)
 if not in_japan and not is_london_open_bar and not na(dxy_lon_zone_top)
     if dxy_o >= dxy_lon_zone_top or dxy_c >= dxy_lon_zone_top
-        dxy_pristine_long  := false
-    if dxy_o <= dxy_lon_zone_bot or dxy_c <= dxy_lon_zone_bot
-        dxy_pristine_short := false
+        dxy_pristine_long  := false   // zone top breached — LONG setup no longer valid
 
 // ─── DXY HTF BB REGIME ────────────────────────────────────────────────────────
 // +1 = DXY 1H/4H bands expanding, MA sloping up   → REV LONG on DXY
@@ -315,9 +310,6 @@ float dxy_as_reward = not na(dxy_as_sl_d) ? dxy_as_sl_d * 10000 : 0.0
 float dxy_la_long_tp    = dxy_lon_zone_bot
 float dxy_la_long_sl_d  = dxy_lon_zone_bot - dxy_c      // TP distance (must be > 0)
 float dxy_la_long_sl    = dxy_c - dxy_la_long_sl_d      // 1:1 mirror below entry
-float dxy_la_short_tp   = dxy_lon_zone_bot
-float dxy_la_short_sl_d = dxy_c - dxy_lon_zone_bot      // TP distance (must be > 0)
-float dxy_la_short_sl   = dxy_c + dxy_la_short_sl_d     // 1:1 mirror above entry
 
 // ─── REVERSAL CONDITIONS (DXY) ────────────────────────────────────────────────
 bool rev_long_cond  = (rev_enabled and not na(dxy_london_open) and
@@ -363,8 +355,10 @@ if gap_rej_long_cond or gap_rej_short_cond
     attr_traded := true
 
 // ─── LON_ATTR CONDITIONS (DXY) ───────────────────────────────────────────────
-// Pristine: dxy_max_move_up==0 (never above DXY open) / dxy_max_move_down==0 (never below)
-// One signal per session (lon_attr_traded). No BB regime filter.
+// LONG only. SHORT direction dropped — HTF analysis shows SHORT negative across all regimes.
+// Pristine: no DXY candle open/close has touched zone_top since London open.
+// 4H BB must be flat — counter-trend 4H environments responsible for -22.2R drag.
+// One signal per session (lon_attr_traded).
 
 bool lon_attr_long_cond = (lon_attr_enabled and
     not lon_attr_traded and
@@ -372,19 +366,11 @@ bool lon_attr_long_cond = (lon_attr_enabled and
     in_lon_attr_sess and not in_japan and
     dxy_dist_from_open <= -lon_attr_min_long and   // DXY >= min_long pts BELOW London open
     dxy_pristine_long and                           // pristine: no DXY candle open/close touched zone top
+    dxy_bb_4h == 0 and                             // 4H BB flat — eliminates counter-trend drag
     dxy_la_long_sl_d > 0 and                       // zone_bot must be above entry (valid TP)
     la_dxy_bull_pin)                                // DXY bull pin bar only
 
-bool lon_attr_short_cond = (lon_attr_enabled and
-    not lon_attr_traded and
-    not na(dxy_london_open) and
-    in_lon_attr_sess and not in_japan and
-    dxy_dist_from_open >= lon_attr_min_short and   // DXY >= min_short pts ABOVE London open
-    dxy_pristine_short and                          // pristine: no DXY candle open/close touched zone bot
-    dxy_la_short_sl_d > 0 and                      // zone_bot must be below entry (valid TP)
-    la_dxy_bear_pin)                                // DXY bear pin bar only
-
-if lon_attr_long_cond or lon_attr_short_cond
+if lon_attr_long_cond
     lon_attr_traded := true
 
 float cr_px = high - low  // pair candle range for label offset
@@ -462,7 +448,7 @@ if in_window and rev_short_cond
         label.new(bar_index, high + cr_px, "▼ REV↓\nSL " + str.tostring(math.round(dxy_rs_sl_d * 10000)) + " pts",
             color=color.new(color.purple, 10), textcolor=color.white, style=label.style_label_down, size=size.small)
 
-// — LON_ATTR LONG (DXY bull pin bar, pristine, >= 1000 pts below DXY London open) ─
+// — LON_ATTR LONG (DXY bull pin bar, pristine, >= 1000 pts below DXY London open, 4H flat) ─
 if in_window and lon_attr_long_cond
     dxy_tp_lvl     := dxy_la_long_tp            // DXY TP = zone near edge (dxy_lon_zone_bot)
     dxy_sl_lvl     := dxy_la_long_sl            // DXY SL = 1:1 mirror below entry
@@ -472,29 +458,12 @@ if in_window and lon_attr_long_cond
     int tdir = pair_dir
     if tdir == 1
         strategy.entry("LonAttr Long", strategy.long)
-        label.new(bar_index, low - cr_px, "▲ LON_ATTR↑\n" + str.tostring(math.round(-dxy_dist_from_open)) + " pts below open",
+        label.new(bar_index, low - cr_px, "▲ LON_ATTR↑\n" + str.tostring(math.round(-dxy_dist_from_open)) + " pts below open  |  4H flat",
             color=color.new(color.navy, 10), textcolor=color.white, style=label.style_label_up, size=size.small)
     else
         strategy.entry("LonAttr Long", strategy.short)
-        label.new(bar_index, high + cr_px, "▼ LON_ATTR↑\n" + str.tostring(math.round(-dxy_dist_from_open)) + " pts below open",
+        label.new(bar_index, high + cr_px, "▼ LON_ATTR↑\n" + str.tostring(math.round(-dxy_dist_from_open)) + " pts below open  |  4H flat",
             color=color.new(color.navy, 10), textcolor=color.white, style=label.style_label_down, size=size.small)
-
-// — LON_ATTR SHORT (DXY bear pin bar, pristine, >= 1000 pts above DXY London open) ─
-if in_window and lon_attr_short_cond
-    dxy_tp_lvl     := dxy_la_short_tp           // DXY TP = zone far edge (dxy_lon_zone_bot)
-    dxy_sl_lvl     := dxy_la_short_sl           // DXY SL = 1:1 mirror above entry
-    dxy_trade_long := false
-    dxy_exit_track := true
-    dxy_entry_bar  := bar_index
-    int tdir = -1 * pair_dir
-    if tdir == 1
-        strategy.entry("LonAttr Short", strategy.long)
-        label.new(bar_index, low - cr_px, "▲ LON_ATTR↓\n" + str.tostring(math.round(dxy_dist_from_open)) + " pts above open",
-            color=color.new(color.maroon, 10), textcolor=color.white, style=label.style_label_up, size=size.small)
-    else
-        strategy.entry("LonAttr Short", strategy.short)
-        label.new(bar_index, high + cr_px, "▼ LON_ATTR↓\n" + str.tostring(math.round(dxy_dist_from_open)) + " pts above open",
-            color=color.new(color.maroon, 10), textcolor=color.white, style=label.style_label_down, size=size.small)
 
 // ─── DXY EXIT ────────────────────────────────────────────────────────────────
 // Close all pair positions when DXY crosses its TP or SL level.
