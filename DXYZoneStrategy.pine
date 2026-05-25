@@ -59,6 +59,16 @@ attr_near_buf       = input.int(50,     "Attraction — Near-Edge TP Buffer (pts
 attr_use_near_tp    = input.bool(true,  "Attraction — Use Near-Edge TP (vs full gap fill)",   group=grp_zone,                      tooltip="On: TP = London open ± near buffer. Off: TP = prior session close (full gap fill).")
 attr_max_prev_range = input.int(8000,   "Attraction — Max Prior Session Range (pts)",         group=grp_zone, minval=500, step=500, tooltip="Skip attraction if prior session DXY range exceeded this. Median DXY daily range ~4800 pts; 8000 passes ~85% of days.")
 
+// ATTR CORE (Pristine Zone Approach)
+attr_core_enabled  = input.bool(true, "Enable ATTR CORE (Pristine Zone Approach)", group=grp_zone,
+    tooltip="Fires when DXY approaches the Tokyo gap zone for the first time from outside — zone not yet touched. CORE filter: gap at London open < 1500 pts AND wave extension < 1500 pts. 32-month backtest: 70% WR, +65R across 6 pairs.")
+core_gap_max       = input.int(1500, "ATTR CORE — Max Gap at London Open (pts)", group=grp_zone, minval=200, step=100,
+    tooltip="Maximum DXY distance (pts) from zone near edge to DXY price at London open. Strongest predictor (corr -0.49). CORE threshold: 1500 pts.")
+core_wave_max      = input.int(1500, "ATTR CORE — Max Wave Extension (pts)", group=grp_zone, minval=100, step=100,
+    tooltip="Maximum DXY wave extension (pts) away from zone after London open. > 1500 pts = overextended. CORE threshold: 1500 pts.")
+attr_approach_min  = input.int(150, "ATTR CORE — Min 3-bar Approach (pts)", group=grp_zone, minval=50, step=25,
+    tooltip="Minimum DXY move toward the zone over the last 3 bars (pts). Filters out sideways drift entries. Default: 150 pts.")
+
 // Reversal
 rev_enabled    = input.bool(true, "Enable Reversal Trades",                                   group=grp_zone)
 rev_proximity  = input.int(250,   "Reversal — Max Distance from Opening Level (pts)",         group=grp_zone, minval=25,  step=25,  tooltip="Entry fires when price is within this many pts of the London session opening price. Backtest optimum: 250 pts (+69.4R pair net R, 56.8% WR). Captures early approach entries while price moves toward the opening level.")
@@ -171,8 +181,12 @@ var float attr_gap_target  = na
 var float attr_gap_pts     = 0.0
 var bool  attr_traded      = false
 var bool  attr_gap_touched = false  // latches true once price crosses the gap target this session
+var float attr_lon_open_close = na   // DXY close at London open bar (ATTR CORE reference)
+var float attr_gap_at_lon     = 0.0  // gap from zone near edge to DXY close at London open (pts)
+var float attr_tokyo_open     = na   // DXY 23:45 open = zone near edge
 
 if is_tokyo_open
+    attr_tokyo_open := open                     // ATTR CORE: zone near edge
     float raw_gap = (open - close[2]) * 10000   // 23:45 open vs 23:15 close
     if math.abs(raw_gap) >= 10
         attr_gap_pts    := raw_gap
@@ -181,7 +195,9 @@ if is_tokyo_open
         attr_gap_pts    := (close - open) * 10000
         attr_gap_target := open
     attr_traded      := false
-    attr_gap_touched := false   // zone is fresh/pristine at Tokyo open
+    attr_gap_touched := false                   // zone is fresh/pristine at Tokyo open
+    attr_lon_open_close := na                   // ATTR CORE: reset London open capture
+    attr_gap_at_lon     := 0.0                  // ATTR CORE: reset gap-at-London measure
 
 // Latch: once the gap target is reached, zone is permanently filled for this session
 if not na(attr_gap_target)
@@ -189,6 +205,14 @@ if not na(attr_gap_target)
         attr_gap_touched := true
     else if attr_gap_pts > 0 and close <= attr_gap_target
         attr_gap_touched := true
+
+// ATTR CORE: capture DXY close at London open for gap/wave filter
+if is_london_open_bar and not na(attr_gap_target) and not attr_gap_touched
+    attr_lon_open_close := close
+    if attr_gap_pts < 0   // gap down: near edge = attr_tokyo_open (higher), price below zone
+        attr_gap_at_lon := math.max((attr_tokyo_open - close) * 10000, 0.0)
+    else if attr_gap_pts > 0   // gap up: near edge = attr_tokyo_open (lower), price above zone
+        attr_gap_at_lon := math.max((close - attr_tokyo_open) * 10000, 0.0)
 
 if not na(london_open_price) and not in_japan
     float above = (close - london_open_price) * 10000
@@ -326,6 +350,20 @@ rev_short = (rev_enabled and not na(london_open_price) and
     not na(pd_high) and
     rev_short_sl_d > 0)
 
+// ─── ATTR CORE PER-BAR CALCULATIONS ──────────────────────────────────────────
+float attr_wave_ext = 0.0
+if not na(attr_lon_open_close)
+    if attr_gap_pts < 0
+        attr_wave_ext := math.max((attr_lon_open_close - close) * 10000, 0.0)
+    else if attr_gap_pts > 0
+        attr_wave_ext := math.max((close - attr_lon_open_close) * 10000, 0.0)
+
+bool impl_attr_long  = (close - close[3]) * 10000 >= attr_approach_min
+bool impl_attr_short = (close[3] - close) * 10000 >= attr_approach_min
+
+bool core_filter_ok = (not na(attr_lon_open_close) and
+    attr_gap_at_lon < core_gap_max and attr_wave_ext < core_wave_max)
+
 // ─── GAP REJECTION CONDITIONS ─────────────────────────────────────────────────
 gap_rej_long  = (attr_enabled and not na(attr_gap_target) and not attr_traded and attr_gap_touched and
     in_sess and not in_japan and
@@ -349,6 +387,38 @@ gap_rej_short = (attr_enabled and not na(attr_gap_target) and not attr_traded an
 
 // Block further gap-window signals once any one has traded this session
 if gap_rej_long or gap_rej_short
+    attr_traded := true
+
+// ─── ATTR CORE CONDITIONS ─────────────────────────────────────────────────────
+bool attr_core_long = (attr_core_enabled and not na(attr_gap_target) and not attr_traded
+    and not attr_gap_touched
+    and in_sess and not in_japan
+    and not na(attr_lon_open_close)
+    and attr_gap_pts < -attr_min_gap
+    and close < attr_tokyo_open
+    and attr_long_reward >= attr_min_reward
+    and pd_range <= attr_max_prev_range
+    and bb_4h == 0
+    and bull_sig
+    and impl_attr_long
+    and core_filter_ok
+    and not na(attr_long_sl_d) and attr_long_sl_d > 0)
+
+bool attr_core_short = (attr_core_enabled and not na(attr_gap_target) and not attr_traded
+    and not attr_gap_touched
+    and in_sess and not in_japan
+    and not na(attr_lon_open_close)
+    and attr_gap_pts > attr_min_gap
+    and close > attr_tokyo_open
+    and attr_short_reward >= attr_min_reward
+    and pd_range <= attr_max_prev_range
+    and bb_4h == 0
+    and bear_sig
+    and impl_attr_short
+    and core_filter_ok
+    and not na(attr_short_sl_d) and attr_short_sl_d > 0)
+
+if attr_core_long or attr_core_short
     attr_traded := true
 
 // ─── LON_ATTR CONDITIONS ─────────────────────────────────────────────────────
@@ -416,6 +486,24 @@ if in_window and lon_attr_long
         "▲ LON_ATTR LONG\n" + str.tostring(math.round(-dist_from_open)) + " pts below open\n4H BB: flat  |  TP: zone near edge  |  SL: " + str.tostring(math.round(lon_attr_long_sl_d * 10000)) + " pts (1:1)",
         color=color.new(color.navy, 10), textcolor=color.white,
         style=label.style_label_up, size=size.small)
+
+// — ATTR CORE LONG ────────────────────────────────────────────────────────────
+if in_window and attr_core_long
+    strategy.entry("AttrCore Long", strategy.long)
+    strategy.exit("ACL Exit", "AttrCore Long", limit=attr_long_tp, stop=attr_long_sl)
+    label.new(bar_index, low - cndl_range,
+        "▲ ATTR CORE LONG\nGap@Lon: " + str.tostring(math.round(attr_gap_at_lon)) + " pts  |  WaveExt: " + str.tostring(math.round(attr_wave_ext)) + " pts",
+        color=color.new(color.blue, 10), textcolor=color.white,
+        style=label.style_label_up, size=size.small)
+
+// — ATTR CORE SHORT ───────────────────────────────────────────────────────────
+if in_window and attr_core_short
+    strategy.entry("AttrCore Short", strategy.short)
+    strategy.exit("ACS Exit", "AttrCore Short", limit=attr_short_tp, stop=attr_short_sl)
+    label.new(bar_index, high + cndl_range,
+        "▼ ATTR CORE SHORT\nGap@Lon: " + str.tostring(math.round(attr_gap_at_lon)) + " pts  |  WaveExt: " + str.tostring(math.round(attr_wave_ext)) + " pts",
+        color=color.new(color.blue, 10), textcolor=color.white,
+        style=label.style_label_down, size=size.small)
 
 // ─── VISUALS ─────────────────────────────────────────────────────────────────
 plot(show_open_lvl and not na(london_open_price) ? london_open_price : na,

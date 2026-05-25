@@ -20,6 +20,16 @@ attr_near_buf       = input.int(50,     "Attraction — Near-Edge TP Buffer (pts
 attr_use_near_tp    = input.bool(true,  "Attraction — Use Near-Edge TP (vs full gap fill)",   group=grp_zone,                      tooltip="On: TP = London open ± near buffer. Off: TP = prior session close (full gap fill).")
 attr_max_prev_range = input.int(8000,   "Attraction — Max Prior Session Range (pts)",         group=grp_zone, minval=500, step=500, tooltip="Skip attraction if prior session DXY range exceeded this. Median DXY daily range ~4800 pts; 8000 passes ~85% of days. Reduces to ~50% at 5000 pts.")
 
+// ATTR CORE (Pristine Zone Approach)
+attr_core_enabled  = input.bool(true, "Enable ATTR CORE (Pristine Zone Approach)", group=grp_zone,
+    tooltip="Fires when DXY approaches the Tokyo gap zone for the first time from outside — zone not yet touched. CORE filter: gap at London open < 1500 pts AND wave extension < 1500 pts. 32-month backtest: 70% WR, +65R across 6 pairs. Best direction: ATTR CORE SHORT on all pairs (68.6% WR) + ATTR CORE LONG on XAUUSD only (66.7% WR).")
+core_gap_max       = input.int(1500, "ATTR CORE — Max Gap at London Open (pts)", group=grp_zone, minval=200, step=100,
+    tooltip="Maximum DXY distance (pts) from zone near edge to DXY price at London open. Strongest predictor (corr -0.49). Values > 1500 pts have poor WR. CORE threshold: 1500 pts.")
+core_wave_max      = input.int(1500, "ATTR CORE — Max Wave Extension (pts)", group=grp_zone, minval=100, step=100,
+    tooltip="Maximum DXY wave extension (pts) away from zone after London open before the reversal candle. > 1500 pts indicates DXY has overextended and zone approach is likely to fail. CORE threshold: 1500 pts.")
+attr_approach_min  = input.int(150, "ATTR CORE — Min 3-bar Approach (pts)", group=grp_zone, minval=50, step=25,
+    tooltip="Minimum DXY move toward the zone over the last 3 bars (pts). Filters out sideways drift entries — requires impulsive approach to zone. Default: 150 pts.")
+
 // Reversal
 rev_enabled    = input.bool(true, "Enable Reversal Trade Alerts",                             group=grp_zone)
 rev_proximity  = input.int(250,   "Reversal — Max Distance from Opening Level (pts)",         group=grp_zone, minval=25,  step=25,  tooltip="Reversal entry fires when price is within this many pts of the London session opening price. Backtest optimum: 250 pts (+69.4R pair net R, 56.8% WR). Wider than original 150 pts captures early approach entries while price is still moving toward the open level.")
@@ -141,8 +151,10 @@ var float attr_gap_target  = na
 var float attr_gap_pts     = 0.0
 var float attr_tokyo_open  = na   // 23:45 open price — upper/lower bound of gap zone
 var bool  attr_traded      = false
-var bool  attr_gap_touched = false  // latches true once price crosses the gap target this
-                                    // session — prevents re-entry if price retreats back
+var bool  attr_gap_touched    = false  // latches true once price crosses the gap target this
+                                      // session — prevents re-entry if price retreats back
+var float attr_lon_open_close = na     // DXY close at London open bar (ATTR CORE reference)
+var float attr_gap_at_lon     = 0.0   // gap from zone near edge to DXY close at London open (pts)
 
 if is_tokyo_open
     attr_tokyo_open  := open
@@ -156,6 +168,8 @@ if is_tokyo_open
         attr_gap_target := open                 // target = return to 23:45 open
     attr_traded      := false                   // reset for new session
     attr_gap_touched := false                   // zone is fresh/pristine at Tokyo open
+    attr_lon_open_close := na                   // ATTR CORE: reset London open capture
+    attr_gap_at_lon     := 0.0                  // ATTR CORE: reset gap-at-London measure
 
 // Latch: once the gap target is reached, zone is permanently filled for this session
 if not na(attr_gap_target)
@@ -163,6 +177,15 @@ if not na(attr_gap_target)
         attr_gap_touched := true
     else if attr_gap_pts > 0 and close <= attr_gap_target  // gap-up: price reached target
         attr_gap_touched := true
+
+// ATTR CORE: capture DXY close at London open for gap/wave filter
+// attr_gap_pts and attr_tokyo_open are already set (from 23:45 the night before)
+if is_london_open_bar and not na(attr_gap_target) and not attr_gap_touched
+    attr_lon_open_close := close
+    if attr_gap_pts < 0   // gap down: near edge = attr_tokyo_open (higher), price is below zone
+        attr_gap_at_lon := math.max((attr_tokyo_open - close) * 10000, 0.0)
+    else if attr_gap_pts > 0   // gap up: near edge = attr_tokyo_open (lower), price is above zone
+        attr_gap_at_lon := math.max((close - attr_tokyo_open) * 10000, 0.0)
 
 // Update max move from opening each bar (used by REV conditions)
 if not na(london_open_price) and not in_japan
@@ -314,6 +337,23 @@ rev_short = (rev_enabled and not na(london_open_price) and
     not na(pd_high) and
     rev_short_sl_d > 0)
 
+// ─── ATTR CORE PER-BAR CALCULATIONS ──────────────────────────────────────────
+// Wave extension: how far DXY moved away from zone AFTER London open (further = worse)
+float attr_wave_ext = 0.0
+if not na(attr_lon_open_close)
+    if attr_gap_pts < 0   // gap down: wave extends further below London open price
+        attr_wave_ext := math.max((attr_lon_open_close - close) * 10000, 0.0)
+    else if attr_gap_pts > 0   // gap up: wave extends further above London open price
+        attr_wave_ext := math.max((close - attr_lon_open_close) * 10000, 0.0)
+
+// Impulsive 3-bar approach toward zone (price must be moving toward zone, not drifting)
+bool impl_attr_long  = (close - close[3]) * 10000 >= attr_approach_min   // UP = toward gap-down zone
+bool impl_attr_short = (close[3] - close) * 10000 >= attr_approach_min   // DOWN = toward gap-up zone
+
+// CORE filter gate: both gap size at London open AND wave extension must be below thresholds
+bool core_filter_ok = (not na(attr_lon_open_close) and
+    attr_gap_at_lon < core_gap_max and attr_wave_ext < core_wave_max)
+
 // ─── GAP REJECTION CONDITIONS ─────────────────────────────────────────────────
 // Gap was already filled (attr_gap_touched=true) but price has pulled back.
 // Same filters as ATTR — only the zone-state latch differs.
@@ -339,6 +379,41 @@ gap_rej_short = (attr_enabled and not na(attr_gap_target) and not attr_traded an
 
 // Block further gap-window signals once any one has traded this session
 if gap_rej_long or gap_rej_short
+    attr_traded := true
+
+// ─── ATTR CORE CONDITIONS ─────────────────────────────────────────────────────
+// Zone NOT yet touched (opposite of GAP_REJ). First approach to the pristine zone.
+// CORE filter: gap at London open < core_gap_max AND wave extension < core_wave_max.
+// 32-month backtest: 70.2% WR, +65.46R | ATTR SHORT all pairs + ATTR LONG XAUUSD only.
+bool attr_core_long = (attr_core_enabled and not na(attr_gap_target) and not attr_traded
+    and not attr_gap_touched              // zone NOT yet filled (pristine — opposite of GAP_REJ)
+    and in_sess and not in_japan
+    and not na(attr_lon_open_close)       // past London open
+    and attr_gap_pts < -attr_min_gap      // gap down setup
+    and close < attr_tokyo_open           // still below zone near edge (hasn't touched zone yet)
+    and attr_long_reward >= attr_min_reward
+    and pd_range <= attr_max_prev_range
+    and bb_4h == 0
+    and bull_sig
+    and impl_attr_long
+    and core_filter_ok
+    and not na(attr_long_sl_d) and attr_long_sl_d > 0)
+
+bool attr_core_short = (attr_core_enabled and not na(attr_gap_target) and not attr_traded
+    and not attr_gap_touched
+    and in_sess and not in_japan
+    and not na(attr_lon_open_close)
+    and attr_gap_pts > attr_min_gap       // gap up setup
+    and close > attr_tokyo_open           // still above zone near edge
+    and attr_short_reward >= attr_min_reward
+    and pd_range <= attr_max_prev_range
+    and bb_4h == 0
+    and bear_sig
+    and impl_attr_short
+    and core_filter_ok
+    and not na(attr_short_sl_d) and attr_short_sl_d > 0)
+
+if attr_core_long or attr_core_short
     attr_traded := true
 
 // ─── LON_ATTR CONDITIONS ─────────────────────────────────────────────────────
@@ -499,13 +574,61 @@ if lon_attr_long
                         extend=extend.right, color=color.new(color.red, 0),
                         style=line.style_dashed, width=2)
 
+if attr_core_long
+    label.new(bar_index, low - lbl_pad,
+        "ATTR CORE LONG\n" + bull_sig_name +
+        "  |  Gap: " + str.tostring(math.round(math.abs(attr_gap_pts))) + " pts" +
+        "  |  Gap@Lon: " + str.tostring(math.round(attr_gap_at_lon)) + " pts" +
+        "  |  WaveExt: " + str.tostring(math.round(attr_wave_ext)) + " pts\n" +
+        "TP: " + str.tostring(attr_long_tp, "#.####") +
+            (attr_use_near_tp ? " (near-edge)" : " (gap fill)") + "\n" +
+        "SL: " + str.tostring(attr_long_sl, "#.####") + " (1:1 mirror)\n" +
+        "4H BB: flat  |  Prev range: " + str.tostring(math.round(pd_range)) + " pts\n" +
+        "DXY LONG = Go LONG: USDCAD, USDJPY  |  Go SHORT: EURUSD, AUDUSD, NZDUSD\n" +
+        "XAUUSD: Go SHORT (DXY up = Gold down)",
+        color=color.new(color.blue, 5), textcolor=color.white,
+        style=label.style_label_up, size=size.normal)
+    line.delete(tp_line)
+    line.delete(sl_line)
+    tp_line := line.new(bar_index, attr_long_tp, bar_index + 1, attr_long_tp,
+                        extend=extend.right, color=color.new(color.lime, 0),
+                        style=line.style_dashed, width=2)
+    sl_line := line.new(bar_index, attr_long_sl, bar_index + 1, attr_long_sl,
+                        extend=extend.right, color=color.new(color.red, 0),
+                        style=line.style_dashed, width=2)
+
+if attr_core_short
+    label.new(bar_index, high + lbl_pad,
+        "ATTR CORE SHORT\n" + bear_sig_name +
+        "  |  Gap: " + str.tostring(math.round(attr_gap_pts)) + " pts" +
+        "  |  Gap@Lon: " + str.tostring(math.round(attr_gap_at_lon)) + " pts" +
+        "  |  WaveExt: " + str.tostring(math.round(attr_wave_ext)) + " pts\n" +
+        "TP: " + str.tostring(attr_short_tp, "#.####") +
+            (attr_use_near_tp ? " (near-edge)" : " (gap fill)") + "\n" +
+        "SL: " + str.tostring(attr_short_sl, "#.####") + " (1:1 mirror)\n" +
+        "4H BB: flat  |  Prev range: " + str.tostring(math.round(pd_range)) + " pts\n" +
+        "DXY SHORT = Go SHORT: USDCAD, USDJPY  |  Go LONG: EURUSD, AUDUSD, NZDUSD\n" +
+        "XAUUSD: Go LONG (DXY down = Gold up)",
+        color=color.new(color.blue, 5), textcolor=color.white,
+        style=label.style_label_down, size=size.normal)
+    line.delete(tp_line)
+    line.delete(sl_line)
+    tp_line := line.new(bar_index, attr_short_tp, bar_index + 1, attr_short_tp,
+                        extend=extend.right, color=color.new(color.lime, 0),
+                        style=line.style_dashed, width=2)
+    sl_line := line.new(bar_index, attr_short_sl, bar_index + 1, attr_short_sl,
+                        extend=extend.right, color=color.new(color.red, 0),
+                        style=line.style_dashed, width=2)
+
 // ─── ENTRY ALERTS ────────────────────────────────────────────────────────────
 alertcondition(gap_rej_long,   title="DXY Gap Rejection LONG",   message="DXY GAP REJECTION LONG\n⚠ CHECK NEWS!\nGap filled then price pulled back. 4H BB flat. Bullish confirmation candle.\nTP: London open + buffer | SL: 1:1 mirror\nGo LONG: USDCAD, USDJPY | Go SHORT: EURUSD, XAUUSD\nLondon open: {{plot_0}} | Price: {{close}} | {{time}}")
 alertcondition(gap_rej_short,  title="DXY Gap Rejection SHORT",  message="DXY GAP REJECTION SHORT\n⚠ CHECK NEWS!\nGap filled then price pulled back. 4H BB flat. Bearish confirmation candle.\nTP: London open - buffer | SL: 1:1 mirror\nGo SHORT: USDCAD, USDJPY | Go LONG: EURUSD, XAUUSD\nLondon open: {{plot_0}} | Price: {{close}} | {{time}}")
 alertcondition(rev_long,       title="DXY Reversal LONG",        message="DXY REVERSAL LONG\nPrice returned to London open level. 1H BB expanding bullish.\nStructural SL at prior day low.\nGo LONG: USDCAD, USDJPY | Go SHORT: EURUSD, XAUUSD\nOpening level: {{plot_0}} | Price: {{close}} | {{time}}")
 alertcondition(rev_short,      title="DXY Reversal SHORT",       message="DXY REVERSAL SHORT\nPrice returned to London open level. 1H BB expanding bearish.\nStructural SL at prior day high.\nGo SHORT: USDCAD, USDJPY | Go LONG: EURUSD, XAUUSD\nOpening level: {{plot_0}} | Price: {{close}} | {{time}}")
-alertcondition(lon_attr_long,  title="DXY LON_ATTR LONG",           message="DXY LON_ATTR LONG (Pin Bar)\nZone top pristine. 4H BB flat. Bull pin bar >= 1000 pts below London open.\nTP = zone near edge (zone_bot). SL = 1:1 mirror.\nGo LONG: USDCAD, USDJPY | Go SHORT: EURUSD, XAUUSD\nLondon open: {{plot_0}} | Price: {{close}} | {{time}}")
-alertcondition(gap_rej_long or gap_rej_short or rev_long or rev_short or lon_attr_long, title="DXY Trade Alert - Any Setup", message="DXY TRADE ALERT — Setup detected. Check direction and levels.\nPrice: {{close}} | {{time}}")
+alertcondition(lon_attr_long,  title="DXY LON_ATTR LONG",        message="DXY LON_ATTR LONG (Pin Bar)\nZone top pristine. 4H BB flat. Bull pin bar >= 1000 pts below London open.\nTP = zone near edge (zone_bot). SL = 1:1 mirror.\nGo LONG: USDCAD, USDJPY | Go SHORT: EURUSD, XAUUSD\nLondon open: {{plot_0}} | Price: {{close}} | {{time}}")
+alertcondition(attr_core_long,  title="DXY ATTR CORE LONG",      message="DXY ATTR CORE LONG\nPristine Tokyo gap zone — first approach, zone not yet touched. CORE filters passed.\nTP: gap-fill target (near-edge) | SL: 1:1 mirror\nDXY LONG = Go LONG: USDCAD, USDJPY | Go SHORT: EURUSD, AUDUSD, NZDUSD\nXAUUSD: Go SHORT (DXY up = Gold down)\nPrice: {{close}} | {{time}}")
+alertcondition(attr_core_short, title="DXY ATTR CORE SHORT",     message="DXY ATTR CORE SHORT\nPristine Tokyo gap zone — first approach, zone not yet touched. CORE filters passed.\nTP: gap-fill target (near-edge) | SL: 1:1 mirror\nDXY SHORT = Go SHORT: USDCAD, USDJPY | Go LONG: EURUSD, AUDUSD, NZDUSD\nXAUUSD: Go LONG (DXY down = Gold up) ← BEST SETUP (66.7% WR)\nPrice: {{close}} | {{time}}")
+alertcondition(gap_rej_long or gap_rej_short or rev_long or rev_short or lon_attr_long or attr_core_long or attr_core_short, title="DXY Trade Alert - Any Setup", message="DXY TRADE ALERT — Setup detected. Check direction and levels.\nPrice: {{close}} | {{time}}")
 
 // ─── EXIT TRACKING ────────────────────────────────────────────────────────────
 var float exit_tp_lvl    = na
@@ -553,6 +676,20 @@ if lon_attr_long
     exit_sl_lvl    := lon_attr_long_sl
     exit_tracking  := true
     exit_is_long   := true
+    exit_entry_bar := bar_index
+
+if attr_core_long
+    exit_tp_lvl    := attr_long_tp
+    exit_sl_lvl    := attr_long_sl
+    exit_tracking  := true
+    exit_is_long   := true
+    exit_entry_bar := bar_index
+
+if attr_core_short
+    exit_tp_lvl    := attr_short_tp
+    exit_sl_lvl    := attr_short_sl
+    exit_tracking  := true
+    exit_is_long   := false
     exit_entry_bar := bar_index
 
 // Detect TP/SL cross

@@ -43,13 +43,25 @@ start_date = input.time(timestamp("01 Aug 2023 00:00 +0000"), "Start Date", grou
 end_date   = input.time(timestamp("30 Apr 2026 23:59 +0000"), "End Date",   group=grp_bt)
 in_window  = time >= start_date and time <= end_date
 
-// ─── PAIR CONFIGURATION ───────────────────────────────────────────────────────
-grp_pair    = "Pair Configuration"
-pair_dir    = input.int(-1, "Direction  (+1 = USD-base   /   -1 = USD-quote or Gold)",
-    options=[-1, 1], group=grp_pair,
-    tooltip="+1: trade same direction as DXY (USDJPY, USDCAD, USDCHF).\n-1: trade inverse to DXY (EURUSD, GBPUSD, AUDUSD, NZDUSD, XAUUSD).")
-tick_factor = input.float(0.01, "Tick Conversion Factor", group=grp_pair, step=0.01,
-    tooltip="Scales DXY SL/TP distance → pair price distance.\n5dp FX (EURUSD/GBPUSD/AUDUSD/NZDUSD/USDCAD/USDCHF): 0.01\nUSDJPY: 1.0\nXAUUSD: 100.0")
+// ─── PAIR AUTO-DETECTION ─────────────────────────────────────────────────────
+// Direction and tick factor are set automatically from the chart symbol.
+// Switch freely between EURUSD / GBPUSD / AUDUSD / NZDUSD / USDCAD / USDCHF / USDJPY / XAUUSD
+// — no manual reconfiguration needed.
+string _sym = syminfo.ticker
+
+// pair_dir: +1 = USD is base (USDJPY, USDCAD, USDCHF) — trades same direction as DXY
+//           -1 = USD is quote or Gold (EURUSD, GBPUSD, AUDUSD, NZDUSD, XAUUSD) — inverse DXY
+bool   _usd_base   = str.contains(_sym, "USDJPY") or str.contains(_sym, "USDCAD") or str.contains(_sym, "USDCHF")
+int    pair_dir    = _usd_base ? 1 : -1
+
+// tick_factor: scales DXY pts → approximate pair price movement
+//   USDJPY: 1.0 | XAUUSD: 100.0 | all 5dp FX pairs (EURUSD/GBPUSD/AUDUSD/NZDUSD/USDCAD/USDCHF): 0.01
+float  tick_factor = str.contains(_sym, "USDJPY") ? 1.0 :
+                     str.contains(_sym, "XAUUSD") ? 100.0 : 0.01
+
+// ATTR CORE direction: XAUUSD = LONG only (DXY long → Gold short, 66.7% WR)
+//                      all other pairs = SHORT only (DXY short setup, 68.6% WR)
+string attr_core_dir = str.contains(_sym, "XAUUSD") ? "LONG only" : "SHORT only"
 
 // ─── SIGNAL PARAMETERS ───────────────────────────────────────────────────────
 grp_zone = "Signal Parameters"
@@ -69,6 +81,16 @@ attr_min_reward     = input.int(100,    "Attraction — Min Reward to TP (pts)",
 attr_near_buf       = input.int(50,     "Attraction — Near-Edge TP Buffer (pts)",             group=grp_zone, minval=0,   step=10,  tooltip="TP = DXY London open ± this buffer. Converted to pair price via tick_factor.")
 attr_use_near_tp    = input.bool(true,  "Attraction — Use Near-Edge TP (vs full gap fill)",   group=grp_zone)
 attr_max_prev_range = input.int(8000,   "Attraction — Max Prior Session Range (pts)",         group=grp_zone, minval=500, step=500, tooltip="Skip attraction if prior DXY session range exceeded this. Median DXY daily range ~4800 pts; 8000 passes ~85% of days.")
+
+// ATTR CORE (Pristine Zone Approach)
+attr_core_enabled  = input.bool(true, "Enable ATTR CORE (Pristine Zone Approach)", group=grp_zone,
+    tooltip="Fires when DXY approaches the Tokyo gap zone for the first time from outside — zone not yet touched. CORE filter: gap at London open < 1500 pts AND wave extension < 1500 pts. 32-month backtest: 70% WR, +65R across 6 pairs. Direction (LONG only / SHORT only) is auto-set from the chart symbol — XAUUSD = LONG only, all others = SHORT only.")
+core_gap_max       = input.int(1500, "ATTR CORE — Max Gap at London Open (pts)", group=grp_zone, minval=200, step=100,
+    tooltip="Maximum DXY distance (pts) from zone near edge at London open. CORE threshold: 1500 pts.")
+core_wave_max      = input.int(1500, "ATTR CORE — Max Wave Extension (pts)", group=grp_zone, minval=100, step=100,
+    tooltip="Maximum DXY wave extension (pts) away from zone after London open. CORE threshold: 1500 pts.")
+attr_approach_min  = input.int(150, "ATTR CORE — Min 3-bar Approach (pts)", group=grp_zone, minval=50, step=25,
+    tooltip="Minimum DXY move toward the zone over the last 3 bars (pts). Default: 150 pts.")
 
 // Reversal
 rev_enabled    = input.bool(true, "Enable Reversal Trades",                                   group=grp_zone)
@@ -175,12 +197,16 @@ if is_london_open_bar
 // Fallback: body of DXY 23:45 candle.
 bool is_tokyo_open = h_gmt == 23 and m_gmt == 45
 
-var float dxy_attr_target  = na
-var float dxy_attr_gap_pts = 0.0
-var bool  attr_traded      = false
-var bool  attr_gap_touched = false  // latches true once price crosses the gap target this session
+var float dxy_attr_target     = na
+var float dxy_attr_gap_pts    = 0.0
+var float dxy_attr_tokyo_open = na   // DXY 23:45 open = zone near edge (ATTR CORE)
+var bool  attr_traded         = false
+var bool  attr_gap_touched    = false  // latches true once price crosses the gap target this session
+var float dxy_lon_open_close  = na   // DXY close at London open bar (ATTR CORE reference)
+var float dxy_gap_at_lon      = 0.0  // gap from zone near edge to DXY close at London open (pts)
 
 if is_tokyo_open
+    dxy_attr_tokyo_open := dxy_o                  // ATTR CORE: zone near edge
     float raw_gap = (dxy_o - dxy_c[2]) * 10000   // 23:45 open vs 23:15 close
     if math.abs(raw_gap) >= 10
         dxy_attr_gap_pts := raw_gap
@@ -188,8 +214,10 @@ if is_tokyo_open
     else
         dxy_attr_gap_pts := (dxy_c - dxy_o) * 10000
         dxy_attr_target  := dxy_o
-    attr_traded      := false
-    attr_gap_touched := false   // zone is fresh/pristine at Tokyo open
+    attr_traded         := false
+    attr_gap_touched    := false                  // zone is fresh/pristine at Tokyo open
+    dxy_lon_open_close  := na                     // ATTR CORE: reset London open capture
+    dxy_gap_at_lon      := 0.0                    // ATTR CORE: reset gap-at-London measure
 
 // Latch: once the gap target is reached, zone is permanently filled for this session
 if not na(dxy_attr_target)
@@ -197,6 +225,14 @@ if not na(dxy_attr_target)
         attr_gap_touched := true
     else if dxy_attr_gap_pts > 0 and dxy_c <= dxy_attr_target
         attr_gap_touched := true
+
+// ATTR CORE: capture DXY close at London open for gap/wave filter
+if is_london_open_bar and not na(dxy_attr_target) and not attr_gap_touched
+    dxy_lon_open_close := dxy_c
+    if dxy_attr_gap_pts < 0   // gap down: near edge = dxy_attr_tokyo_open (higher)
+        dxy_gap_at_lon := math.max((dxy_attr_tokyo_open - dxy_c) * 10000, 0.0)
+    else if dxy_attr_gap_pts > 0   // gap up: near edge = dxy_attr_tokyo_open (lower)
+        dxy_gap_at_lon := math.max((dxy_c - dxy_attr_tokyo_open) * 10000, 0.0)
 
 // ─── DXY EXIT TRACKING ────────────────────────────────────────────────────────
 // Positions are closed when DXY crosses its TP or SL level (not pair price levels).
@@ -328,6 +364,20 @@ bool rev_short_cond = (rev_enabled and not na(dxy_london_open) and
     dxy_bb_1h == -1 and
     not na(dxy_pd_high) and dxy_rs_sl_d > 0)
 
+// ─── ATTR CORE PER-BAR CALCULATIONS (DXY) ────────────────────────────────────
+float dxy_wave_ext = 0.0
+if not na(dxy_lon_open_close)
+    if dxy_attr_gap_pts < 0
+        dxy_wave_ext := math.max((dxy_lon_open_close - dxy_c) * 10000, 0.0)
+    else if dxy_attr_gap_pts > 0
+        dxy_wave_ext := math.max((dxy_c - dxy_lon_open_close) * 10000, 0.0)
+
+bool dxy_impl_long  = (dxy_c - dxy_c[3]) * 10000 >= attr_approach_min
+bool dxy_impl_short = (dxy_c[3] - dxy_c) * 10000 >= attr_approach_min
+
+bool dxy_core_ok = (not na(dxy_lon_open_close) and
+    dxy_gap_at_lon < core_gap_max and dxy_wave_ext < core_wave_max)
+
 // ─── GAP REJECTION CONDITIONS (DXY) ──────────────────────────────────────────
 // Same filters as ATTR but fires AFTER gap has been filled (attr_gap_touched = true)
 bool gap_rej_long_cond  = (attr_enabled and not na(dxy_attr_target) and not attr_traded and attr_gap_touched and
@@ -352,6 +402,43 @@ bool gap_rej_short_cond = (attr_enabled and not na(dxy_attr_target) and not attr
 
 // Block further GAP_REJ signals once traded this session
 if gap_rej_long_cond or gap_rej_short_cond
+    attr_traded := true
+
+// ─── ATTR CORE CONDITIONS (DXY) ──────────────────────────────────────────────
+// Zone NOT yet touched. Pair direction filtered by attr_core_dir input.
+// ATTR CORE SHORT on DXY: use for EURUSD/AUDUSD/NZDUSD/USDCAD/USDJPY (pair_dir determines actual entry side)
+// ATTR CORE LONG on DXY:  use for XAUUSD only (DXY long = XAUUSD short, so pair_dir=-1 → strategy.short)
+bool attr_core_long_cond = (attr_core_enabled and not na(dxy_attr_target) and not attr_traded
+    and not attr_gap_touched
+    and in_sess and not in_japan
+    and not na(dxy_lon_open_close)
+    and dxy_attr_gap_pts < -attr_min_gap          // gap down setup
+    and dxy_c < dxy_attr_tokyo_open               // still below zone near edge
+    and dxy_al_reward >= attr_min_reward
+    and dxy_pd_range <= attr_max_prev_range
+    and dxy_bb_4h == 0
+    and dxy_bull_sig
+    and dxy_impl_long
+    and dxy_core_ok
+    and not na(dxy_al_sl_d) and dxy_al_sl_d > 0
+    and (attr_core_dir == "LONG only" or attr_core_dir == "Both"))
+
+bool attr_core_short_cond = (attr_core_enabled and not na(dxy_attr_target) and not attr_traded
+    and not attr_gap_touched
+    and in_sess and not in_japan
+    and not na(dxy_lon_open_close)
+    and dxy_attr_gap_pts > attr_min_gap           // gap up setup
+    and dxy_c > dxy_attr_tokyo_open               // still above zone near edge
+    and dxy_as_reward >= attr_min_reward
+    and dxy_pd_range <= attr_max_prev_range
+    and dxy_bb_4h == 0
+    and dxy_bear_sig
+    and dxy_impl_short
+    and dxy_core_ok
+    and not na(dxy_as_sl_d) and dxy_as_sl_d > 0
+    and (attr_core_dir == "SHORT only" or attr_core_dir == "Both"))
+
+if attr_core_long_cond or attr_core_short_cond
     attr_traded := true
 
 // ─── LON_ATTR CONDITIONS (DXY) ───────────────────────────────────────────────
@@ -465,30 +552,78 @@ if in_window and lon_attr_long_cond
         label.new(bar_index, high + cr_px, "▼ LON_ATTR↑\n" + str.tostring(math.round(-dxy_dist_from_open)) + " pts below open  |  4H flat",
             color=color.new(color.navy, 10), textcolor=color.white, style=label.style_label_down, size=size.small)
 
+// — ATTR CORE LONG (DXY gap down, first approach, zone pristine, CORE filter passed) ─────
+// DXY LONG → pair_dir=+1 goes LONG, pair_dir=-1 goes SHORT (e.g. XAUUSD: DXY up = Gold down)
+if in_window and attr_core_long_cond
+    dxy_tp_lvl     := dxy_al_tp
+    dxy_sl_lvl     := dxy_c - dxy_al_sl_d
+    dxy_trade_long := true
+    dxy_exit_track := true
+    dxy_entry_bar  := bar_index
+    int tdir = pair_dir
+    if tdir == 1
+        strategy.entry("AttrCore Long", strategy.long)
+        label.new(bar_index, low - cr_px,
+            "▲ CORE↑\nGap@Lon: " + str.tostring(math.round(dxy_gap_at_lon)) + " pts  |  Wave: " + str.tostring(math.round(dxy_wave_ext)) + " pts",
+            color=color.new(color.blue, 10), textcolor=color.white, style=label.style_label_up, size=size.small)
+    else
+        strategy.entry("AttrCore Long", strategy.short)
+        label.new(bar_index, high + cr_px,
+            "▼ CORE↑\nGap@Lon: " + str.tostring(math.round(dxy_gap_at_lon)) + " pts  |  Wave: " + str.tostring(math.round(dxy_wave_ext)) + " pts",
+            color=color.new(color.blue, 10), textcolor=color.white, style=label.style_label_down, size=size.small)
+
+// — ATTR CORE SHORT (DXY gap up, first approach, zone pristine, CORE filter passed) ─────
+// DXY SHORT → pair_dir=+1 goes SHORT, pair_dir=-1 goes LONG (e.g. EURUSD: DXY down = EUR up)
+if in_window and attr_core_short_cond
+    dxy_tp_lvl     := dxy_as_tp
+    dxy_sl_lvl     := dxy_c + dxy_as_sl_d
+    dxy_trade_long := false
+    dxy_exit_track := true
+    dxy_entry_bar  := bar_index
+    int tdir = -1 * pair_dir
+    if tdir == 1
+        strategy.entry("AttrCore Short", strategy.long)
+        label.new(bar_index, low - cr_px,
+            "▲ CORE↓\nGap@Lon: " + str.tostring(math.round(dxy_gap_at_lon)) + " pts  |  Wave: " + str.tostring(math.round(dxy_wave_ext)) + " pts",
+            color=color.new(color.blue, 10), textcolor=color.white, style=label.style_label_up, size=size.small)
+    else
+        strategy.entry("AttrCore Short", strategy.short)
+        label.new(bar_index, high + cr_px,
+            "▼ CORE↓\nGap@Lon: " + str.tostring(math.round(dxy_gap_at_lon)) + " pts  |  Wave: " + str.tostring(math.round(dxy_wave_ext)) + " pts",
+            color=color.new(color.blue, 10), textcolor=color.white, style=label.style_label_down, size=size.small)
+
 // ─── DXY EXIT ────────────────────────────────────────────────────────────────
 // Close all pair positions when DXY crosses its TP or SL level.
 // bar_index > dxy_entry_bar prevents same-bar entry + exit conflict.
+// pair_is_long = true when the PAIR trade direction is long (accounts for pair_dir inversion).
+//   DXY long + pair_dir +1 → pair long  (USDJPY/USDCAD go up when DXY goes up)
+//   DXY long + pair_dir -1 → pair short (EURUSD/XAUUSD go down when DXY goes up)
+//   DXY short + pair_dir +1 → pair short
+//   DXY short + pair_dir -1 → pair long
 if dxy_exit_track and not na(dxy_tp_lvl) and not na(dxy_sl_lvl) and bar_index > dxy_entry_bar
-    bool dxy_tp_cross = dxy_trade_long ? dxy_h >= dxy_tp_lvl : dxy_l <= dxy_tp_lvl
-    bool dxy_sl_cross = dxy_trade_long ? dxy_l <= dxy_sl_lvl : dxy_h >= dxy_sl_lvl
+    bool dxy_tp_cross  = dxy_trade_long ? dxy_h >= dxy_tp_lvl : dxy_l <= dxy_tp_lvl
+    bool dxy_sl_cross  = dxy_trade_long ? dxy_l <= dxy_sl_lvl : dxy_h >= dxy_sl_lvl
+    bool pair_is_long  = (dxy_trade_long and pair_dir == 1) or (not dxy_trade_long and pair_dir == -1)
     if dxy_tp_cross
         strategy.close_all(comment="DXY TP")
         dxy_exit_track := false
         dxy_tp_lvl     := na
         dxy_sl_lvl     := na
-        label.new(bar_index, dxy_trade_long ? low - cr_px : high + cr_px,
+        // TP hit: pair went in our favour — long pair price rose (label above), short pair price fell (label below)
+        label.new(bar_index, pair_is_long ? high + cr_px : low - cr_px,
             "✔ DXY TP",
             color=color.new(color.lime, 10), textcolor=color.black,
-            style=dxy_trade_long ? label.style_label_up : label.style_label_down, size=size.small)
+            style=pair_is_long ? label.style_label_down : label.style_label_up, size=size.small)
     else if dxy_sl_cross
         strategy.close_all(comment="DXY SL")
         dxy_exit_track := false
         dxy_tp_lvl     := na
         dxy_sl_lvl     := na
-        label.new(bar_index, dxy_trade_long ? low - cr_px : high + cr_px,
+        // SL hit: pair went against us — long pair price fell (label below), short pair price rose (label above)
+        label.new(bar_index, pair_is_long ? low - cr_px : high + cr_px,
             "✘ DXY SL",
             color=color.new(color.red, 10), textcolor=color.white,
-            style=dxy_trade_long ? label.style_label_up : label.style_label_down, size=size.small)
+            style=pair_is_long ? label.style_label_up : label.style_label_down, size=size.small)
 
 // ─── VISUALS ─────────────────────────────────────────────────────────────────
 bgcolor(show_session and in_sess ? color.new(color.blue, 93) : na, title="London Session")

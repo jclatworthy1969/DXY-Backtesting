@@ -1,0 +1,688 @@
+//@version=6
+// ─────────────────────────────────────────────────────────────────────────────
+// DXY Pair Levels  v1.0
+// Indicator (not strategy) — draws estimated pair TP/SL lines when DXY signals
+// fire. Apply to any DXY-correlated pair chart (15m).
+//
+// All signal logic mirrors DXYPairStrategy v3.0. DXY 15m OHLC is fetched via
+// request.security(). Entry/exit tracking uses DXY price levels, not pair levels.
+// Pair TP/SL lines are approximate (tick_factor conversion) — guidance only.
+//
+// PAIR CONFIGURATION:
+//   EURUSD / GBPUSD / AUDUSD / NZDUSD / XAUUSD  →  Dir: -1
+//   USDCAD / USDCHF / USDJPY                    →  Dir: +1
+//   5dp FX: factor 0.01  |  USDJPY: 1.0  |  XAUUSD: 100.0
+//
+// WEBHOOK: enable the toggle and create ONE alert on this indicator in
+//   TradingView with the "alert() function calls" condition, pointing to your
+//   webhook URL. Fires JSON on every entry and exit.
+// ─────────────────────────────────────────────────────────────────────────────
+indicator("DXY Pair Levels", overlay=true, max_labels_count=500, max_lines_count=500)
+
+// ─── PAIR AUTO-DETECTION ─────────────────────────────────────────────────────
+// Direction and tick factor are set automatically from the chart symbol.
+// Switch freely between EURUSD / GBPUSD / AUDUSD / NZDUSD / USDCAD / USDCHF / USDJPY / XAUUSD
+// — no manual reconfiguration needed.
+grp_pair    = "Pair Configuration"
+dxy_symbol  = input.symbol("TVC:DXY", "DXY Symbol", group=grp_pair,
+    tooltip="Symbol used to fetch DXY data.\nDefault: TVC:DXY (TradingView index).\nIf signals are missing in replay mode, change this to match the DXY symbol on your broker feed (e.g. FXCM:USDOLLAR, ICMARKETS:USDX, etc.).")
+
+string _sym = syminfo.ticker
+
+// pair_dir: +1 = USD is base (USDJPY, USDCAD, USDCHF) — trades same direction as DXY
+//           -1 = USD is quote or Gold (EURUSD, GBPUSD, AUDUSD, NZDUSD, XAUUSD) — inverse DXY
+bool   _usd_base   = str.contains(_sym, "USDJPY") or str.contains(_sym, "USDCAD") or str.contains(_sym, "USDCHF")
+int    pair_dir    = _usd_base ? 1 : -1
+
+// tick_factor: scales DXY pts → approximate pair price movement
+//   USDJPY: 1.0 | XAUUSD: 100.0 | all 5dp FX pairs: 0.01
+float  tick_factor = str.contains(_sym, "USDJPY") ? 1.0 :
+                     str.contains(_sym, "XAUUSD") ? 100.0 : 0.01
+
+// ATTR CORE direction: XAUUSD = LONG only (DXY long → Gold short, 66.7% WR)
+//                      all other pairs = SHORT only (DXY short setup, 68.6% WR)
+string attr_core_dir = str.contains(_sym, "XAUUSD") ? "LONG only" : "SHORT only"
+
+// ─── SIGNAL PARAMETERS (match DXYPairStrategy defaults) ──────────────────────
+grp_zone = "Signal Parameters"
+grp_sess = "Session Window (GMT)"
+grp_sig  = "Entry Signals"
+grp_htf  = "HTF Bias (BB Regime)"
+grp_disp = "Display"
+grp_wh   = "Webhook / Alerts"
+
+lon_attr_enabled   = input.bool(true,  "Enable London Open Attraction (LON_ATTR — LONG only)", group=grp_zone,
+    tooltip="Pin bar attraction toward DXY London session open. LONG only. 4H BB flat required.")
+lon_attr_min_long  = input.int(1000,   "LON_ATTR — Min Distance Long (pts below DXY open)",    group=grp_zone, minval=50, step=10)
+attr_enabled        = input.bool(true,  "Enable Gap Rejection Trades",                          group=grp_zone)
+attr_min_gap        = input.int(75,     "Attraction — Min Gap at Tokyo Open (pts)",              group=grp_zone, minval=10,  step=25)
+attr_min_reward     = input.int(100,    "Attraction — Min Reward to TP (pts)",                   group=grp_zone, minval=50,  step=25)
+attr_near_buf       = input.int(50,     "Attraction — Near-Edge TP Buffer (pts)",                group=grp_zone, minval=0,   step=10)
+attr_use_near_tp    = input.bool(true,  "Attraction — Use Near-Edge TP (vs full gap fill)",      group=grp_zone)
+attr_max_prev_range = input.int(8000,   "Attraction — Max Prior Session Range (pts)",            group=grp_zone, minval=500, step=500)
+
+// ATTR CORE (Pristine Zone Approach)
+attr_core_enabled  = input.bool(true, "Enable ATTR CORE (Pristine Zone Approach)", group=grp_zone,
+    tooltip="Fires when DXY approaches the Tokyo gap zone for the first time from outside — zone not yet touched. CORE filter: gap at London open < 1500 pts AND wave extension < 1500 pts. 32-month backtest: 70% WR, +65R across 6 pairs. Direction auto-set from symbol (XAUUSD = LONG only, all others = SHORT only).")
+core_gap_max       = input.int(1500, "ATTR CORE — Max Gap at London Open (pts)", group=grp_zone, minval=200, step=100)
+core_wave_max      = input.int(1500, "ATTR CORE — Max Wave Extension (pts)",     group=grp_zone, minval=100, step=100)
+attr_approach_min  = input.int(150,  "ATTR CORE — Min 3-bar Approach (pts)",     group=grp_zone, minval=50,  step=25)
+
+rev_enabled    = input.bool(true, "Enable Reversal Trades",                                      group=grp_zone)
+rev_proximity  = input.int(250,   "Reversal — Max Distance from Opening Level (pts)",            group=grp_zone, minval=25,  step=25)
+rev_min_move   = input.int(400,   "Reversal — Min Move Away from Opening (pts)",                 group=grp_zone, minval=25,  step=25)
+struct_sl_buf  = input.int(50,    "Reversal — Structural SL Buffer (pts)",                       group=grp_zone, minval=0,   step=10)
+max_sl_pts     = input.int(3000,  "Reversal — Max SL Distance (pts)",                            group=grp_zone, minval=500, step=250)
+
+// Session
+entry_start_h = input.int(7,  "REV Entry Start Hour (GMT)",      group=grp_sess, minval=0, maxval=23)
+entry_start_m = input.int(0,  "REV Entry Start Minute (GMT)",    group=grp_sess, minval=0, maxval=59)
+attr_start_h  = input.int(6,  "ATTR Entry Start Hour (GMT)",     group=grp_sess, minval=0, maxval=23)
+attr_start_m  = input.int(0,  "ATTR Entry Start Minute (GMT)",   group=grp_sess, minval=0, maxval=59)
+entry_end_h   = input.int(19, "Entry End Hour (GMT)",            group=grp_sess, minval=0, maxval=23)
+entry_end_m   = input.int(30, "Entry End Minute (GMT)",          group=grp_sess, minval=0, maxval=59)
+rev_end_h     = input.int(12, "Reversal — Entry End Hour (GMT)", group=grp_sess, minval=6, maxval=19)
+rev_end_m     = input.int(0,  "Reversal — Entry End Min (GMT)",  group=grp_sess, minval=0, maxval=59)
+monday_start  = input.int(6,  "Monday Start Hour (GMT)",         group=grp_sess, minval=0, maxval=23)
+japan_end_h   = input.int(6,  "Japan Session End Hour (GMT)",    group=grp_sess, minval=1, maxval=8)
+lon_attr_end_h= input.int(18, "LON_ATTR — Entry End Hour (GMT)", group=grp_sess, minval=7, maxval=22)
+
+// Candle patterns
+use_engulf    = input.bool(true,  "Engulfing Candle",        group=grp_sig)
+use_pin       = input.bool(true,  "Pin Bar (directional)",   group=grp_sig)
+use_3bar      = input.bool(true,  "3-Bar Reversal",          group=grp_sig)
+pin_wick_mult = input.float(2.0,  "Pin Bar — Min Wick:Body", group=grp_sig, minval=1.0, step=0.25)
+
+// HTF BB
+bb_period     = input.int(20,    "BB Period",                        group=grp_htf, minval=5,  maxval=50)
+bb_std_mult   = input.float(2.0, "BB Std Dev Multiplier",           group=grp_htf, minval=0.5, step=0.25)
+bb_lookback   = input.int(20,    "BB Width Lookback (flat detect)",  group=grp_htf, minval=5,  maxval=50)
+
+// Display
+show_session  = input.bool(true,  "Show London Session Background", group=grp_disp)
+show_tp_sl    = input.bool(true,  "Show TP/SL Lines",                group=grp_disp)
+
+// Webhook
+enable_webhook = input.bool(false, "Enable Webhook Alerts", group=grp_wh,
+    tooltip="Fires alert() JSON on every entry and exit.\nCreate ONE alert on this indicator in TradingView with the 'alert() function calls' condition.\nPoint the notification to your webhook URL.")
+
+// ─── DXY 15m OHLC ─────────────────────────────────────────────────────────────
+dxy_o = request.security(dxy_symbol, "15", open,  lookahead=barmerge.lookahead_off)
+dxy_h = request.security(dxy_symbol, "15", high,  lookahead=barmerge.lookahead_off)
+dxy_l = request.security(dxy_symbol, "15", low,   lookahead=barmerge.lookahead_off)
+dxy_c = request.security(dxy_symbol, "15", close, lookahead=barmerge.lookahead_off)
+
+// ─── SESSION FLAGS ────────────────────────────────────────────────────────────
+h_gmt       = hour(time, "UTC")
+m_gmt       = minute(time, "UTC")
+is_mon      = dayofweek(time, "UTC") == dayofweek.monday
+mon_min     = monday_start * 60 + 30
+c_min       = h_gmt * 60 + m_gmt
+e_min       = entry_end_h * 60 + entry_end_m
+r_end_min   = rev_end_h   * 60 + rev_end_m
+rev_s_min   = is_mon ? mon_min : entry_start_h * 60 + entry_start_m
+attr_s_min  = is_mon ? mon_min : attr_start_h  * 60 + attr_start_m
+in_sess          = c_min >= attr_s_min and c_min <= e_min
+in_rev_sess      = c_min >= rev_s_min  and c_min <= r_end_min
+in_japan         = (h_gmt == 23 and m_gmt >= 45) or (h_gmt >= 0 and h_gmt < japan_end_h)
+lon_attr_end_min = lon_attr_end_h * 60
+in_lon_attr_sess = c_min > rev_s_min and c_min <= lon_attr_end_min
+
+is_london_open_bar = not in_japan and
+     ((not is_mon and c_min == entry_start_h * 60 + entry_start_m) or
+      (is_mon      and c_min == monday_start  * 60 + 30))
+
+bool is_new_day = not na(time) and ta.change(dayofmonth(time, "UTC")) != 0
+
+// ─── DXY PRIOR DAY HIGH / LOW ─────────────────────────────────────────────────
+var float dxy_today_high = na
+var float dxy_today_low  = na
+var float dxy_pd_high    = na
+var float dxy_pd_low     = na
+var float dxy_pd_range   = 0.0
+
+if is_new_day
+    if not na(dxy_today_high)
+        dxy_pd_high  := dxy_today_high
+        dxy_pd_low   := dxy_today_low
+        dxy_pd_range := (dxy_today_high - dxy_today_low) * 10000
+    dxy_today_high := dxy_h
+    dxy_today_low  := dxy_l
+else
+    dxy_today_high := na(dxy_today_high) ? dxy_h : math.max(dxy_today_high, dxy_h)
+    dxy_today_low  := na(dxy_today_low)  ? dxy_l : math.min(dxy_today_low,  dxy_l)
+
+// ─── DXY LONDON OPEN LEVEL ────────────────────────────────────────────────────
+var float dxy_london_open   = na
+var float dxy_max_move_up   = 0.0
+var float dxy_max_move_down = 0.0
+var bool  lon_attr_traded   = false
+var float dxy_lon_zone_top  = na
+var float dxy_lon_zone_bot  = na
+var bool  dxy_pristine_long = true
+
+if is_london_open_bar
+    dxy_london_open    := dxy_o
+    dxy_max_move_up    := 0.0
+    dxy_max_move_down  := 0.0
+    lon_attr_traded    := false
+    dxy_lon_zone_top   := math.max(dxy_o, dxy_c)
+    dxy_lon_zone_bot   := math.min(dxy_o, dxy_c)
+    dxy_pristine_long  := true
+
+// ─── DXY TOKYO OPEN GAP ───────────────────────────────────────────────────────
+bool is_tokyo_open = h_gmt == 23 and m_gmt == 45
+
+var float dxy_attr_target     = na
+var float dxy_attr_gap_pts    = 0.0
+var float dxy_attr_tokyo_open = na   // DXY 23:45 open = zone near edge (ATTR CORE)
+var bool  attr_traded         = false
+var bool  attr_gap_touched    = false
+var float dxy_lon_open_close  = na   // DXY close at London open bar (ATTR CORE)
+var float dxy_gap_at_lon      = 0.0  // gap from zone near edge to DXY close at London open (pts)
+
+if is_tokyo_open
+    dxy_attr_tokyo_open := dxy_o
+    float raw_gap = (dxy_o - dxy_c[2]) * 10000
+    if math.abs(raw_gap) >= 10
+        dxy_attr_gap_pts := raw_gap
+        dxy_attr_target  := dxy_c[2]
+    else
+        dxy_attr_gap_pts := (dxy_c - dxy_o) * 10000
+        dxy_attr_target  := dxy_o
+    attr_traded         := false
+    attr_gap_touched    := false
+    dxy_lon_open_close  := na
+    dxy_gap_at_lon      := 0.0
+
+if not na(dxy_attr_target)
+    if dxy_attr_gap_pts < 0 and dxy_c >= dxy_attr_target
+        attr_gap_touched := true
+    else if dxy_attr_gap_pts > 0 and dxy_c <= dxy_attr_target
+        attr_gap_touched := true
+
+// ATTR CORE: capture DXY close at London open bar and measure gap-at-London
+if is_london_open_bar and not na(dxy_attr_target) and not attr_gap_touched
+    dxy_lon_open_close := dxy_c
+    if dxy_attr_gap_pts < 0
+        dxy_gap_at_lon := math.max((dxy_attr_tokyo_open - dxy_c) * 10000, 0.0)
+    else if dxy_attr_gap_pts > 0
+        dxy_gap_at_lon := math.max((dxy_c - dxy_attr_tokyo_open) * 10000, 0.0)
+
+// ─── DXY MAX MOVE & PRISTINE TRACKING ────────────────────────────────────────
+if not na(dxy_london_open) and not in_japan
+    float above = (dxy_c - dxy_london_open) * 10000
+    if above > 0
+        dxy_max_move_up   := math.max(dxy_max_move_up,    above)
+    else if above < 0
+        dxy_max_move_down := math.max(dxy_max_move_down, -above)
+
+if not in_japan and not is_london_open_bar and not na(dxy_lon_zone_top)
+    if dxy_o >= dxy_lon_zone_top or dxy_c >= dxy_lon_zone_top
+        dxy_pristine_long := false
+
+// ─── DXY HTF BB REGIME ────────────────────────────────────────────────────────
+dxy_1h_basis  = request.security(dxy_symbol, "60",  ta.sma(close, bb_period),                                            lookahead=barmerge.lookahead_off)
+dxy_1h_basis3 = request.security(dxy_symbol, "60",  ta.sma(close, bb_period)[3],                                         lookahead=barmerge.lookahead_off)
+dxy_1h_width  = request.security(dxy_symbol, "60",  ta.stdev(close, bb_period) * bb_std_mult * 2.0,                      lookahead=barmerge.lookahead_off)
+dxy_1h_wavg   = request.security(dxy_symbol, "60",  ta.sma(ta.stdev(close, bb_period) * bb_std_mult * 2.0, bb_lookback), lookahead=barmerge.lookahead_off)
+dxy_1h_exp    = dxy_1h_width > dxy_1h_wavg
+dxy_1h_sup    = dxy_1h_basis > dxy_1h_basis3
+dxy_bb_1h     = dxy_1h_exp ? (dxy_1h_sup ? 1 : -1) : 0
+
+dxy_4h_basis  = request.security(dxy_symbol, "240", ta.sma(close, bb_period),                                            lookahead=barmerge.lookahead_off)
+dxy_4h_basis3 = request.security(dxy_symbol, "240", ta.sma(close, bb_period)[3],                                         lookahead=barmerge.lookahead_off)
+dxy_4h_width  = request.security(dxy_symbol, "240", ta.stdev(close, bb_period) * bb_std_mult * 2.0,                      lookahead=barmerge.lookahead_off)
+dxy_4h_wavg   = request.security(dxy_symbol, "240", ta.sma(ta.stdev(close, bb_period) * bb_std_mult * 2.0, bb_lookback), lookahead=barmerge.lookahead_off)
+dxy_4h_exp    = dxy_4h_width > dxy_4h_wavg
+dxy_4h_sup    = dxy_4h_basis > dxy_4h_basis3
+dxy_bb_4h     = dxy_4h_exp ? (dxy_4h_sup ? 1 : -1) : 0
+
+// ─── DXY CANDLE MEASUREMENTS ─────────────────────────────────────────────────
+dxy_bs   = math.abs(dxy_c - dxy_o)
+dxy_btop = math.max(dxy_o, dxy_c)
+dxy_bbot = math.min(dxy_o, dxy_c)
+dxy_uw   = dxy_h - dxy_btop
+dxy_lw   = dxy_bbot - dxy_l
+dxy_cr   = dxy_h - dxy_l
+dxy_bs1  = math.abs(dxy_c[1] - dxy_o[1])
+
+// ─── DXY ENTRY SIGNALS ───────────────────────────────────────────────────────
+bull_eng = use_engulf and dxy_c > dxy_o and not (dxy_c[1] > dxy_o[1]) and dxy_c > dxy_o[1] and dxy_o < dxy_c[1] and dxy_bs >= dxy_bs1 * 0.8
+bear_eng = use_engulf and dxy_c < dxy_o and not (dxy_c[1] < dxy_o[1]) and dxy_c < dxy_o[1] and dxy_o > dxy_c[1] and dxy_bs >= dxy_bs1 * 0.8
+bull_pin = use_pin and dxy_lw >= dxy_bs * pin_wick_mult and dxy_lw >= dxy_uw * 1.5 and dxy_cr > 0
+bear_pin = use_pin and dxy_uw >= dxy_bs * pin_wick_mult and dxy_uw >= dxy_lw * 1.5 and dxy_cr > 0
+dxy_b2r  = math.abs(dxy_c[2] - dxy_o[2])
+dxy_ind  = dxy_bs1 <= dxy_b2r * 0.5
+bull_3b  = use_3bar and dxy_c[2] < dxy_o[2] and dxy_ind and dxy_c > dxy_o and dxy_c > dxy_o[2]
+bear_3b  = use_3bar and dxy_c[2] > dxy_o[2] and dxy_ind and dxy_c < dxy_o and dxy_c < dxy_o[2]
+bool _dxy_bull_raw = bull_eng or bull_pin or bull_3b
+bool _dxy_bear_raw = bear_eng or bear_pin or bear_3b
+bool _dxy_both     = _dxy_bull_raw and _dxy_bear_raw
+dxy_bull_sig = _dxy_bull_raw and not (_dxy_both and dxy_c <= dxy_o)
+dxy_bear_sig = _dxy_bear_raw and not (_dxy_both and dxy_c >= dxy_o)
+
+// LON_ATTR pin bar (always active, independent of use_pin)
+la_dxy_bp_r  = dxy_lw >= dxy_bs * pin_wick_mult and dxy_lw >= dxy_uw * 1.5 and dxy_cr > 0
+la_dxy_brp_r = dxy_uw >= dxy_bs * pin_wick_mult and dxy_uw >= dxy_lw * 1.5 and dxy_cr > 0
+bool _la_dxy_pb  = la_dxy_bp_r and la_dxy_brp_r
+la_dxy_bull_pin  = la_dxy_bp_r  and not (_la_dxy_pb and dxy_c <= dxy_o)
+
+// ─── DXY DISTANCE & SL/TP LEVELS ─────────────────────────────────────────────
+float dxy_dist_from_open = not na(dxy_london_open) ? (dxy_c - dxy_london_open) * 10000 : na
+bool  dxy_at_open_level  = not na(dxy_dist_from_open) and math.abs(dxy_dist_from_open) <= rev_proximity
+
+// Reversal SL
+float dxy_rl_raw_sl  = na(dxy_pd_low)  ? dxy_c - max_sl_pts / 10000.0 : dxy_pd_low  - struct_sl_buf / 10000.0
+float dxy_rl_sl      = math.max(dxy_rl_raw_sl,  dxy_c - max_sl_pts / 10000.0)
+float dxy_rl_sl_d    = dxy_c - dxy_rl_sl
+float dxy_rs_raw_sl  = na(dxy_pd_high) ? dxy_c + max_sl_pts / 10000.0 : dxy_pd_high + struct_sl_buf / 10000.0
+float dxy_rs_sl      = math.min(dxy_rs_raw_sl, dxy_c + max_sl_pts / 10000.0)
+float dxy_rs_sl_d    = dxy_rs_sl - dxy_c
+
+// Attraction (GAP_REJ) TP
+float dxy_al_tp     = attr_use_near_tp ? dxy_attr_target - attr_near_buf / 10000.0 : dxy_attr_target
+float dxy_as_tp     = attr_use_near_tp ? dxy_attr_target + attr_near_buf / 10000.0 : dxy_attr_target
+float dxy_al_sl_d   = not na(dxy_al_tp) ? dxy_al_tp - dxy_c : na
+float dxy_as_sl_d   = not na(dxy_as_tp) ? dxy_c - dxy_as_tp : na
+float dxy_al_reward = not na(dxy_al_sl_d) ? dxy_al_sl_d * 10000 : 0.0
+float dxy_as_reward = not na(dxy_as_sl_d) ? dxy_as_sl_d * 10000 : 0.0
+
+// LON_ATTR TP/SL
+float dxy_la_long_tp   = dxy_lon_zone_bot
+float dxy_la_long_sl_d = dxy_lon_zone_bot - dxy_c
+float dxy_la_long_sl   = dxy_c - dxy_la_long_sl_d
+
+// ─── ATTR CORE PER-BAR CALCULATIONS ──────────────────────────────────────────
+float dxy_wave_ext = 0.0
+if not na(dxy_lon_open_close)
+    if dxy_attr_gap_pts < 0
+        dxy_wave_ext := math.max((dxy_lon_open_close - dxy_c) * 10000, 0.0)
+    else if dxy_attr_gap_pts > 0
+        dxy_wave_ext := math.max((dxy_c - dxy_lon_open_close) * 10000, 0.0)
+bool dxy_impl_long  = (dxy_c - dxy_c[3]) * 10000 >= attr_approach_min
+bool dxy_impl_short = (dxy_c[3] - dxy_c) * 10000 >= attr_approach_min
+bool dxy_core_ok    = (not na(dxy_lon_open_close) and
+    dxy_gap_at_lon < core_gap_max and dxy_wave_ext < core_wave_max)
+
+// ─── SIGNAL CONDITIONS ────────────────────────────────────────────────────────
+bool rev_long_cond = (rev_enabled and not na(dxy_london_open) and
+    in_rev_sess and not in_japan and
+    dxy_max_move_down >= rev_min_move and
+    dxy_at_open_level and dxy_bull_sig and dxy_bb_1h == 1 and
+    not na(dxy_pd_low) and dxy_rl_sl_d > 0)
+
+bool rev_short_cond = (rev_enabled and not na(dxy_london_open) and
+    in_rev_sess and not in_japan and
+    dxy_max_move_up >= rev_min_move and
+    dxy_at_open_level and dxy_bear_sig and dxy_bb_1h == -1 and
+    not na(dxy_pd_high) and dxy_rs_sl_d > 0)
+
+bool gap_rej_long_cond = (attr_enabled and not na(dxy_attr_target) and not attr_traded and attr_gap_touched and
+    in_sess and not in_japan and
+    dxy_attr_gap_pts < -attr_min_gap and dxy_c < dxy_attr_target and
+    dxy_pd_range <= attr_max_prev_range and dxy_bb_4h == 0 and
+    dxy_bull_sig and dxy_al_reward >= attr_min_reward and
+    not na(dxy_al_sl_d) and dxy_al_sl_d > 0)
+
+bool gap_rej_short_cond = (attr_enabled and not na(dxy_attr_target) and not attr_traded and attr_gap_touched and
+    in_sess and not in_japan and
+    dxy_attr_gap_pts > attr_min_gap and dxy_c > dxy_attr_target and
+    dxy_pd_range <= attr_max_prev_range and dxy_bb_4h == 0 and
+    dxy_bear_sig and dxy_as_reward >= attr_min_reward and
+    not na(dxy_as_sl_d) and dxy_as_sl_d > 0)
+
+if gap_rej_long_cond or gap_rej_short_cond
+    attr_traded := true
+
+bool lon_attr_long_cond = (lon_attr_enabled and not lon_attr_traded and
+    not na(dxy_london_open) and in_lon_attr_sess and not in_japan and
+    dxy_dist_from_open <= -lon_attr_min_long and
+    dxy_pristine_long and dxy_bb_4h == 0 and
+    dxy_la_long_sl_d > 0 and la_dxy_bull_pin)
+
+if lon_attr_long_cond
+    lon_attr_traded := true
+
+bool attr_core_long_cond = (attr_core_enabled and not na(dxy_attr_target) and not attr_traded
+    and not attr_gap_touched
+    and in_sess and not in_japan
+    and not na(dxy_lon_open_close)
+    and dxy_attr_gap_pts < -attr_min_gap
+    and dxy_c < dxy_attr_target
+    and dxy_al_reward >= attr_min_reward
+    and dxy_pd_range <= attr_max_prev_range
+    and dxy_bb_4h == 0
+    and dxy_bull_sig
+    and dxy_impl_long
+    and dxy_core_ok
+    and not na(dxy_al_sl_d) and dxy_al_sl_d > 0
+    and (attr_core_dir == "LONG only" or attr_core_dir == "Both"))
+
+bool attr_core_short_cond = (attr_core_enabled and not na(dxy_attr_target) and not attr_traded
+    and not attr_gap_touched
+    and in_sess and not in_japan
+    and not na(dxy_lon_open_close)
+    and dxy_attr_gap_pts > attr_min_gap
+    and dxy_c > dxy_attr_target
+    and dxy_as_reward >= attr_min_reward
+    and dxy_pd_range <= attr_max_prev_range
+    and dxy_bb_4h == 0
+    and dxy_bear_sig
+    and dxy_impl_short
+    and dxy_core_ok
+    and not na(dxy_as_sl_d) and dxy_as_sl_d > 0
+    and (attr_core_dir == "SHORT only" or attr_core_dir == "Both"))
+
+if attr_core_long_cond or attr_core_short_cond
+    attr_traded := true
+
+// ─── STATE TRACKING ──────────────────────────────────────────────────────────
+var float dxy_tp_lvl     = na       // DXY TP level for open trade
+var float dxy_sl_lvl     = na       // DXY SL level for open trade
+var float pair_tp_lvl    = na       // estimated pair TP price
+var float pair_sl_lvl    = na       // estimated pair SL price
+var bool  dxy_trade_long = true     // DXY direction of open trade
+var bool  dxy_exit_track = false    // position open and monitoring DXY exit
+var int   dxy_entry_bar  = -1       // bar_index of last entry
+var line  tp_line_ref    = na       // TP line object
+var line  sl_line_ref    = na       // SL line object
+var string sig_name      = ""       // signal name for webhook/labels
+
+// ─── HELPER: extend existing lines to current bar ─────────────────────────────
+// Called each bar while a trade is open to keep lines extending rightward.
+if dxy_exit_track and not na(tp_line_ref)
+    line.set_x2(tp_line_ref, bar_index + 1)
+    line.set_x2(sl_line_ref, bar_index + 1)
+
+// ─── ENTRY HELPER (local function) ───────────────────────────────────────────
+// Inline entry logic called once per signal type. pd_eff determines pair direction.
+//   pd_eff  = +pair_dir  for DXY LONG signals
+//   pd_eff  = -pair_dir  for DXY SHORT signals
+// Pair TP = pair_entry + pd_eff * dxy_sl_d_decimal * tick_factor
+// Pair SL = pair_entry - pd_eff * dxy_sl_d_decimal * tick_factor  (1:1 initial)
+
+float cr_px = high - low   // pair candle range for label offset
+
+// ─── ENTRY: GAP REJECTION LONG ───────────────────────────────────────────────
+if gap_rej_long_cond
+    if not na(tp_line_ref)
+        line.delete(tp_line_ref)
+        line.delete(sl_line_ref)
+    float pd_eff     = pair_dir
+    float p_sl_d     = dxy_al_sl_d * tick_factor
+    float p_tp       = close + pd_eff * p_sl_d
+    float p_sl       = close - pd_eff * p_sl_d
+    dxy_tp_lvl      := dxy_al_tp
+    dxy_sl_lvl      := dxy_c - dxy_al_sl_d
+    pair_tp_lvl     := p_tp
+    pair_sl_lvl     := p_sl
+    dxy_trade_long  := true
+    dxy_exit_track  := true
+    dxy_entry_bar   := bar_index
+    sig_name        := "GAP_REJ_LONG"
+    bool pair_long   = pd_eff > 0
+    if show_tp_sl
+        tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20),  width=1, style=line.style_dashed)
+        sl_line_ref := line.new(bar_index, p_sl, bar_index + 1, p_sl, color=color.new(color.red,  20),  width=1, style=line.style_dashed)
+    label.new(bar_index, pair_long ? low - cr_px : high + cr_px,
+        "▲ GAP REJ DXY↑\nTP: " + str.tostring(p_tp, format.mintick) + "  SL: " + str.tostring(p_sl, format.mintick) + "\nGap: " + str.tostring(math.round(math.abs(dxy_attr_gap_pts))) + " pts",
+        color=color.new(color.orange, 10), textcolor=color.white,
+        style=pair_long ? label.style_label_up : label.style_label_down, size=size.small)
+    if enable_webhook
+        alert('{"event":"ENTRY","pair":"' + syminfo.ticker + '","signal":"GAP_REJ_LONG","pair_dir":"' + (pair_long ? "LONG" : "SHORT") + '","entry":' + str.tostring(close, format.mintick) + ',"tp":' + str.tostring(p_tp, format.mintick) + ',"sl":' + str.tostring(p_sl, format.mintick) + ',"sl_pts":' + str.tostring(math.round(dxy_al_sl_d * 10000)) + ',"dxy_entry":' + str.tostring(dxy_c) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
+
+// ─── ENTRY: GAP REJECTION SHORT ──────────────────────────────────────────────
+if gap_rej_short_cond
+    if not na(tp_line_ref)
+        line.delete(tp_line_ref)
+        line.delete(sl_line_ref)
+    float pd_eff     = -pair_dir
+    float p_sl_d     = dxy_as_sl_d * tick_factor
+    float p_tp       = close + pd_eff * p_sl_d
+    float p_sl       = close - pd_eff * p_sl_d
+    dxy_tp_lvl      := dxy_as_tp
+    dxy_sl_lvl      := dxy_c + dxy_as_sl_d
+    pair_tp_lvl     := p_tp
+    pair_sl_lvl     := p_sl
+    dxy_trade_long  := false
+    dxy_exit_track  := true
+    dxy_entry_bar   := bar_index
+    sig_name        := "GAP_REJ_SHORT"
+    bool pair_long   = pd_eff > 0
+    if show_tp_sl
+        tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20), width=1, style=line.style_dashed)
+        sl_line_ref := line.new(bar_index, p_sl, bar_index + 1, p_sl, color=color.new(color.red,  20), width=1, style=line.style_dashed)
+    label.new(bar_index, pair_long ? low - cr_px : high + cr_px,
+        "▲ GAP REJ DXY↓\nTP: " + str.tostring(p_tp, format.mintick) + "  SL: " + str.tostring(p_sl, format.mintick) + "\nGap: " + str.tostring(math.round(dxy_attr_gap_pts)) + " pts",
+        color=color.new(color.orange, 10), textcolor=color.white,
+        style=pair_long ? label.style_label_up : label.style_label_down, size=size.small)
+    if enable_webhook
+        alert('{"event":"ENTRY","pair":"' + syminfo.ticker + '","signal":"GAP_REJ_SHORT","pair_dir":"' + (pair_long ? "LONG" : "SHORT") + '","entry":' + str.tostring(close, format.mintick) + ',"tp":' + str.tostring(p_tp, format.mintick) + ',"sl":' + str.tostring(p_sl, format.mintick) + ',"sl_pts":' + str.tostring(math.round(dxy_as_sl_d * 10000)) + ',"dxy_entry":' + str.tostring(dxy_c) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
+
+// ─── ENTRY: REVERSAL LONG ─────────────────────────────────────────────────────
+if rev_long_cond
+    if not na(tp_line_ref)
+        line.delete(tp_line_ref)
+        line.delete(sl_line_ref)
+    float pd_eff     = pair_dir
+    float p_sl_d     = dxy_rl_sl_d * tick_factor
+    float p_tp       = close + pd_eff * p_sl_d
+    float p_sl       = close - pd_eff * p_sl_d
+    dxy_tp_lvl      := dxy_c + dxy_rl_sl_d
+    dxy_sl_lvl      := dxy_rl_sl
+    pair_tp_lvl     := p_tp
+    pair_sl_lvl     := p_sl
+    dxy_trade_long  := true
+    dxy_exit_track  := true
+    dxy_entry_bar   := bar_index
+    sig_name        := "REV_LONG"
+    bool pair_long   = pd_eff > 0
+    if show_tp_sl
+        tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20), width=1, style=line.style_dashed)
+        sl_line_ref := line.new(bar_index, p_sl, bar_index + 1, p_sl, color=color.new(color.red,  20), width=1, style=line.style_dashed)
+    label.new(bar_index, pair_long ? low - cr_px : high + cr_px,
+        "▲ REV DXY↑\nTP: " + str.tostring(p_tp, format.mintick) + "  SL: " + str.tostring(p_sl, format.mintick) + "\nDXY SL: " + str.tostring(math.round(dxy_rl_sl_d * 10000)) + " pts",
+        color=color.new(color.teal, 10), textcolor=color.white,
+        style=pair_long ? label.style_label_up : label.style_label_down, size=size.small)
+    if enable_webhook
+        alert('{"event":"ENTRY","pair":"' + syminfo.ticker + '","signal":"REV_LONG","pair_dir":"' + (pair_long ? "LONG" : "SHORT") + '","entry":' + str.tostring(close, format.mintick) + ',"tp":' + str.tostring(p_tp, format.mintick) + ',"sl":' + str.tostring(p_sl, format.mintick) + ',"sl_pts":' + str.tostring(math.round(dxy_rl_sl_d * 10000)) + ',"dxy_entry":' + str.tostring(dxy_c) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
+
+// ─── ENTRY: REVERSAL SHORT ────────────────────────────────────────────────────
+if rev_short_cond
+    if not na(tp_line_ref)
+        line.delete(tp_line_ref)
+        line.delete(sl_line_ref)
+    float pd_eff     = -pair_dir
+    float p_sl_d     = dxy_rs_sl_d * tick_factor
+    float p_tp       = close + pd_eff * p_sl_d
+    float p_sl       = close - pd_eff * p_sl_d
+    dxy_tp_lvl      := dxy_c - dxy_rs_sl_d
+    dxy_sl_lvl      := dxy_rs_sl
+    pair_tp_lvl     := p_tp
+    pair_sl_lvl     := p_sl
+    dxy_trade_long  := false
+    dxy_exit_track  := true
+    dxy_entry_bar   := bar_index
+    sig_name        := "REV_SHORT"
+    bool pair_long   = pd_eff > 0
+    if show_tp_sl
+        tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20), width=1, style=line.style_dashed)
+        sl_line_ref := line.new(bar_index, p_sl, bar_index + 1, p_sl, color=color.new(color.red,  20), width=1, style=line.style_dashed)
+    label.new(bar_index, pair_long ? low - cr_px : high + cr_px,
+        "▲ REV DXY↓\nTP: " + str.tostring(p_tp, format.mintick) + "  SL: " + str.tostring(p_sl, format.mintick) + "\nDXY SL: " + str.tostring(math.round(dxy_rs_sl_d * 10000)) + " pts",
+        color=color.new(color.purple, 10), textcolor=color.white,
+        style=pair_long ? label.style_label_up : label.style_label_down, size=size.small)
+    if enable_webhook
+        alert('{"event":"ENTRY","pair":"' + syminfo.ticker + '","signal":"REV_SHORT","pair_dir":"' + (pair_long ? "LONG" : "SHORT") + '","entry":' + str.tostring(close, format.mintick) + ',"tp":' + str.tostring(p_tp, format.mintick) + ',"sl":' + str.tostring(p_sl, format.mintick) + ',"sl_pts":' + str.tostring(math.round(dxy_rs_sl_d * 10000)) + ',"dxy_entry":' + str.tostring(dxy_c) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
+
+// ─── ENTRY: LON_ATTR LONG ─────────────────────────────────────────────────────
+if lon_attr_long_cond
+    if not na(tp_line_ref)
+        line.delete(tp_line_ref)
+        line.delete(sl_line_ref)
+    float pd_eff     = pair_dir
+    float p_sl_d     = dxy_la_long_sl_d * tick_factor
+    float p_tp       = close + pd_eff * p_sl_d
+    float p_sl       = close - pd_eff * p_sl_d
+    dxy_tp_lvl      := dxy_la_long_tp
+    dxy_sl_lvl      := dxy_la_long_sl
+    pair_tp_lvl     := p_tp
+    pair_sl_lvl     := p_sl
+    dxy_trade_long  := true
+    dxy_exit_track  := true
+    dxy_entry_bar   := bar_index
+    sig_name        := "LON_ATTR_LONG"
+    bool pair_long   = pd_eff > 0
+    if show_tp_sl
+        tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20), width=1, style=line.style_dashed)
+        sl_line_ref := line.new(bar_index, p_sl, bar_index + 1, p_sl, color=color.new(color.red,  20), width=1, style=line.style_dashed)
+    label.new(bar_index, pair_long ? low - cr_px : high + cr_px,
+        "▲ LON_ATTR DXY↑\nTP: " + str.tostring(p_tp, format.mintick) + "  SL: " + str.tostring(p_sl, format.mintick) + "\n" + str.tostring(math.round(-dxy_dist_from_open)) + " pts below open  |  4H flat",
+        color=color.new(color.navy, 10), textcolor=color.white,
+        style=pair_long ? label.style_label_up : label.style_label_down, size=size.small)
+    if enable_webhook
+        alert('{"event":"ENTRY","pair":"' + syminfo.ticker + '","signal":"LON_ATTR_LONG","pair_dir":"' + (pair_long ? "LONG" : "SHORT") + '","entry":' + str.tostring(close, format.mintick) + ',"tp":' + str.tostring(p_tp, format.mintick) + ',"sl":' + str.tostring(p_sl, format.mintick) + ',"sl_pts":' + str.tostring(math.round(dxy_la_long_sl_d * 10000)) + ',"dxy_entry":' + str.tostring(dxy_c) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
+
+// ─── ENTRY: ATTR CORE LONG ────────────────────────────────────────────────────
+if attr_core_long_cond
+    if not na(tp_line_ref)
+        line.delete(tp_line_ref)
+        line.delete(sl_line_ref)
+    float pd_eff     = pair_dir
+    float p_sl_d     = dxy_al_sl_d * tick_factor
+    float p_tp       = close + pd_eff * p_sl_d
+    float p_sl       = close - pd_eff * p_sl_d
+    dxy_tp_lvl      := dxy_al_tp
+    dxy_sl_lvl      := dxy_c - dxy_al_sl_d
+    pair_tp_lvl     := p_tp
+    pair_sl_lvl     := p_sl
+    dxy_trade_long  := true
+    dxy_exit_track  := true
+    dxy_entry_bar   := bar_index
+    sig_name        := "ATTR_CORE_LONG"
+    bool pair_long   = pd_eff > 0
+    if show_tp_sl
+        tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20), width=1, style=line.style_dashed)
+        sl_line_ref := line.new(bar_index, p_sl, bar_index + 1, p_sl, color=color.new(color.red,  20), width=1, style=line.style_dashed)
+    label.new(bar_index, pair_long ? low - cr_px : high + cr_px,
+        (pair_long ? "▲" : "▼") + " ATTR CORE DXY↑\nTP: " + str.tostring(p_tp, format.mintick) + "  SL: " + str.tostring(p_sl, format.mintick) + "\nGap@Lon: " + str.tostring(math.round(dxy_gap_at_lon)) + " pts  |  WaveExt: " + str.tostring(math.round(dxy_wave_ext)) + " pts",
+        color=color.new(color.blue, 10), textcolor=color.white,
+        style=pair_long ? label.style_label_up : label.style_label_down, size=size.small)
+    if enable_webhook
+        alert('{"event":"ENTRY","pair":"' + syminfo.ticker + '","signal":"ATTR_CORE_LONG","pair_dir":"' + (pair_long ? "LONG" : "SHORT") + '","entry":' + str.tostring(close, format.mintick) + ',"tp":' + str.tostring(p_tp, format.mintick) + ',"sl":' + str.tostring(p_sl, format.mintick) + ',"sl_pts":' + str.tostring(math.round(dxy_al_sl_d * 10000)) + ',"gap_at_lon":' + str.tostring(math.round(dxy_gap_at_lon)) + ',"wave_ext":' + str.tostring(math.round(dxy_wave_ext)) + ',"dxy_entry":' + str.tostring(dxy_c) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
+
+// ─── ENTRY: ATTR CORE SHORT ───────────────────────────────────────────────────
+if attr_core_short_cond
+    if not na(tp_line_ref)
+        line.delete(tp_line_ref)
+        line.delete(sl_line_ref)
+    float pd_eff     = -pair_dir
+    float p_sl_d     = dxy_as_sl_d * tick_factor
+    float p_tp       = close + pd_eff * p_sl_d
+    float p_sl       = close - pd_eff * p_sl_d
+    dxy_tp_lvl      := dxy_as_tp
+    dxy_sl_lvl      := dxy_c + dxy_as_sl_d
+    pair_tp_lvl     := p_tp
+    pair_sl_lvl     := p_sl
+    dxy_trade_long  := false
+    dxy_exit_track  := true
+    dxy_entry_bar   := bar_index
+    sig_name        := "ATTR_CORE_SHORT"
+    bool pair_long   = pd_eff > 0
+    if show_tp_sl
+        tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20), width=1, style=line.style_dashed)
+        sl_line_ref := line.new(bar_index, p_sl, bar_index + 1, p_sl, color=color.new(color.red,  20), width=1, style=line.style_dashed)
+    label.new(bar_index, pair_long ? low - cr_px : high + cr_px,
+        (pair_long ? "▲" : "▼") + " ATTR CORE DXY↓\nTP: " + str.tostring(p_tp, format.mintick) + "  SL: " + str.tostring(p_sl, format.mintick) + "\nGap@Lon: " + str.tostring(math.round(dxy_gap_at_lon)) + " pts  |  WaveExt: " + str.tostring(math.round(dxy_wave_ext)) + " pts",
+        color=color.new(color.blue, 10), textcolor=color.white,
+        style=pair_long ? label.style_label_up : label.style_label_down, size=size.small)
+    if enable_webhook
+        alert('{"event":"ENTRY","pair":"' + syminfo.ticker + '","signal":"ATTR_CORE_SHORT","pair_dir":"' + (pair_long ? "LONG" : "SHORT") + '","entry":' + str.tostring(close, format.mintick) + ',"tp":' + str.tostring(p_tp, format.mintick) + ',"sl":' + str.tostring(p_sl, format.mintick) + ',"sl_pts":' + str.tostring(math.round(dxy_as_sl_d * 10000)) + ',"gap_at_lon":' + str.tostring(math.round(dxy_gap_at_lon)) + ',"wave_ext":' + str.tostring(math.round(dxy_wave_ext)) + ',"dxy_entry":' + str.tostring(dxy_c) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
+
+// ─── DXY EXIT ────────────────────────────────────────────────────────────────
+// Monitor DXY price against its TP/SL levels. On hit: terminate lines and
+// draw exit label at estimated pair TP/SL price (not actual pair close).
+if dxy_exit_track and not na(dxy_tp_lvl) and not na(dxy_sl_lvl) and bar_index > dxy_entry_bar
+    bool dxy_tp_cross = dxy_trade_long ? dxy_h >= dxy_tp_lvl : dxy_l <= dxy_tp_lvl
+    bool dxy_sl_cross = dxy_trade_long ? dxy_l <= dxy_sl_lvl : dxy_h >= dxy_sl_lvl
+
+    if dxy_tp_cross or dxy_sl_cross
+        bool is_tp       = dxy_tp_cross
+        string result    = is_tp ? "TP" : "SL"
+        float exit_price = is_tp ? pair_tp_lvl : pair_sl_lvl
+        bool  pair_long  = (dxy_trade_long and pair_dir > 0) or (not dxy_trade_long and pair_dir < 0)
+
+        // Terminate lines at this bar
+        if show_tp_sl and not na(tp_line_ref)
+            line.set_x2(tp_line_ref, bar_index)
+            line.set_x2(sl_line_ref, bar_index)
+
+        // Exit label at estimated pair TP or SL price
+        label.new(bar_index, exit_price,
+            (is_tp ? "✔ TP" : "✘ SL") + "\n" + sig_name + "\n" + str.tostring(exit_price, format.mintick),
+            color=is_tp ? color.new(color.lime, 10) : color.new(color.red, 10),
+            textcolor=is_tp ? color.black : color.white,
+            style=pair_long ? label.style_label_up : label.style_label_down, size=size.small)
+
+        if enable_webhook
+            alert('{"event":"EXIT","pair":"' + syminfo.ticker + '","result":"' + result + '","signal":"' + sig_name + '","exit_price":' + str.tostring(exit_price, format.mintick) + ',"dxy_exit":' + str.tostring(dxy_c) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
+
+        // Reset state
+        dxy_exit_track := false
+        dxy_tp_lvl     := na
+        dxy_sl_lvl     := na
+        pair_tp_lvl    := na
+        pair_sl_lvl    := na
+        tp_line_ref    := na
+        sl_line_ref    := na
+        sig_name       := ""
+
+// ─── FRIDAY SESSION CLOSE RESET ──────────────────────────────────────────────
+// No trades held over the weekend. At Friday session end, terminate any open
+// trade lines and wipe all intraday DXY state so Monday starts clean.
+var bool week_reset_done = false
+bool is_fri = dayofweek(time, "UTC") == dayofweek.friday
+if not is_fri
+    week_reset_done := false
+bool do_friday_reset = is_fri and c_min >= e_min and not week_reset_done
+
+if do_friday_reset
+    week_reset_done := true
+    if dxy_exit_track
+        if show_tp_sl and not na(tp_line_ref)
+            line.set_x2(tp_line_ref, bar_index)
+            line.set_x2(sl_line_ref, bar_index)
+        label.new(bar_index, not na(pair_tp_lvl) ? pair_tp_lvl : close,
+            "⚑ WK END\n" + sig_name,
+            color=color.new(color.gray, 30), textcolor=color.white,
+            style=label.style_label_down, size=size.tiny)
+    dxy_exit_track    := false
+    dxy_tp_lvl        := na
+    dxy_sl_lvl        := na
+    pair_tp_lvl       := na
+    pair_sl_lvl       := na
+    tp_line_ref       := na
+    sl_line_ref       := na
+    sig_name          := ""
+    dxy_london_open   := na
+    dxy_max_move_up   := 0.0
+    dxy_max_move_down := 0.0
+    lon_attr_traded   := false
+    dxy_lon_zone_top  := na
+    dxy_lon_zone_bot  := na
+    dxy_pristine_long := true
+    attr_traded         := false
+    attr_gap_touched    := false
+    dxy_attr_target     := na
+    dxy_attr_gap_pts    := 0.0
+    dxy_attr_tokyo_open := na
+    dxy_lon_open_close  := na
+    dxy_gap_at_lon      := 0.0
+
+// ─── VISUALS ─────────────────────────────────────────────────────────────────
+bgcolor(show_session and in_sess ? color.new(color.blue, 93) : na, title="London Session")
+
+// Note: DXY opening level (~100) is not plotted here — plotting it on a pair
+// chart (~1.05) would distort the Y-axis scale and compress all pair drawings.
+
