@@ -17,7 +17,7 @@
 //   TradingView with the "alert() function calls" condition, pointing to your
 //   webhook URL. Fires JSON on every entry and exit.
 // ─────────────────────────────────────────────────────────────────────────────
-indicator("DXY Pair Levels", overlay=true, max_labels_count=500, max_lines_count=500, calc_on_every_tick=false)
+indicator("DXY Pair Levels", overlay=true, max_labels_count=500, max_lines_count=500)
 
 // ─── PAIR AUTO-DETECTION ─────────────────────────────────────────────────────
 // Direction and tick factor are set automatically from the chart symbol.
@@ -310,27 +310,31 @@ bool rev_long_cond = (rev_enabled and not na(dxy_london_open) and
     in_rev_sess and not in_japan and
     dxy_max_move_down >= rev_min_move and
     dxy_at_open_level and dxy_bull_sig and dxy_bb_1h == 1 and
-    not na(dxy_pd_low) and dxy_rl_sl_d > 0)
+    not na(dxy_pd_low) and dxy_rl_sl_d > 0 and
+    barstate.isconfirmed)
 
 bool rev_short_cond = (rev_enabled and not na(dxy_london_open) and
     in_rev_sess and not in_japan and
     dxy_max_move_up >= rev_min_move and
     dxy_at_open_level and dxy_bear_sig and dxy_bb_1h == -1 and
-    not na(dxy_pd_high) and dxy_rs_sl_d > 0)
+    not na(dxy_pd_high) and dxy_rs_sl_d > 0 and
+    barstate.isconfirmed)
 
 bool gap_rej_long_cond = (attr_enabled and not na(dxy_attr_target) and not attr_traded and attr_gap_touched and
     in_sess and not in_japan and
     dxy_attr_gap_pts < -attr_min_gap and dxy_c < dxy_attr_target and
     dxy_pd_range <= attr_max_prev_range and dxy_bb_4h == 0 and
     dxy_bull_sig and dxy_al_reward >= attr_min_reward and
-    not na(dxy_al_sl_d) and dxy_al_sl_d > 0)
+    not na(dxy_al_sl_d) and dxy_al_sl_d > 0 and
+    barstate.isconfirmed)
 
 bool gap_rej_short_cond = (attr_enabled and not na(dxy_attr_target) and not attr_traded and attr_gap_touched and
     in_sess and not in_japan and
     dxy_attr_gap_pts > attr_min_gap and dxy_c > dxy_attr_target and
     dxy_pd_range <= attr_max_prev_range and dxy_bb_4h == 0 and
     dxy_bear_sig and dxy_as_reward >= attr_min_reward and
-    not na(dxy_as_sl_d) and dxy_as_sl_d > 0)
+    not na(dxy_as_sl_d) and dxy_as_sl_d > 0 and
+    barstate.isconfirmed)
 
 if gap_rej_long_cond or gap_rej_short_cond
     attr_traded := true
@@ -339,7 +343,8 @@ bool lon_attr_long_cond = (lon_attr_enabled and not lon_attr_traded and
     not na(dxy_london_open) and in_lon_attr_sess and not in_japan and
     dxy_dist_from_open <= -lon_attr_min_long and
     dxy_pristine_long and dxy_bb_4h == 0 and
-    dxy_la_long_sl_d > 0 and la_dxy_bull_pin)
+    dxy_la_long_sl_d > 0 and la_dxy_bull_pin and
+    barstate.isconfirmed)
 
 if lon_attr_long_cond
     lon_attr_traded := true
@@ -357,7 +362,8 @@ bool attr_core_long_cond = (attr_core_enabled and not na(dxy_attr_target) and no
     and dxy_impl_long
     and dxy_core_ok
     and not na(dxy_al_sl_d) and dxy_al_sl_d > 0
-    and (attr_core_dir == "LONG only" or attr_core_dir == "Both"))
+    and (attr_core_dir == "LONG only" or attr_core_dir == "Both")
+    and barstate.isconfirmed)
 
 bool attr_core_short_cond = (attr_core_enabled and not na(dxy_attr_target) and not attr_traded
     and not attr_gap_touched
@@ -372,7 +378,8 @@ bool attr_core_short_cond = (attr_core_enabled and not na(dxy_attr_target) and n
     and dxy_impl_short
     and dxy_core_ok
     and not na(dxy_as_sl_d) and dxy_as_sl_d > 0
-    and (attr_core_dir == "SHORT only" or attr_core_dir == "Both"))
+    and (attr_core_dir == "SHORT only" or attr_core_dir == "Both")
+    and barstate.isconfirmed)
 
 if attr_core_long_cond or attr_core_short_cond
     attr_traded := true
@@ -603,7 +610,7 @@ if attr_core_short_cond
 // ─── DXY EXIT ────────────────────────────────────────────────────────────────
 // Monitor DXY price against its TP/SL levels. On hit: terminate lines and
 // draw exit label at estimated pair TP/SL price (not actual pair close).
-if dxy_exit_track and not na(dxy_tp_lvl) and not na(dxy_sl_lvl) and bar_index > dxy_entry_bar
+if dxy_exit_track and not na(dxy_tp_lvl) and not na(dxy_sl_lvl) and bar_index > dxy_entry_bar and barstate.isconfirmed
     bool dxy_tp_cross = dxy_trade_long ? dxy_h >= dxy_tp_lvl : dxy_l <= dxy_tp_lvl
     bool dxy_sl_cross = dxy_trade_long ? dxy_l <= dxy_sl_lvl : dxy_h >= dxy_sl_lvl
 

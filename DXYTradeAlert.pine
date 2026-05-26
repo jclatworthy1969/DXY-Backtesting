@@ -1,5 +1,5 @@
 //@version=6
-indicator("DXY Trade Alert", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=100, calc_on_every_tick=false)
+indicator("DXY Trade Alert", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=100)
 
 // ─── INPUTS ──────────────────────────────────────────────────────────────────
 grp_zone = "Signal Parameters"
@@ -357,7 +357,8 @@ rev_long  = (rev_enabled and not na(london_open_price) and
     bull_sig and
     bb_1h == 1 and
     not na(pd_low) and
-    rev_long_sl_d > 0)
+    rev_long_sl_d > 0 and
+    barstate.isconfirmed)
 
 rev_short = (rev_enabled and not na(london_open_price) and
     in_rev_sess and not in_japan and
@@ -366,7 +367,8 @@ rev_short = (rev_enabled and not na(london_open_price) and
     bear_sig and
     bb_1h == -1 and
     not na(pd_high) and
-    rev_short_sl_d > 0)
+    rev_short_sl_d > 0 and
+    barstate.isconfirmed)
 
 // ─── ATTR CORE PER-BAR CALCULATIONS ──────────────────────────────────────────
 // Wave extension: how far DXY moved away from zone AFTER London open (further = worse)
@@ -396,7 +398,8 @@ gap_rej_long  = (attr_enabled and not na(attr_gap_target) and not attr_traded an
     bb_4h == 0 and
     bull_sig and
     attr_long_reward >= attr_min_reward and
-    not na(attr_long_sl_d) and attr_long_sl_d > 0)
+    not na(attr_long_sl_d) and attr_long_sl_d > 0 and
+    barstate.isconfirmed)
 
 gap_rej_short = (attr_enabled and not na(attr_gap_target) and not attr_traded and attr_gap_touched and
     in_sess and not in_japan and
@@ -406,7 +409,8 @@ gap_rej_short = (attr_enabled and not na(attr_gap_target) and not attr_traded an
     bb_4h == 0 and
     bear_sig and
     attr_short_reward >= attr_min_reward and
-    not na(attr_short_sl_d) and attr_short_sl_d > 0)
+    not na(attr_short_sl_d) and attr_short_sl_d > 0 and
+    barstate.isconfirmed)
 
 // Block further gap-window signals once any one has traded this session
 if gap_rej_long or gap_rej_short
@@ -428,7 +432,8 @@ bool attr_core_long = (attr_core_enabled and not na(attr_gap_target) and not att
     and bull_sig
     and impl_attr_long
     and core_filter_ok
-    and not na(attr_long_sl_d) and attr_long_sl_d > 0)
+    and not na(attr_long_sl_d) and attr_long_sl_d > 0
+    and barstate.isconfirmed)
 
 bool attr_core_short = (attr_core_enabled and not na(attr_gap_target) and not attr_traded
     and not attr_gap_touched
@@ -442,7 +447,8 @@ bool attr_core_short = (attr_core_enabled and not na(attr_gap_target) and not at
     and bear_sig
     and impl_attr_short
     and core_filter_ok
-    and not na(attr_short_sl_d) and attr_short_sl_d > 0)
+    and not na(attr_short_sl_d) and attr_short_sl_d > 0
+    and barstate.isconfirmed)
 
 if attr_core_long or attr_core_short
     attr_traded := true
@@ -461,7 +467,8 @@ bool lon_attr_long = (lon_attr_enabled and
     lon_pristine_long and                       // pristine: no candle open/close has touched zone top
     bb_4h == 0 and                             // 4H BB flat — eliminates counter-trend drag
     lon_attr_long_sl_d > 0 and                 // zone_bot must be above entry (valid TP)
-    la_bull_pin)                                // bull pin bar only
+    la_bull_pin and                             // bull pin bar only
+    barstate.isconfirmed)
 
 if lon_attr_long
     lon_attr_traded := true
@@ -720,8 +727,8 @@ if attr_core_short
 
 // Detect TP/SL cross
 bool _can_exit  = exit_tracking and bar_index > exit_entry_bar
-bool dxy_tp_hit = _can_exit and (exit_is_long ? high >= exit_tp_lvl : low  <= exit_tp_lvl)
-bool dxy_sl_hit = _can_exit and (exit_is_long ? low  <= exit_sl_lvl : high >= exit_sl_lvl)
+bool dxy_tp_hit = _can_exit and barstate.isconfirmed and (exit_is_long ? high >= exit_tp_lvl : low  <= exit_tp_lvl)
+bool dxy_sl_hit = _can_exit and barstate.isconfirmed and (exit_is_long ? low  <= exit_sl_lvl : high >= exit_sl_lvl)
 
 if dxy_tp_hit or dxy_sl_hit
     exit_tracking := false
