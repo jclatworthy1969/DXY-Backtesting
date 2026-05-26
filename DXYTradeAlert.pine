@@ -1,5 +1,5 @@
 //@version=6
-indicator("DXY Trade Alert", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=100)
+indicator("DXY Trade Alert", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=100, calc_on_every_tick=false)
 
 // ─── INPUTS ──────────────────────────────────────────────────────────────────
 grp_zone = "Signal Parameters"

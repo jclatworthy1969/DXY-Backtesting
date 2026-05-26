@@ -17,7 +17,7 @@
 //   TradingView with the "alert() function calls" condition, pointing to your
 //   webhook URL. Fires JSON on every entry and exit.
 // ─────────────────────────────────────────────────────────────────────────────
-indicator("DXY Pair Levels", overlay=true, max_labels_count=500, max_lines_count=500)
+indicator("DXY Pair Levels", overlay=true, max_labels_count=500, max_lines_count=500, calc_on_every_tick=false)
 
 // ─── PAIR AUTO-DETECTION ─────────────────────────────────────────────────────
 // Direction and tick factor are set automatically from the chart symbol.
