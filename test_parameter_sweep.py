@@ -1,27 +1,19 @@
 """
 test_parameter_sweep.py
 =======================
-Sweep the three key distance / gap parameters to find their optimal values
+Sweep the key distance / gap parameters to find their optimal values
 for maximising pair returns (fractional R, DXY-exit approach).
 
 Parameters swept
 ----------------
-  1. GAP_REJ  attr_min_gap   : 25 – 600 pts (25-pt steps)
-       Minimum gap size at Tokyo open required for a GAP_REJ signal to fire.
-       Current default: 150 pts.
+  1. GAP_REJ  attr_min_gap        : 25 – 600 pts (25-pt steps)
+  2. REV      rev_proximity       : 25 – 500 pts (25-pt steps)
+  3. REV      rev_min_move        : 25 – 600 pts (25-pt steps)
+  4. LON_ATTR LONG  min_distance  : 200 – 2000 pts (25-pt steps)
+  5. LON_ATTR SHORT min_distance  : 200 – 2000 pts (25-pt steps)
 
-  2. REV      rev_proximity  : 25 – 500 pts (25-pt steps)
-       Maximum distance (pts) between close and London open price at entry.
-       Lower = price must be very close to open. Current default: 150 pts.
-       Held constant during min_move sweep (at 150 pts).
-
-  3. REV      rev_min_move   : 25 – 600 pts (25-pt steps)
-       Minimum pts price must have moved away from London open before a
-       reversal is valid. Higher = cleaner reversals.
-       Current default: 100 pts.
-       Held constant during proximity sweep (at 100 pts).
-
-LON_ATTR (already swept to 1000 pts) is excluded here.
+  LON_ATTR LONG and SHORT are swept independently so that LONG-only vs
+  SHORT-only performance can be compared directly.
 
 Method
 ------
@@ -41,14 +33,16 @@ import dxy_clean_rules as r
 PAIRS   = r.PAIRS
 MIN_N   = 8    # minimum pair-trade count to report as meaningful
 
-GAP_THRESHOLDS   = list(range(25, 625, 25))   # attr_min_gap sweep
-PROX_THRESHOLDS  = list(range(25, 525, 25))   # rev_proximity sweep
-MOVE_THRESHOLDS  = list(range(25, 625, 25))   # rev_min_move sweep
+GAP_THRESHOLDS      = list(range(25,  625, 25))   # attr_min_gap sweep
+PROX_THRESHOLDS     = list(range(25,  525, 25))   # rev_proximity sweep
+MOVE_THRESHOLDS     = list(range(25,  625, 25))   # rev_min_move sweep
+LON_ATTR_THRESHOLDS = list(range(200, 2025, 25))  # LON_ATTR distance sweep
 
 # Current defaults (held fixed when sweeping the other parameter)
-DEFAULT_PROX = 150
-DEFAULT_MOVE = 100
-DEFAULT_GAP  = 150
+DEFAULT_PROX     = 150
+DEFAULT_MOVE     = 100
+DEFAULT_GAP      = 150
+DEFAULT_LON_DIST = 1000
 
 # ── Load data ────────────────────────────────────────────────────────────────
 print("Loading data...")
@@ -318,6 +312,135 @@ print(f"REV: {n_rl} LONG + {n_rs} SHORT = {len(rev_sigs)} total  "
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# SCAN 3: LON_ATTR  (distance=0 to collect all, store actual dist_from_open)
+#   Pin bars only (lower wick >= 2x body for LONG, upper wick >= 2x body for SHORT).
+#   Pristine zone: body of London open candle (zone_top / zone_bot).
+#   TP = lon_zone_bot for both directions (near edge LONG, far edge SHORT).
+#   One signal per session. No BB filter.
+# ════════════════════════════════════════════════════════════════════════════
+print("Scanning LON_ATTR signals (min_distance=0)...")
+
+# Pin bar vectors (LON_ATTR uses pin bars only — engulfing and 3-bar excluded)
+_body_sz    = (df_scan['close'] - df_scan['open']).abs()
+_body_top   = df_scan[['open', 'close']].max(axis=1)
+_body_bot   = df_scan[['open', 'close']].min(axis=1)
+_upper_wick = df_scan['high'] - _body_top
+_lower_wick = _body_bot - df_scan['low']
+_cndl_range = df_scan['high'] - df_scan['low']
+_PIN_MULT   = 2.0
+_bull_pin   = (_lower_wick >= _body_sz * _PIN_MULT) & (_lower_wick >= _upper_wick * 1.5) & (_cndl_range > 0)
+_bear_pin   = (_upper_wick >= _body_sz * _PIN_MULT) & (_upper_wick >= _lower_wick * 1.5) & (_cndl_range > 0)
+
+LON_ATTR_END = 18 * 60    # 18:00 UTC — entry window closes
+
+london_open_price  = np.nan
+lon_zone_top       = np.nan
+lon_zone_bot       = np.nan
+lon_pristine_long  = True
+lon_pristine_short = True
+lon_attr_traded    = False
+
+lon_sigs = []
+
+for i in range(2, len(df_scan)):
+    row = df_scan.iloc[i]
+    c, o = row['close'], row['open']
+    ts   = row['time']
+    hour, minute = ts.hour, ts.minute
+    curr_min = hour * 60 + minute
+    dow = ts.dayofweek
+    in_japan = ((hour == 23) and (minute >= 45)) or (0 <= hour < 6)
+
+    is_london_open = (not in_japan and hour == imp.LON_OPEN_HOUR
+                      and minute == imp.LON_OPEN_MINUTE and dow != 0)
+    is_monday_open = (not in_japan and hour == imp.MON_OPEN_HOUR
+                      and minute == imp.MON_OPEN_MINUTE and dow == 0)
+    is_london_open_bar = is_london_open or is_monday_open
+
+    if is_london_open_bar:
+        london_open_price  = o
+        lon_zone_top       = max(o, c)
+        lon_zone_bot       = min(o, c)
+        lon_pristine_long  = True
+        lon_pristine_short = True
+        lon_attr_traded    = False
+        continue   # skip entry on the London open bar itself
+
+    if np.isnan(london_open_price):
+        continue
+
+    # Pristine zone violation tracking (Japan session candles excluded)
+    if not in_japan and not np.isnan(lon_zone_top):
+        if o >= lon_zone_top or c >= lon_zone_top:
+            lon_pristine_long  = False
+        if o <= lon_zone_bot or c <= lon_zone_bot:
+            lon_pristine_short = False
+
+    # Session window: strictly after London open until 18:00 UTC
+    lon_start   = (imp.MON_OPEN_HOUR * 60 + imp.MON_OPEN_MINUTE if dow == 0
+                   else imp.LON_OPEN_HOUR * 60 + imp.LON_OPEN_MINUTE)
+    in_lon_sess = lon_start < curr_min <= LON_ATTR_END and not in_japan
+
+    if not (in_lon_sess and not lon_attr_traded and not np.isnan(lon_zone_top)):
+        continue
+
+    bb_1h_i = int(row['bb_1h'])
+    bb_4h_i = int(row['bb_4h'])
+
+    # LON_ATTR LONG: price is BELOW London open, zone top pristine, bull pin bar
+    dist_below = (london_open_price - c) * 10000   # positive when below open
+    if dist_below > 0 and lon_pristine_long and _bull_pin.at[i]:
+        sl_d = lon_zone_bot - c          # TP distance (zone_bot above entry)
+        if sl_d > 0:
+            tp  = lon_zone_bot
+            sl  = c - sl_d
+            out, epx, ebar = r.resolve(df_scan, i, c, tp, sl, 'long')
+            lon_sigs.append({
+                'type': 'LON_ATTR_LONG', 'entry_time': str(ts),
+                'entry': round(c,5), 'tp': round(tp,5), 'sl': round(sl,5),
+                'sl_pts': round(sl_d*10000), 'tp_pts': round(sl_d*10000),
+                'london_open': round(london_open_price,5),
+                'lon_zone_top': round(lon_zone_top,5), 'lon_zone_bot': round(lon_zone_bot,5),
+                'pristine': True, 'outcome': out, 'exit_px': round(epx,5),
+                'exit_time': str(df_scan.at[ebar,'time']),
+                'bias_1h': bb_1h_i, 'bias_4h': bb_4h_i,
+                'dist': round(dist_below),
+            })
+            lon_attr_traded = True
+            continue
+
+    # LON_ATTR SHORT: price is ABOVE London open, zone bot pristine, bear pin bar
+    dist_above = (c - london_open_price) * 10000   # positive when above open
+    if dist_above > 0 and lon_pristine_short and _bear_pin.at[i]:
+        sl_d = c - lon_zone_bot          # TP distance (zone_bot below entry)
+        if sl_d > 0:
+            tp  = lon_zone_bot
+            sl  = c + sl_d
+            out, epx, ebar = r.resolve(df_scan, i, c, tp, sl, 'short')
+            lon_sigs.append({
+                'type': 'LON_ATTR_SHORT', 'entry_time': str(ts),
+                'entry': round(c,5), 'tp': round(tp,5), 'sl': round(sl,5),
+                'sl_pts': round(sl_d*10000), 'tp_pts': round(sl_d*10000),
+                'london_open': round(london_open_price,5),
+                'lon_zone_top': round(lon_zone_top,5), 'lon_zone_bot': round(lon_zone_bot,5),
+                'pristine': True, 'outcome': out, 'exit_px': round(epx,5),
+                'exit_time': str(df_scan.at[ebar,'time']),
+                'bias_1h': bb_1h_i, 'bias_4h': bb_4h_i,
+                'dist': round(dist_above),
+            })
+            lon_attr_traded = True
+
+n_ll = sum(1 for s in lon_sigs if s['type']=='LON_ATTR_LONG')
+n_ls = sum(1 for s in lon_sigs if s['type']=='LON_ATTR_SHORT')
+if lon_sigs:
+    print(f"LON_ATTR: {n_ll} LONG + {n_ls} SHORT = {len(lon_sigs)} total  "
+          f"(dist range: {min(s['dist'] for s in lon_sigs):.0f}–"
+          f"{max(s['dist'] for s in lon_sigs):.0f} pts)\n")
+else:
+    print("LON_ATTR: 0 signals found\n")
+
+
+# ════════════════════════════════════════════════════════════════════════════
 # PAIR RETURN HELPER
 # ════════════════════════════════════════════════════════════════════════════
 def pair_net_r(sig_list):
@@ -336,6 +459,50 @@ def pair_net_r(sig_list):
     losses = sum(1 for t in valid if t['outcome'] == 'loss')
     wr     = wins / n * 100
     return len(sig_list), net, wr, n, wins
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# HTF BIAS HELPER
+# ════════════════════════════════════════════════════════════════════════════
+def htf_breakdown(sig_list, label, direction, show_4h=True, show_1h=True):
+    """
+    Print pair net R split by 1H and 4H BB regime.
+    direction : 'long' or 'short' — determines which bb value is 'with-trend'.
+    show_1h/4h: set False when that dimension is already pre-filtered
+                (e.g. REV already requires bb_1h direction -> show_1h=False).
+    """
+    if not sig_list:
+        print(f"  {label}: No signals\n")
+        return
+    with_val = +1 if direction == 'long' else -1
+    labels = {
+        with_val:   "with-trend     ",
+       -with_val:   "counter-trend  ",
+        0:          "flat (neutral) ",
+    }
+    print(f"  {label}  (total DXY signals: {len(sig_list)})")
+    print(f"  {'Regime':<24}  {'DXYsig':>7}  {'Pair-N':>7}  {'W':>5}  {'WR%':>7}  {'Net R':>8}")
+    print(f"  {'-'*65}")
+    if show_1h:
+        for bv, bl in labels.items():
+            sub = [s for s in sig_list if s['bias_1h'] == bv]
+            if not sub:
+                continue
+            ns, net, wr, n, w = pair_net_r(sub)
+            wr_s = f"{wr:.1f}%" if not np.isnan(wr) else "   n/a"
+            nr   = net if not np.isnan(net) else 0.0
+            print(f"  1H {bl}  {ns:>7}  {n:>7}  {w:>5}  {wr_s:>7}  {nr:>+8.1f}R")
+        print()
+    if show_4h:
+        for bv, bl in labels.items():
+            sub = [s for s in sig_list if s['bias_4h'] == bv]
+            if not sub:
+                continue
+            ns, net, wr, n, w = pair_net_r(sub)
+            wr_s = f"{wr:.1f}%" if not np.isnan(wr) else "   n/a"
+            nr   = net if not np.isnan(net) else 0.0
+            print(f"  4H {bl}  {ns:>7}  {n:>7}  {w:>5}  {wr_s:>7}  {nr:>+8.1f}R")
+        print()
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -425,6 +592,35 @@ sweep_table(move_rows,
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# SWEEP 4: LON_ATTR LONG  min_distance
+# ════════════════════════════════════════════════════════════════════════════
+print("Sweeping LON_ATTR LONG min_distance...")
+lon_long_rows = []
+for t in LON_ATTR_THRESHOLDS:
+    sub = [s for s in lon_sigs if s['type'] == 'LON_ATTR_LONG' and s['dist'] >= t]
+    ns, net, wr, n, w = pair_net_r(sub)
+    lon_long_rows.append({'thresh': t, 'sigs': ns, 'net': net, 'wr': wr, 'n': n, 'wins': w})
+
+sweep_table(lon_long_rows,
+            "LON_ATTR LONG — min_distance sweep (pair returns, DXY-exit)",
+            "MinDist", DEFAULT_LON_DIST)
+
+# ════════════════════════════════════════════════════════════════════════════
+# SWEEP 5: LON_ATTR SHORT  min_distance
+# ════════════════════════════════════════════════════════════════════════════
+print("Sweeping LON_ATTR SHORT min_distance...")
+lon_short_rows = []
+for t in LON_ATTR_THRESHOLDS:
+    sub = [s for s in lon_sigs if s['type'] == 'LON_ATTR_SHORT' and s['dist'] >= t]
+    ns, net, wr, n, w = pair_net_r(sub)
+    lon_short_rows.append({'thresh': t, 'sigs': ns, 'net': net, 'wr': wr, 'n': n, 'wins': w})
+
+sweep_table(lon_short_rows,
+            "LON_ATTR SHORT — min_distance sweep (pair returns, DXY-exit)",
+            "MinDist", DEFAULT_LON_DIST)
+
+
+# ════════════════════════════════════════════════════════════════════════════
 # PER-PAIR BREAKDOWN AT KEY THRESHOLDS
 # ════════════════════════════════════════════════════════════════════════════
 def pair_breakdown(sig_list, label):
@@ -455,21 +651,34 @@ def best_thresh(rows, key='net'):
         return None
     return int(valid.loc[valid[key].idxmax(), 'thresh'])
 
-best_gap  = best_thresh(gap_rows,  'net')
-best_prox = best_thresh(prox_rows, 'net')
-best_move = best_thresh(move_rows, 'net')
+best_gap       = best_thresh(gap_rows,       'net')
+best_prox      = best_thresh(prox_rows,      'net')
+best_move      = best_thresh(move_rows,      'net')
+best_lon_long  = best_thresh(lon_long_rows,  'net')
+best_lon_short = best_thresh(lon_short_rows, 'net')
 
 print("=" * 84)
 print("  PER-PAIR BREAKDOWN AT KEY THRESHOLDS")
 print("=" * 84)
 print()
 
-# GAP_REJ
+# GAP_REJ — pair breakdown then HTF bias (4H flat already guaranteed by filter; check 1H only)
 pair_breakdown([s for s in gap_sigs if s['gap_pts'] >= DEFAULT_GAP],
                f"GAP_REJ  — current default {DEFAULT_GAP} pts")
 if best_gap and best_gap != DEFAULT_GAP:
     pair_breakdown([s for s in gap_sigs if s['gap_pts'] >= best_gap],
                    f"GAP_REJ  — optimal {best_gap} pts")
+
+print("=" * 84)
+print("  GAP_REJ — HTF BIAS (1H only; 4H flat is a pre-condition so all have bb_4h=0)")
+print("  Note: GAP_REJ LONG = bullish signal after gap fills down -> with-trend = 1H up")
+print("        GAP_REJ SHORT = bearish signal after gap fills up  -> with-trend = 1H down")
+print("=" * 84)
+print()
+gap_long_sigs  = [s for s in gap_sigs if s['type'] == 'GAP_REJ_LONG'  and s['gap_pts'] >= DEFAULT_GAP]
+gap_short_sigs = [s for s in gap_sigs if s['type'] == 'GAP_REJ_SHORT' and s['gap_pts'] >= DEFAULT_GAP]
+htf_breakdown(gap_long_sigs,  f"GAP_REJ LONG  — gap >= {DEFAULT_GAP} pts", 'long',  show_4h=False)
+htf_breakdown(gap_short_sigs, f"GAP_REJ SHORT — gap >= {DEFAULT_GAP} pts", 'short', show_4h=False)
 
 # REV proximity
 pair_breakdown([s for s in rev_sigs if s['dist'] <= DEFAULT_PROX and s['max_move'] >= DEFAULT_MOVE],
@@ -485,29 +694,107 @@ if best_move and best_move != DEFAULT_MOVE:
     pair_breakdown([s for s in rev_sigs if s['max_move'] >= best_move and s['dist'] <= DEFAULT_PROX],
                    f"REV move — optimal {best_move} pts (prox={DEFAULT_PROX})")
 
+print("=" * 84)
+print("  REV — HTF BIAS (4H only; 1H direction is a pre-condition so all have matching bb_1h)")
+print("  Note: REV already requires bb_1h expanding in trade direction.")
+print("        Here we check whether 4H alignment improves results further.")
+print("        REV LONG  -> with-trend 4H = bb_4h +1 (4H also up)")
+print("        REV SHORT -> with-trend 4H = bb_4h -1 (4H also down)")
+print("=" * 84)
+print()
+rev_long_base  = [s for s in rev_sigs if s['type'] == 'REV_LONG'  and s['dist'] <= DEFAULT_PROX and s['max_move'] >= DEFAULT_MOVE]
+rev_short_base = [s for s in rev_sigs if s['type'] == 'REV_SHORT' and s['dist'] <= DEFAULT_PROX and s['max_move'] >= DEFAULT_MOVE]
+htf_breakdown(rev_long_base,  f"REV LONG  — prox<={DEFAULT_PROX}, move>={DEFAULT_MOVE}", 'long',  show_1h=False)
+htf_breakdown(rev_short_base, f"REV SHORT — prox<={DEFAULT_PROX}, move>={DEFAULT_MOVE}", 'short', show_1h=False)
+# Also at optimised params
+if best_prox and best_move and (best_prox, best_move) != (DEFAULT_PROX, DEFAULT_MOVE):
+    rev_long_opt  = [s for s in rev_sigs if s['type'] == 'REV_LONG'  and s['dist'] <= best_prox and s['max_move'] >= best_move]
+    rev_short_opt = [s for s in rev_sigs if s['type'] == 'REV_SHORT' and s['dist'] <= best_prox and s['max_move'] >= best_move]
+    htf_breakdown(rev_long_opt,  f"REV LONG  — optimal prox<={best_prox}, move>={best_move}", 'long',  show_1h=False)
+    htf_breakdown(rev_short_opt, f"REV SHORT — optimal prox<={best_prox}, move>={best_move}", 'short', show_1h=False)
+
 
 # ════════════════════════════════════════════════════════════════════════════
-# COMBINED: best params together
+# LON_ATTR DIRECTION COMPARISON
+# ════════════════════════════════════════════════════════════════════════════
+print("=" * 84)
+print("  LON_ATTR — LONG vs SHORT DIRECTION COMPARISON")
+print("=" * 84)
+print()
+
+pair_breakdown([s for s in lon_sigs if s['type'] == 'LON_ATTR_LONG'  and s['dist'] >= DEFAULT_LON_DIST],
+               f"LON_ATTR LONG only  — dist >= {DEFAULT_LON_DIST} pts")
+pair_breakdown([s for s in lon_sigs if s['type'] == 'LON_ATTR_SHORT' and s['dist'] >= DEFAULT_LON_DIST],
+               f"LON_ATTR SHORT only — dist >= {DEFAULT_LON_DIST} pts")
+pair_breakdown([s for s in lon_sigs if s['dist'] >= DEFAULT_LON_DIST],
+               f"LON_ATTR COMBINED   — dist >= {DEFAULT_LON_DIST} pts")
+
+if best_lon_long and best_lon_long != DEFAULT_LON_DIST:
+    pair_breakdown([s for s in lon_sigs if s['type'] == 'LON_ATTR_LONG' and s['dist'] >= best_lon_long],
+                   f"LON_ATTR LONG only  — optimal dist >= {best_lon_long} pts")
+if best_lon_short and best_lon_short != DEFAULT_LON_DIST:
+    pair_breakdown([s for s in lon_sigs if s['type'] == 'LON_ATTR_SHORT' and s['dist'] >= best_lon_short],
+                   f"LON_ATTR SHORT only — optimal dist >= {best_lon_short} pts")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# LON_ATTR HTF BIAS ANALYSIS
+#   For LONG: bb_1h == +1 = 1H expanding slope UP   (with-trend for a LONG)
+#             bb_1h == -1 = 1H expanding slope DOWN  (counter-trend for a LONG)
+#             bb_1h ==  0 = 1H flat                  (neutral)
+#   For SHORT: bb_1h == -1 = with-trend, bb_1h == +1 = counter-trend
+#   Same logic applied to 4H bb.
+# ════════════════════════════════════════════════════════════════════════════
+print("=" * 84)
+print("  LON_ATTR — HTF BIAS BREAKDOWN (with-trend vs counter-trend)")
+print("=" * 84)
+print()
+
+lon_long_1000  = [s for s in lon_sigs if s['type'] == 'LON_ATTR_LONG'  and s['dist'] >= DEFAULT_LON_DIST]
+lon_short_1000 = [s for s in lon_sigs if s['type'] == 'LON_ATTR_SHORT' and s['dist'] >= DEFAULT_LON_DIST]
+
+htf_breakdown(lon_long_1000,  f"LON_ATTR LONG  — dist >= {DEFAULT_LON_DIST} pts", 'long')
+htf_breakdown(lon_short_1000, f"LON_ATTR SHORT — dist >= {DEFAULT_LON_DIST} pts", 'short')
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# COMBINED PORTFOLIO — current defaults vs LON_ATTR long-only variant
 # ════════════════════════════════════════════════════════════════════════════
 print("=" * 84)
 print("  COMBINED PORTFOLIO — current defaults vs optimal thresholds")
 print("=" * 84)
 print()
 
+# Full portfolio: GAP_REJ + REV + LON_ATTR combined (both directions)
 default_sigs = (
     [s for s in gap_sigs if s['gap_pts'] >= DEFAULT_GAP] +
-    [s for s in rev_sigs if s['dist'] <= DEFAULT_PROX and s['max_move'] >= DEFAULT_MOVE]
+    [s for s in rev_sigs if s['dist'] <= DEFAULT_PROX and s['max_move'] >= DEFAULT_MOVE] +
+    [s for s in lon_sigs if s['dist'] >= DEFAULT_LON_DIST]
 )
 pair_breakdown(default_sigs,
-               f"CURRENT DEFAULTS  gap={DEFAULT_GAP}  prox={DEFAULT_PROX}  move={DEFAULT_MOVE}")
+               f"ALL TRADES (both LON_ATTR dirs)  gap={DEFAULT_GAP}  prox={DEFAULT_PROX}  "
+               f"move={DEFAULT_MOVE}  lon={DEFAULT_LON_DIST}")
 
-bg  = best_gap  or DEFAULT_GAP
-bp  = best_prox or DEFAULT_PROX
-bm  = best_move or DEFAULT_MOVE
-if (bg, bp, bm) != (DEFAULT_GAP, DEFAULT_PROX, DEFAULT_MOVE):
-    optimal_sigs = (
+# LON_ATTR LONG-only variant
+long_only_sigs = (
+    [s for s in gap_sigs if s['gap_pts'] >= DEFAULT_GAP] +
+    [s for s in rev_sigs if s['dist'] <= DEFAULT_PROX and s['max_move'] >= DEFAULT_MOVE] +
+    [s for s in lon_sigs if s['type'] == 'LON_ATTR_LONG' and s['dist'] >= DEFAULT_LON_DIST]
+)
+pair_breakdown(long_only_sigs,
+               f"LON_ATTR LONG ONLY               gap={DEFAULT_GAP}  prox={DEFAULT_PROX}  "
+               f"move={DEFAULT_MOVE}  lon={DEFAULT_LON_DIST}")
+
+# Optimal params (best sweep thresholds for each)
+bg  = best_gap       or DEFAULT_GAP
+bp  = best_prox      or DEFAULT_PROX
+bm  = best_move      or DEFAULT_MOVE
+bll = best_lon_long  or DEFAULT_LON_DIST
+if (bg, bp, bm, bll) != (DEFAULT_GAP, DEFAULT_PROX, DEFAULT_MOVE, DEFAULT_LON_DIST):
+    optimal_long_only = (
         [s for s in gap_sigs if s['gap_pts'] >= bg] +
-        [s for s in rev_sigs if s['dist'] <= bp and s['max_move'] >= bm]
+        [s for s in rev_sigs if s['dist'] <= bp and s['max_move'] >= bm] +
+        [s for s in lon_sigs if s['type'] == 'LON_ATTR_LONG' and s['dist'] >= bll]
     )
-    pair_breakdown(optimal_sigs,
-                   f"OPTIMAL PARAMS    gap={bg}  prox={bp}  move={bm}")
+    pair_breakdown(optimal_long_only,
+                   f"OPTIMAL (LON_ATTR LONG only)     gap={bg}  prox={bp}  move={bm}  lon={bll}")
