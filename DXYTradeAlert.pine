@@ -7,6 +7,7 @@ grp_sess = "Session Window (GMT)"
 grp_sig  = "Entry Signals"
 grp_htf  = "HTF Bias (BB Regime)"
 grp_disp = "Display"
+grp_wh   = "Webhook / Alerts"
 
 // London Open Attraction (LON_ATTR)
 lon_attr_enabled   = input.bool(true,  "Enable London Open Attraction (LON_ATTR — LONG only)", group=grp_zone, tooltip="Pin bar attraction trade toward the London session open level. LONG only: price >= min pts below open, zone pristine (never crossed above open this session), bull pin bar, 4H BB flat. SHORT direction dropped — HTF analysis shows SHORT trades are negative across all regimes.")
@@ -68,6 +69,10 @@ show_prev_hl   = input.bool(true, "Show Prior Day High/Low",         group=grp_d
 show_session   = input.bool(true, "Show London Session Background",  group=grp_disp)
 show_lon_zone  = input.bool(true, "Show London Open Zone (LON_ATTR)", group=grp_disp, tooltip="Yellow box spanning the body of the London open candle — the LON_ATTR pristine zone (zone_bot to zone_top). Yellow = zone intact (pristine). Grey = zone violated (a candle has closed through zone_top or zone_bot).")
 show_exit_lvls = input.bool(true, "Show Exit TP/SL Lines",           group=grp_disp)
+
+// Webhook
+enable_webhook = input.bool(false, "Enable DXY Webhook Alerts", group=grp_wh,
+    tooltip="Fires alert() JSON on every DXY entry signal and DXY TP/SL exit.\nCreate ONE TradingView alert on this indicator with the 'alert() function calls' condition.\nDXY_ENTRY: notifies automation of active DXY direction and key levels.\nDXY_EXIT: tells automation to close ALL open pair positions immediately.\nAlso enable webhooks on each DXY Pair Levels chart for per-pair ENTRY/EXIT/SL_MOVE events.")
 
 // ─── SESSION TIMING ──────────────────────────────────────────────────────────
 h        = hour(time, "UTC")
@@ -669,6 +674,7 @@ var float exit_sl_lvl    = na
 var bool  exit_tracking  = false
 var bool  exit_is_long   = true
 var int   exit_entry_bar = -1
+var string sig_name      = ""       // last fired signal — used in DXY_EXIT webhook
 
 // NOTE: exit_tracking is NOT reset at London open. It only clears when TP or SL
 // is actually hit. This prevents orphan exit warnings caused by the London open
@@ -682,6 +688,9 @@ if gap_rej_long
     exit_tracking := true
     exit_is_long  := true
     exit_entry_bar := bar_index
+    sig_name      := "GAP_REJ_LONG"
+    if enable_webhook
+        alert('{"event":"DXY_ENTRY","signal":"GAP_REJ_LONG","dxy_dir":"LONG","dxy_entry":' + str.tostring(close) + ',"dxy_tp":' + str.tostring(attr_long_tp) + ',"dxy_sl":' + str.tostring(attr_long_sl) + ',"sl_pts":' + str.tostring(math.round(attr_long_sl_d * 10000)) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
 
 if gap_rej_short
     exit_tp_lvl   := attr_short_tp
@@ -689,6 +698,9 @@ if gap_rej_short
     exit_tracking := true
     exit_is_long  := false
     exit_entry_bar := bar_index
+    sig_name      := "GAP_REJ_SHORT"
+    if enable_webhook
+        alert('{"event":"DXY_ENTRY","signal":"GAP_REJ_SHORT","dxy_dir":"SHORT","dxy_entry":' + str.tostring(close) + ',"dxy_tp":' + str.tostring(attr_short_tp) + ',"dxy_sl":' + str.tostring(attr_short_sl) + ',"sl_pts":' + str.tostring(math.round(attr_short_sl_d * 10000)) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
 
 if rev_long
     exit_tp_lvl   := rev_long_tp
@@ -696,6 +708,9 @@ if rev_long
     exit_tracking := true
     exit_is_long  := true
     exit_entry_bar := bar_index
+    sig_name      := "REV_LONG"
+    if enable_webhook
+        alert('{"event":"DXY_ENTRY","signal":"REV_LONG","dxy_dir":"LONG","dxy_entry":' + str.tostring(close) + ',"dxy_tp":' + str.tostring(rev_long_tp) + ',"dxy_sl":' + str.tostring(rev_long_sl) + ',"sl_pts":' + str.tostring(math.round(rev_long_sl_d * 10000)) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
 
 if rev_short
     exit_tp_lvl   := rev_short_tp
@@ -703,6 +718,9 @@ if rev_short
     exit_tracking := true
     exit_is_long  := false
     exit_entry_bar := bar_index
+    sig_name      := "REV_SHORT"
+    if enable_webhook
+        alert('{"event":"DXY_ENTRY","signal":"REV_SHORT","dxy_dir":"SHORT","dxy_entry":' + str.tostring(close) + ',"dxy_tp":' + str.tostring(rev_short_tp) + ',"dxy_sl":' + str.tostring(rev_short_sl) + ',"sl_pts":' + str.tostring(math.round(rev_short_sl_d * 10000)) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
 
 if lon_attr_long
     exit_tp_lvl    := lon_attr_long_tp
@@ -710,6 +728,9 @@ if lon_attr_long
     exit_tracking  := true
     exit_is_long   := true
     exit_entry_bar := bar_index
+    sig_name       := "LON_ATTR_LONG"
+    if enable_webhook
+        alert('{"event":"DXY_ENTRY","signal":"LON_ATTR_LONG","dxy_dir":"LONG","dxy_entry":' + str.tostring(close) + ',"dxy_tp":' + str.tostring(lon_attr_long_tp) + ',"dxy_sl":' + str.tostring(lon_attr_long_sl) + ',"sl_pts":' + str.tostring(math.round(lon_attr_long_sl_d * 10000)) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
 
 if attr_core_long
     exit_tp_lvl    := attr_long_tp
@@ -717,6 +738,9 @@ if attr_core_long
     exit_tracking  := true
     exit_is_long   := true
     exit_entry_bar := bar_index
+    sig_name       := "ATTR_CORE_LONG"
+    if enable_webhook
+        alert('{"event":"DXY_ENTRY","signal":"ATTR_CORE_LONG","dxy_dir":"LONG","dxy_entry":' + str.tostring(close) + ',"dxy_tp":' + str.tostring(attr_long_tp) + ',"dxy_sl":' + str.tostring(attr_long_sl) + ',"sl_pts":' + str.tostring(math.round(attr_long_sl_d * 10000)) + ',"gap_at_lon":' + str.tostring(math.round(attr_gap_at_lon)) + ',"wave_ext":' + str.tostring(math.round(attr_wave_ext)) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
 
 if attr_core_short
     exit_tp_lvl    := attr_short_tp
@@ -724,6 +748,9 @@ if attr_core_short
     exit_tracking  := true
     exit_is_long   := false
     exit_entry_bar := bar_index
+    sig_name       := "ATTR_CORE_SHORT"
+    if enable_webhook
+        alert('{"event":"DXY_ENTRY","signal":"ATTR_CORE_SHORT","dxy_dir":"SHORT","dxy_entry":' + str.tostring(close) + ',"dxy_tp":' + str.tostring(attr_short_tp) + ',"dxy_sl":' + str.tostring(attr_short_sl) + ',"sl_pts":' + str.tostring(math.round(attr_short_sl_d * 10000)) + ',"gap_at_lon":' + str.tostring(math.round(attr_gap_at_lon)) + ',"wave_ext":' + str.tostring(math.round(attr_wave_ext)) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
 
 // Detect TP/SL cross
 bool _can_exit  = exit_tracking and bar_index > exit_entry_bar
@@ -732,6 +759,7 @@ bool dxy_sl_hit = _can_exit and barstate.isconfirmed and (exit_is_long ? low  <=
 
 if dxy_tp_hit or dxy_sl_hit
     exit_tracking := false
+    sig_name      := ""
     line.delete(tp_line)
     line.delete(sl_line)
 
@@ -746,12 +774,16 @@ if dxy_tp_hit
         "▲ DXY TP HIT\nExit pair positions",
         color=color.new(color.lime, 10), textcolor=color.black,
         style=exit_is_long ? label.style_label_down : label.style_label_up, size=size.normal)
+    if enable_webhook
+        alert('{"event":"DXY_EXIT","result":"TP","signal":"' + sig_name + '","dxy_exit":' + str.tostring(close) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
 
 if dxy_sl_hit
     label.new(bar_index, exit_is_long ? low - lbl_pad : high + lbl_pad,
         "▼ DXY SL HIT\nExit pair positions",
         color=color.new(color.red, 10), textcolor=color.white,
         style=exit_is_long ? label.style_label_up : label.style_label_down, size=size.normal)
+    if enable_webhook
+        alert('{"event":"DXY_EXIT","result":"SL","signal":"' + sig_name + '","dxy_exit":' + str.tostring(close) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
 
 // ─── EXIT ALERTS ─────────────────────────────────────────────────────────────
 alertcondition(dxy_tp_hit,

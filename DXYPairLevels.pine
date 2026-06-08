@@ -105,6 +105,9 @@ show_tp_sl    = input.bool(true,  "Show TP/SL Lines",                group=grp_d
 // Webhook
 enable_webhook = input.bool(false, "Enable Webhook Alerts", group=grp_wh,
     tooltip="Fires alert() JSON on every entry and exit.\nCreate ONE alert on this indicator in TradingView with the 'alert() function calls' condition.\nPoint the notification to your webhook URL.")
+be_trigger_pct = input.int(50, "Breakeven Move — Trigger (% toward TP)", group=grp_wh,
+    minval=25, maxval=75, step=5,
+    tooltip="Fire an advisory SL_MOVE webhook when DXY has moved this % of the way from entry to TP. Default 50% = halfway. IMPORTANT: SL_MOVE is advisory only — never place automatic orders based on this event.")
 
 // ─── DXY 15m OHLC ─────────────────────────────────────────────────────────────
 dxy_o = request.security(dxy_symbol, "15", open,  lookahead=barmerge.lookahead_off)
@@ -395,6 +398,9 @@ var int   dxy_entry_bar  = -1       // bar_index of last entry
 var line  tp_line_ref    = na       // TP line object
 var line  sl_line_ref    = na       // SL line object
 var string sig_name      = ""       // signal name for webhook/labels
+var float dxy_entry_price = na       // DXY close at entry bar (SL_MOVE progress calc)
+var float pair_entry_px   = na       // pair close at entry bar (= breakeven SL level)
+var bool  sl_move_fired   = false    // prevents duplicate SL_MOVE per trade
 
 // ─── HELPER: extend existing lines to current bar ─────────────────────────────
 // Called each bar while a trade is open to keep lines extending rightward.
@@ -428,6 +434,9 @@ if gap_rej_long_cond
     dxy_exit_track  := true
     dxy_entry_bar   := bar_index
     sig_name        := "GAP_REJ_LONG"
+    dxy_entry_price := dxy_c
+    pair_entry_px   := close
+    sl_move_fired   := false
     bool pair_long   = pd_eff > 0
     if show_tp_sl
         tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20),  width=1, style=line.style_dashed)
@@ -456,6 +465,9 @@ if gap_rej_short_cond
     dxy_exit_track  := true
     dxy_entry_bar   := bar_index
     sig_name        := "GAP_REJ_SHORT"
+    dxy_entry_price := dxy_c
+    pair_entry_px   := close
+    sl_move_fired   := false
     bool pair_long   = pd_eff > 0
     if show_tp_sl
         tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20), width=1, style=line.style_dashed)
@@ -484,6 +496,9 @@ if rev_long_cond
     dxy_exit_track  := true
     dxy_entry_bar   := bar_index
     sig_name        := "REV_LONG"
+    dxy_entry_price := dxy_c
+    pair_entry_px   := close
+    sl_move_fired   := false
     bool pair_long   = pd_eff > 0
     if show_tp_sl
         tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20), width=1, style=line.style_dashed)
@@ -512,6 +527,9 @@ if rev_short_cond
     dxy_exit_track  := true
     dxy_entry_bar   := bar_index
     sig_name        := "REV_SHORT"
+    dxy_entry_price := dxy_c
+    pair_entry_px   := close
+    sl_move_fired   := false
     bool pair_long   = pd_eff > 0
     if show_tp_sl
         tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20), width=1, style=line.style_dashed)
@@ -540,6 +558,9 @@ if lon_attr_long_cond
     dxy_exit_track  := true
     dxy_entry_bar   := bar_index
     sig_name        := "LON_ATTR_LONG"
+    dxy_entry_price := dxy_c
+    pair_entry_px   := close
+    sl_move_fired   := false
     bool pair_long   = pd_eff > 0
     if show_tp_sl
         tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20), width=1, style=line.style_dashed)
@@ -568,6 +589,9 @@ if attr_core_long_cond
     dxy_exit_track  := true
     dxy_entry_bar   := bar_index
     sig_name        := "ATTR_CORE_LONG"
+    dxy_entry_price := dxy_c
+    pair_entry_px   := close
+    sl_move_fired   := false
     bool pair_long   = pd_eff > 0
     if show_tp_sl
         tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20), width=1, style=line.style_dashed)
@@ -596,6 +620,9 @@ if attr_core_short_cond
     dxy_exit_track  := true
     dxy_entry_bar   := bar_index
     sig_name        := "ATTR_CORE_SHORT"
+    dxy_entry_price := dxy_c
+    pair_entry_px   := close
+    sl_move_fired   := false
     bool pair_long   = pd_eff > 0
     if show_tp_sl
         tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20), width=1, style=line.style_dashed)
@@ -606,6 +633,19 @@ if attr_core_short_cond
         style=pair_long ? label.style_label_up : label.style_label_down, size=size.small)
     if enable_webhook
         alert('{"event":"ENTRY","pair":"' + syminfo.ticker + '","signal":"ATTR_CORE_SHORT","pair_dir":"' + (pair_long ? "LONG" : "SHORT") + '","entry":' + str.tostring(close, format.mintick) + ',"tp":' + str.tostring(p_tp, format.mintick) + ',"sl":' + str.tostring(p_sl, format.mintick) + ',"sl_pts":' + str.tostring(math.round(dxy_as_sl_d * 10000)) + ',"gap_at_lon":' + str.tostring(math.round(dxy_gap_at_lon)) + ',"wave_ext":' + str.tostring(math.round(dxy_wave_ext)) + ',"dxy_entry":' + str.tostring(dxy_c) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
+
+// ─── SL_MOVE: BREAKEVEN ADVISORY ─────────────────────────────────────────────
+// Fires when DXY has moved be_trigger_pct % of the way from entry to TP.
+// Advisory only — tells automation to consider moving pair stop to breakeven.
+// NEVER act on SL_MOVE automatically.
+if dxy_exit_track and enable_webhook and not sl_move_fired and barstate.isconfirmed
+    if not na(dxy_entry_price) and not na(dxy_tp_lvl) and bar_index > dxy_entry_bar
+        float _tp_dist  = math.abs(dxy_tp_lvl - dxy_entry_price)
+        bool  _toward   = dxy_trade_long ? dxy_c > dxy_entry_price : dxy_c < dxy_entry_price
+        float _progress = (_tp_dist > 0 and _toward) ? math.abs(dxy_c - dxy_entry_price) / _tp_dist * 100.0 : 0.0
+        if _progress >= be_trigger_pct
+            sl_move_fired := true
+            alert('{"event":"SL_MOVE","pair":"' + syminfo.ticker + '","signal":"' + sig_name + '","action":"MOVE_TO_BE","new_sl":' + str.tostring(pair_entry_px, format.mintick) + ',"pair_entry":' + str.tostring(pair_entry_px, format.mintick) + ',"dxy_price":' + str.tostring(dxy_c) + ',"progress_pct":' + str.tostring(math.round(_progress)) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
 
 // ─── DXY EXIT ────────────────────────────────────────────────────────────────
 // Monitor DXY price against its TP/SL levels. On hit: terminate lines and
@@ -636,14 +676,17 @@ if dxy_exit_track and not na(dxy_tp_lvl) and not na(dxy_sl_lvl) and bar_index > 
             alert('{"event":"EXIT","pair":"' + syminfo.ticker + '","result":"' + result + '","signal":"' + sig_name + '","exit_price":' + str.tostring(exit_price, format.mintick) + ',"dxy_exit":' + str.tostring(dxy_c) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
 
         // Reset state
-        dxy_exit_track := false
-        dxy_tp_lvl     := na
-        dxy_sl_lvl     := na
-        pair_tp_lvl    := na
-        pair_sl_lvl    := na
-        tp_line_ref    := na
-        sl_line_ref    := na
-        sig_name       := ""
+        dxy_exit_track  := false
+        dxy_tp_lvl      := na
+        dxy_sl_lvl      := na
+        pair_tp_lvl     := na
+        pair_sl_lvl     := na
+        tp_line_ref     := na
+        sl_line_ref     := na
+        sig_name        := ""
+        sl_move_fired   := false
+        dxy_entry_price := na
+        pair_entry_px   := na
 
 // ─── FRIDAY SESSION CLOSE RESET ──────────────────────────────────────────────
 // No trades held over the weekend. At Friday session end, terminate any open
@@ -672,6 +715,9 @@ if do_friday_reset
     tp_line_ref       := na
     sl_line_ref       := na
     sig_name          := ""
+    sl_move_fired     := false
+    dxy_entry_price   := na
+    pair_entry_px     := na
     dxy_london_open   := na
     dxy_max_move_up   := 0.0
     dxy_max_move_down := 0.0
