@@ -206,13 +206,29 @@ def _apply_pair_worker(args):
             continue
         pi, xi = pair_idx[et], pair_idx[xt]
         pc = df_pair.at[pi, 'close']
-        px = df_pair.at[xi, 'close']
         is_long_dxy = 'LONG' in sig['type']
         pair_long   = (is_long_dxy and D == 1) or (not is_long_dxy and D == -1)
         pair_sl_d   = sig['sl_pts'] / 10000 * F
-        raw_pnl     = (px - pc) if pair_long else (pc - px)
-        r_actual    = raw_pnl / pair_sl_d if pair_sl_d > 0 else 0.0
-        outcome     = 'win' if r_actual > 0 else ('loss' if r_actual < 0 else 'even')
+
+        # Scan forward: exit at pair SL (-1R max loss) or DXY exit bar, whichever first
+        pair_sl_px = pc - pair_sl_d if pair_long else pc + pair_sl_d
+        r_actual = None
+        for j in range(pi + 1, xi + 1):
+            l_j = df_pair.at[j, 'low']
+            h_j = df_pair.at[j, 'high']
+            if pair_long and l_j <= pair_sl_px:
+                r_actual = -1.0
+                break
+            elif not pair_long and h_j >= pair_sl_px:
+                r_actual = -1.0
+                break
+
+        if r_actual is None:
+            px       = df_pair.at[xi, 'close']
+            raw_pnl  = (px - pc) if pair_long else (pc - px)
+            r_actual = raw_pnl / pair_sl_d if pair_sl_d > 0 else 0.0
+
+        outcome = 'win' if r_actual > 0 else ('loss' if r_actual < 0 else 'even')
         results.append({
             'dxy_type':    sig['type'],
             'entry_time':  et,
@@ -221,7 +237,7 @@ def _apply_pair_worker(args):
             'pair':        pair,
             'direction':   'long' if pair_long else 'short',
             'entry':       round(pc, 5),
-            'exit_px':     round(px, 5),
+            'exit_px':     round(df_pair.at[xi, 'close'], 5),
             'sl_pts_dxy':  sig['sl_pts'],
             'outcome':     outcome,
             'r_actual':    round(r_actual, 3),

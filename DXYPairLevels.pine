@@ -647,6 +647,39 @@ if dxy_exit_track and enable_webhook and not sl_move_fired and barstate.isconfir
             sl_move_fired := true
             alert('{"event":"SL_MOVE","pair":"' + syminfo.ticker + '","signal":"' + sig_name + '","action":"MOVE_TO_BE","new_sl":' + str.tostring(pair_entry_px, format.mintick) + ',"pair_entry":' + str.tostring(pair_entry_px, format.mintick) + ',"dxy_price":' + str.tostring(dxy_c) + ',"progress_pct":' + str.tostring(math.round(_progress)) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
 
+
+// ─── PAIR SL: HARD STOP ON PAIR CHART ────────────────────────────────────────
+// Pair hard stop-loss hit before DXY exits. Caps loss at exactly -1R and
+// terminates trade tracking so the DXY EXIT block does not fire afterwards.
+if dxy_exit_track and not na(pair_sl_lvl) and bar_index > dxy_entry_bar and barstate.isconfirmed
+    bool pair_long   = (dxy_trade_long and pair_dir > 0) or (not dxy_trade_long and pair_dir < 0)
+    bool pair_sl_hit = pair_long ? low <= pair_sl_lvl : high >= pair_sl_lvl
+
+    if pair_sl_hit
+        if show_tp_sl and not na(tp_line_ref)
+            line.set_x2(tp_line_ref, bar_index)
+            line.set_x2(sl_line_ref, bar_index)
+
+        label.new(bar_index, pair_sl_lvl,
+            "✘ PAIR SL\n" + sig_name + "\n" + str.tostring(pair_sl_lvl, format.mintick),
+            color=color.new(color.red, 10), textcolor=color.white,
+            style=pair_long ? label.style_label_up : label.style_label_down, size=size.small)
+
+        if enable_webhook
+            alert('{"event":"PAIR_SL","pair":"' + syminfo.ticker + '","signal":"' + sig_name + '","result":"SL","exit_price":' + str.tostring(pair_sl_lvl, format.mintick) + ',"r_result":-1.0,"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
+
+        dxy_exit_track  := false
+        dxy_tp_lvl      := na
+        dxy_sl_lvl      := na
+        pair_tp_lvl     := na
+        pair_sl_lvl     := na
+        tp_line_ref     := na
+        sl_line_ref     := na
+        sig_name        := ""
+        sl_move_fired   := false
+        dxy_entry_price := na
+        pair_entry_px   := na
+
 // ─── DXY EXIT ────────────────────────────────────────────────────────────────
 // Monitor DXY price against its TP/SL levels. On hit: terminate lines and
 // draw exit label at estimated pair TP/SL price (not actual pair close).
