@@ -1,6 +1,6 @@
 //@version=6
 // ─────────────────────────────────────────────────────────────────────────────
-// DXY Pair Levels  v1.0
+// DXY Pair Levels  v1.1
 // Indicator (not strategy) — draws estimated pair TP/SL lines when DXY signals
 // fire. Apply to any DXY-correlated pair chart (15m).
 //
@@ -38,6 +38,16 @@ int    pair_dir    = _usd_base ? 1 : -1
 //   USDJPY: 1.0 | XAUUSD: 100.0 | all 5dp FX pairs: 0.01
 float  tick_factor = str.contains(_sym, "USDJPY") ? 1.0 :
                      str.contains(_sym, "XAUUSD") ? 100.0 : 0.01
+
+// lon_attr_tp_mult: per-pair visual TP multiplier for LON_ATTR_LONG signals only.
+// Based on 32-month backtest p75 of winning trades (DXY-exit mode):
+//   USDJPY: 2.5R (p75=2.62R, mean=2.84R)
+//   NZDUSD: 1.5R (p75=1.17R, bimodal distribution with large outliers)
+//   AUDUSD: 1.5R (p75=1.63R)
+//   All others: 1.0R (standard 1:1, unchanged)
+// TP line is visual guidance only — actual exit remains DXY-driven.
+float  lon_attr_tp_mult = str.contains(_sym, "USDJPY") ? 2.5 :
+                          (str.contains(_sym, "NZDUSD") or str.contains(_sym, "AUDUSD")) ? 1.5 : 1.0
 
 // ATTR CORE direction: XAUUSD = LONG only (DXY long → Gold short, 66.7% WR)
 //                      all other pairs = SHORT only (DXY short setup, 68.6% WR)
@@ -548,7 +558,7 @@ if lon_attr_long_cond
         line.delete(sl_line_ref)
     float pd_eff     = pair_dir
     float p_sl_d     = dxy_la_long_sl_d * tick_factor
-    float p_tp       = close + pd_eff * p_sl_d
+    float p_tp       = close + pd_eff * p_sl_d * lon_attr_tp_mult
     float p_sl       = close - pd_eff * p_sl_d
     dxy_tp_lvl      := dxy_la_long_tp
     dxy_sl_lvl      := dxy_la_long_sl
@@ -566,7 +576,7 @@ if lon_attr_long_cond
         tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20), width=1, style=line.style_dashed)
         sl_line_ref := line.new(bar_index, p_sl, bar_index + 1, p_sl, color=color.new(color.red,  20), width=1, style=line.style_dashed)
     label.new(bar_index, pair_long ? low - cr_px : high + cr_px,
-        "▲ LON_ATTR DXY↑\nTP: " + str.tostring(p_tp, format.mintick) + "  SL: " + str.tostring(p_sl, format.mintick) + "\n" + str.tostring(math.round(-dxy_dist_from_open)) + " pts below open  |  4H flat",
+        "▲ LON_ATTR DXY↑\nTP: " + str.tostring(p_tp, format.mintick) + " (" + str.tostring(lon_attr_tp_mult, "#.#") + "R)  SL: " + str.tostring(p_sl, format.mintick) + "\n" + str.tostring(math.round(-dxy_dist_from_open)) + " pts below open  |  4H flat",
         color=color.new(color.navy, 10), textcolor=color.white,
         style=pair_long ? label.style_label_up : label.style_label_down, size=size.small)
     if enable_webhook
