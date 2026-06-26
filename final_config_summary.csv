@@ -1,0 +1,5 @@
+pair,period,months,signal,exit_mode,N_trades,N_wins,N_losses,WR_pct,profit_factor,net_R,R_per_month,trades_per_month,avg_win_R,avg_loss_R,best_trade_R,worst_trade_R,visual_TP_mult
+USDJPY,Sep 2023 - May 2026,32.4,LON_ATTR_LONG,DXY-driven (pair SL capped -1R),59,27,32,45.8,2.56,46.64,1.44,1.8,2.836,-0.935,18.75,-1.0,2.5R
+NZDUSD,Sep 2023 - May 2026,32.4,LON_ATTR_LONG,DXY-driven (pair SL capped -1R),62,31,30,50.0,4.08,79.05,2.44,1.9,3.379,-0.857,41.72,-1.0,1.5R
+AUDUSD,Sep 2023 - May 2026,32.4,LON_ATTR_LONG,DXY-driven (pair SL capped -1R),62,26,36,41.9,1.84,25.65,0.79,1.9,2.159,-0.847,25.0,-1.0,1.5R
+ALL PAIRS,Sep 2023 - May 2026,32.4,LON_ATTR_LONG,DXY-driven (pair SL capped -1R),183,84,98,45.9,2.76,151.33,4.67,5.6,2.827,-0.879,41.72,-1.0,per-pair
