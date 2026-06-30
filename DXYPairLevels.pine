@@ -1,107 +1,127 @@
 //@version=6
 // ─────────────────────────────────────────────────────────────────────────────
-// DXY Pair Levels  v1.1
-// Indicator (not strategy) — draws estimated pair TP/SL lines when DXY signals
-// fire. Apply to any DXY-correlated pair chart (15m).
+// DXY Pair Levels  v2.0
+// Indicator — draws estimated pair TP/SL lines when DXY or USDJPY signals fire.
+// Apply to any correlated pair chart (15m).
 //
-// All signal logic mirrors DXYPairStrategy v3.0. DXY 15m OHLC is fetched via
-// request.security(). Entry/exit tracking uses DXY price levels, not pair levels.
-// Pair TP/SL lines are approximate (tick_factor conversion) — guidance only.
+// SIGNAL ROUTING (32-month backtest, Sep 2023 – May 2026):
+//   LON_ATTR_LONG   — DXY indicator    — USDJPY / NZDUSD / AUDUSD
+//   GAP_REJ_LONG    — DXY indicator    — all pairs
+//   GAP_REJ_SHORT   — USDJPY indicator — EURUSD / GBPUSD / USDCHF (inv3)
+//   ATTR_CORE_LONG  — USDJPY indicator — all 7 pairs, any BB, TP 3.0x
+//   ATTR_CORE_SHORT — USDJPY indicator — all 7 pairs, BB4 flat required, TP 2.5x
+//   REV_LONG        — USDJPY indicator — all 7 pairs, 1000pt impulse, BB4 flat, TP 3.0x
+//   REV_SHORT       — USDJPY indicator — all 7 pairs, 1000pt impulse, any BB, TP 2.5x
 //
 // PAIR CONFIGURATION:
-//   EURUSD / GBPUSD / AUDUSD / NZDUSD / XAUUSD  →  Dir: -1
-//   USDCAD / USDCHF / USDJPY                    →  Dir: +1
-//   5dp FX: factor 0.01  |  USDJPY: 1.0  |  XAUUSD: 100.0
+//   EURUSD / GBPUSD / AUDUSD / NZDUSD -> Dir: -1 (inverse DXY / USDJPY)
+//   USDCAD / USDCHF / USDJPY          -> Dir: +1 (same direction)
+//   5dp FX: factor 0.01  |  USDJPY: 1.0
 //
-// WEBHOOK: enable the toggle and create ONE alert on this indicator in
-//   TradingView with the "alert() function calls" condition, pointing to your
-//   webhook URL. Fires JSON on every entry and exit.
+// IMPORTANT: Only make changes to this local file. Apply to TradingView manually.
 // ─────────────────────────────────────────────────────────────────────────────
 indicator("DXY Pair Levels", overlay=true, max_labels_count=500, max_lines_count=500)
 
 // ─── PAIR AUTO-DETECTION ─────────────────────────────────────────────────────
-// Direction and tick factor are set automatically from the chart symbol.
-// Switch freely between EURUSD / GBPUSD / AUDUSD / NZDUSD / USDCAD / USDCHF / USDJPY / XAUUSD
-// — no manual reconfiguration needed.
 grp_pair    = "Pair Configuration"
-dxy_symbol  = input.symbol("TVC:DXY", "DXY Symbol", group=grp_pair,
-    tooltip="Symbol used to fetch DXY data.\nDefault: TVC:DXY (TradingView index).\nIf signals are missing in replay mode, change this to match the DXY symbol on your broker feed (e.g. FXCM:USDOLLAR, ICMARKETS:USDX, etc.).")
+dxy_symbol  = input.symbol("TVC:DXY",    "DXY Symbol",    group=grp_pair,
+    tooltip="Symbol for DXY data. Default: TVC:DXY. Change to broker feed if signals missing in replay.")
+jpy_symbol  = input.symbol("FX:USDJPY",  "USDJPY Symbol", group=grp_pair,
+    tooltip="Symbol for USDJPY data used as indicator for GAP_REJ_SHORT, ATTR_CORE, and REV signals.")
 
 string _sym = syminfo.ticker
 
-// pair_dir: +1 = USD is base (USDJPY, USDCAD, USDCHF) — trades same direction as DXY
-//           -1 = USD is quote or Gold (EURUSD, GBPUSD, AUDUSD, NZDUSD, XAUUSD) — inverse DXY
+// pair_dir: +1 = USD is base (USDJPY, USDCAD, USDCHF) - same direction as DXY/USDJPY
+//           -1 = USD is quote (EURUSD, GBPUSD, AUDUSD, NZDUSD) - inverse
 bool   _usd_base   = str.contains(_sym, "USDJPY") or str.contains(_sym, "USDCAD") or str.contains(_sym, "USDCHF")
 int    pair_dir    = _usd_base ? 1 : -1
 
-// tick_factor: scales DXY pts → approximate pair price movement
-//   USDJPY: 1.0 | XAUUSD: 100.0 | all 5dp FX pairs: 0.01
+// tick_factor: scales indicator pts -> approximate pair price movement
 float  tick_factor = str.contains(_sym, "USDJPY") ? 1.0 :
                      str.contains(_sym, "XAUUSD") ? 100.0 : 0.01
 
-// lon_attr_tp_mult: per-pair visual TP multiplier for LON_ATTR_LONG signals only.
-// Based on 32-month backtest p75 of winning trades (DXY-exit mode):
-//   USDJPY: 2.5R (p75=2.62R, mean=2.84R)
-//   NZDUSD: 1.5R (p75=1.17R, bimodal distribution with large outliers)
-//   AUDUSD: 1.5R (p75=1.63R)
-//   All others: 1.0R (standard 1:1, unchanged)
-// TP line is visual guidance only — actual exit remains DXY-driven.
+// LON_ATTR per-pair TP multiplier (DXY indicator only)
+// Backtest p75 winners: USDJPY=2.62R (use 2.5), NZDUSD/AUDUSD=1.5R, others=1.0R
 float  lon_attr_tp_mult = str.contains(_sym, "USDJPY") ? 2.5 :
                           (str.contains(_sym, "NZDUSD") or str.contains(_sym, "AUDUSD")) ? 1.5 : 1.0
 
-// ATTR CORE direction: XAUUSD = LONG only (DXY long → Gold short, 66.7% WR)
-//                      all other pairs = SHORT only (DXY short setup, 68.6% WR)
-string attr_core_dir = str.contains(_sym, "XAUUSD") ? "LONG only" : "SHORT only"
-
-// ─── SIGNAL PARAMETERS (match DXYPairStrategy defaults) ──────────────────────
-grp_zone = "Signal Parameters"
+// ─── SIGNAL PARAMETERS ────────────────────────────────────────────────────────
+grp_dxy  = "DXY Signals (LON_ATTR / GAP_REJ_LONG)"
+grp_jpy  = "USDJPY Signals (GAP_REJ_SHORT / ATTR_CORE / REV)"
 grp_sess = "Session Window (GMT)"
-grp_sig  = "Entry Signals"
-grp_htf  = "HTF Bias (BB Regime)"
+grp_sig  = "Entry Candles"
+grp_htf  = "HTF BB Regime"
 grp_disp = "Display"
 grp_wh   = "Webhook / Alerts"
 
-lon_attr_enabled   = input.bool(true,  "Enable London Open Attraction (LON_ATTR — LONG only)", group=grp_zone,
-    tooltip="Pin bar attraction toward DXY London session open. LONG only. 4H BB flat required.")
-lon_attr_min_long  = input.int(1000,   "LON_ATTR — Min Distance Long (pts below DXY open)",    group=grp_zone, minval=50, step=10)
-attr_enabled        = input.bool(true,  "Enable Gap Rejection Trades",                          group=grp_zone)
-attr_min_gap        = input.int(75,     "Attraction — Min Gap at Tokyo Open (pts)",              group=grp_zone, minval=10,  step=25)
-attr_min_reward     = input.int(100,    "Attraction — Min Reward to TP (pts)",                   group=grp_zone, minval=50,  step=25)
-attr_near_buf       = input.int(50,     "Attraction — Near-Edge TP Buffer (pts)",                group=grp_zone, minval=0,   step=10)
-attr_use_near_tp    = input.bool(true,  "Attraction — Use Near-Edge TP (vs full gap fill)",      group=grp_zone)
-attr_max_prev_range = input.int(8000,   "Attraction — Max Prior Session Range (pts)",            group=grp_zone, minval=500, step=500)
+// DXY LON_ATTR
+lon_attr_enabled   = input.bool(true,  "Enable LON_ATTR_LONG (DXY)",                    group=grp_dxy)
+lon_attr_min_long  = input.int(1000,   "LON_ATTR -- Min Distance Below DXY Open (pts)", group=grp_dxy, minval=50, step=10)
 
-// ATTR CORE (Pristine Zone Approach)
-attr_core_enabled  = input.bool(true, "Enable ATTR CORE (Pristine Zone Approach)", group=grp_zone,
-    tooltip="Fires when DXY approaches the Tokyo gap zone for the first time from outside — zone not yet touched. CORE filter: gap at London open < 1500 pts AND wave extension < 1500 pts. 32-month backtest: 70% WR, +65R across 6 pairs. Direction auto-set from symbol (XAUUSD = LONG only, all others = SHORT only).")
-core_gap_max       = input.int(1500, "ATTR CORE — Max Gap at London Open (pts)", group=grp_zone, minval=200, step=100)
-core_wave_max      = input.int(1500, "ATTR CORE — Max Wave Extension (pts)",     group=grp_zone, minval=100, step=100)
-attr_approach_min  = input.int(150,  "ATTR CORE — Min 3-bar Approach (pts)",     group=grp_zone, minval=50,  step=25)
+// DXY GAP_REJ_LONG
+attr_enabled        = input.bool(true,  "Enable GAP_REJ_LONG (DXY)",                    group=grp_dxy)
+attr_min_gap        = input.int(75,     "GAP_REJ_LONG -- Min Gap at Tokyo Open (pts)",  group=grp_dxy, minval=10, step=25)
+attr_min_reward     = input.int(100,    "GAP_REJ_LONG -- Min Reward to TP (pts)",       group=grp_dxy, minval=50, step=25)
+attr_near_buf       = input.int(50,     "GAP_REJ -- Near-Edge TP Buffer (pts)",         group=grp_dxy, minval=0,  step=10)
+attr_use_near_tp    = input.bool(true,  "GAP_REJ -- Use Near-Edge TP",                  group=grp_dxy)
+attr_max_prev_range = input.int(8000,   "GAP_REJ_LONG -- Max Prior Session Range (pts)", group=grp_dxy, minval=500, step=500)
 
-rev_enabled    = input.bool(true, "Enable Reversal Trades",                                      group=grp_zone)
-rev_proximity  = input.int(250,   "Reversal — Max Distance from Opening Level (pts)",            group=grp_zone, minval=25,  step=25)
-rev_min_move   = input.int(400,   "Reversal — Min Move Away from Opening (pts)",                 group=grp_zone, minval=25,  step=25)
-struct_sl_buf  = input.int(50,    "Reversal — Structural SL Buffer (pts)",                       group=grp_zone, minval=0,   step=10)
-max_sl_pts     = input.int(3000,  "Reversal — Max SL Distance (pts)",                            group=grp_zone, minval=500, step=250)
+// USDJPY GAP_REJ_SHORT
+jpy_grs_enabled    = input.bool(true,  "Enable GAP_REJ_SHORT (USDJPY indicator)",       group=grp_jpy,
+    tooltip="USDJPY gaps UP overnight (>= min pts), bearish candle fires during London. Best pairs: EURUSD/GBPUSD/USDCHF. Backtest: 36 signals, +140.8R, +4.34R/mo, PF=3.76 (inv3, 32 months).")
+jpy_grs_min_gap    = input.int(200,    "GAP_REJ_SHORT -- Min USDJPY Overnight Gap (pts)", group=grp_jpy, minval=50, step=10)
+jpy_grs_tp_mult    = input.float(3.0,  "GAP_REJ_SHORT -- USDJPY TP Multiplier",        group=grp_jpy, minval=1.0, maxval=5.0, step=0.5,
+    tooltip="TP = entry - tp_mult x gap_dist. 1.0x = gap fill. Backtest 1x-3x within ~10R of each other -- pairs return +4.7R avg regardless.")
+jpy_grs_inv3_only  = input.bool(true,  "GAP_REJ_SHORT -- inv3 pairs only (EUR/GBP/CHF)", group=grp_jpy,
+    tooltip="Restrict to EURUSD, GBPUSD, USDCHF. Best pair set in backtesting. Disable to show signal on all pairs.")
+
+// USDJPY ATTR_CORE
+jpy_acl_enabled    = input.bool(true,  "Enable ATTR_CORE_LONG (USDJPY indicator)",      group=grp_jpy,
+    tooltip="USDJPY approaches Japan-session zone from below (gapped down overnight). All 7 pairs. Backtest: 36 signals, +36.8R, +1.14R/mo, PF=1.43.")
+jpy_acl_tp_mult    = input.float(3.0,  "ATTR_CORE_LONG -- USDJPY TP Multiplier",       group=grp_jpy, minval=1.0, maxval=5.0, step=0.5)
+jpy_acs_enabled    = input.bool(true,  "Enable ATTR_CORE_SHORT (USDJPY indicator)",     group=grp_jpy,
+    tooltip="USDJPY approaches Japan-session zone from above (gapped up overnight). BB4 flat REQUIRED. All 7 pairs. Backtest: 24 signals, +37.8R, +1.17R/mo, PF=1.61.")
+jpy_acs_tp_mult    = input.float(2.5,  "ATTR_CORE_SHORT -- USDJPY TP Multiplier",      group=grp_jpy, minval=1.0, maxval=5.0, step=0.5)
+jpy_ac_min_gap     = input.int(50,     "ATTR_CORE -- Min USDJPY Gap at Tokyo (pts)",    group=grp_jpy, minval=10, step=10)
+
+// USDJPY REV_LONG
+jpy_rl_enabled     = input.bool(true,  "Enable REV_LONG (USDJPY indicator)",            group=grp_jpy,
+    tooltip="USDJPY drops 1000+pts from London open, bullish candle within 1000pts of open, BB4 flat. All 7 pairs. Backtest: 11 signals, +49.9R, +1.54R/mo, PF=3.26, 58.9% WR.")
+jpy_rl_min_impulse = input.int(1000,   "REV_LONG -- Min USDJPY Drop from London Open (pts)", group=grp_jpy, minval=100, step=50)
+jpy_rl_max_dist    = input.int(1000,   "REV_LONG -- Max Dist from London Open at Entry (pts)", group=grp_jpy, minval=100, step=50)
+jpy_rl_tp_mult     = input.float(3.0,  "REV_LONG -- USDJPY TP Multiplier",             group=grp_jpy, minval=1.0, maxval=5.0, step=0.5)
+
+// USDJPY REV_SHORT
+jpy_rs_enabled     = input.bool(true,  "Enable REV_SHORT (USDJPY indicator)",           group=grp_jpy,
+    tooltip="USDJPY rises 1000+pts from London open, bearish candle. Any BB. All 7 pairs. Backtest: 53 signals, +66.7R, +2.06R/mo, PF=1.44. Grade A filter (DXY confirms): 80% WR on 10/10 signals.")
+jpy_rs_min_impulse = input.int(1000,   "REV_SHORT -- Min USDJPY Rise from London Open (pts)", group=grp_jpy, minval=100, step=50)
+jpy_rs_max_dist    = input.int(5000,   "REV_SHORT -- Max Dist from London Open at Entry (pts)", group=grp_jpy, minval=500, step=100)
+jpy_rs_tp_mult     = input.float(2.5,  "REV_SHORT -- USDJPY TP Multiplier",            group=grp_jpy, minval=1.0, maxval=5.0, step=0.5)
+jpy_rs_dxy_filter  = input.bool(false, "REV_SHORT -- Grade A only (DXY confirms)",      group=grp_jpy,
+    tooltip="When ON: only fires when DXY is also above London open AND shows bearish candle. Backtest WR = 80% (10 signals). OFF gives 53 signals at 44.5% WR -- use OFF for volume, ON for size.")
+
+// REV structural SL
+struct_sl_buf  = input.int(50,   "REV -- Structural SL Buffer (pts)",  group=grp_jpy, minval=0, step=10)
+max_sl_pts     = input.int(3000, "REV -- Max SL Distance (pts)",       group=grp_jpy, minval=500, step=250)
 
 // Session
-entry_start_h = input.int(7,  "REV Entry Start Hour (GMT)",      group=grp_sess, minval=0, maxval=23)
-entry_start_m = input.int(0,  "REV Entry Start Minute (GMT)",    group=grp_sess, minval=0, maxval=59)
-attr_start_h  = input.int(6,  "ATTR Entry Start Hour (GMT)",     group=grp_sess, minval=0, maxval=23)
-attr_start_m  = input.int(0,  "ATTR Entry Start Minute (GMT)",   group=grp_sess, minval=0, maxval=59)
-entry_end_h   = input.int(19, "Entry End Hour (GMT)",            group=grp_sess, minval=0, maxval=23)
-entry_end_m   = input.int(30, "Entry End Minute (GMT)",          group=grp_sess, minval=0, maxval=59)
-rev_end_h     = input.int(12, "Reversal — Entry End Hour (GMT)", group=grp_sess, minval=6, maxval=19)
-rev_end_m     = input.int(0,  "Reversal — Entry End Min (GMT)",  group=grp_sess, minval=0, maxval=59)
-monday_start  = input.int(6,  "Monday Start Hour (GMT)",         group=grp_sess, minval=0, maxval=23)
-japan_end_h   = input.int(6,  "Japan Session End Hour (GMT)",    group=grp_sess, minval=1, maxval=8)
-lon_attr_end_h= input.int(18, "LON_ATTR — Entry End Hour (GMT)", group=grp_sess, minval=7, maxval=22)
+entry_start_h = input.int(7,  "REV Entry Start Hour (GMT)",       group=grp_sess, minval=0, maxval=23)
+entry_start_m = input.int(0,  "REV Entry Start Minute (GMT)",     group=grp_sess, minval=0, maxval=59)
+attr_start_h  = input.int(6,  "ATTR Entry Start Hour (GMT)",      group=grp_sess, minval=0, maxval=23)
+attr_start_m  = input.int(0,  "ATTR Entry Start Minute (GMT)",    group=grp_sess, minval=0, maxval=59)
+entry_end_h   = input.int(19, "Entry End Hour (GMT)",             group=grp_sess, minval=0, maxval=23)
+entry_end_m   = input.int(30, "Entry End Minute (GMT)",           group=grp_sess, minval=0, maxval=59)
+rev_end_h     = input.int(12, "REV -- Entry End Hour (GMT)",      group=grp_sess, minval=6, maxval=19)
+rev_end_m     = input.int(0,  "REV -- Entry End Min (GMT)",       group=grp_sess, minval=0, maxval=59)
+monday_start  = input.int(6,  "Monday Start Hour (GMT)",          group=grp_sess, minval=0, maxval=23)
+japan_end_h   = input.int(6,  "Japan Session End Hour (GMT)",     group=grp_sess, minval=1, maxval=8)
+lon_attr_end_h= input.int(18, "LON_ATTR -- Entry End Hour (GMT)", group=grp_sess, minval=7, maxval=22)
 
 // Candle patterns
 use_engulf    = input.bool(true,  "Engulfing Candle",        group=grp_sig)
 use_pin       = input.bool(true,  "Pin Bar (directional)",   group=grp_sig)
 use_3bar      = input.bool(true,  "3-Bar Reversal",          group=grp_sig)
-pin_wick_mult = input.float(2.0,  "Pin Bar — Min Wick:Body", group=grp_sig, minval=1.0, step=0.25)
+pin_wick_mult = input.float(2.0,  "Pin Bar -- Min Wick:Body", group=grp_sig, minval=1.0, step=0.25)
 
 // HTF BB
 bb_period     = input.int(20,    "BB Period",                        group=grp_htf, minval=5,  maxval=50)
@@ -114,16 +134,22 @@ show_tp_sl    = input.bool(true,  "Show TP/SL Lines",                group=grp_d
 
 // Webhook
 enable_webhook = input.bool(false, "Enable Webhook Alerts", group=grp_wh,
-    tooltip="Fires alert() JSON on every entry and exit.\nCreate ONE alert on this indicator in TradingView with the 'alert() function calls' condition.\nPoint the notification to your webhook URL.")
-be_trigger_pct = input.int(50, "Breakeven Move — Trigger (% toward TP)", group=grp_wh,
+    tooltip="Fires alert() JSON on every entry and exit. Create ONE alert on this indicator with the 'alert() function calls' condition.")
+be_trigger_pct = input.int(50, "Breakeven Move -- Trigger (% toward TP)", group=grp_wh,
     minval=25, maxval=75, step=5,
-    tooltip="Fire an advisory SL_MOVE webhook when DXY has moved this % of the way from entry to TP. Default 50% = halfway. IMPORTANT: SL_MOVE is advisory only — never place automatic orders based on this event.")
+    tooltip="Advisory SL_MOVE webhook fires when indicator has moved this % toward TP. SL_MOVE is advisory only -- never place automatic orders.")
 
 // ─── DXY 15m OHLC ─────────────────────────────────────────────────────────────
 dxy_o = request.security(dxy_symbol, "15", open,  lookahead=barmerge.lookahead_off)
 dxy_h = request.security(dxy_symbol, "15", high,  lookahead=barmerge.lookahead_off)
 dxy_l = request.security(dxy_symbol, "15", low,   lookahead=barmerge.lookahead_off)
 dxy_c = request.security(dxy_symbol, "15", close, lookahead=barmerge.lookahead_off)
+
+// ─── USDJPY 15m OHLC ──────────────────────────────────────────────────────────
+jpy_o = request.security(jpy_symbol, "15", open,  lookahead=barmerge.lookahead_off)
+jpy_h = request.security(jpy_symbol, "15", high,  lookahead=barmerge.lookahead_off)
+jpy_l = request.security(jpy_symbol, "15", low,   lookahead=barmerge.lookahead_off)
+jpy_c = request.security(jpy_symbol, "15", close, lookahead=barmerge.lookahead_off)
 
 // ─── SESSION FLAGS ────────────────────────────────────────────────────────────
 h_gmt       = hour(time, "UTC")
@@ -145,7 +171,8 @@ is_london_open_bar = not in_japan and
      ((not is_mon and c_min == entry_start_h * 60 + entry_start_m) or
       (is_mon      and c_min == monday_start  * 60 + 30))
 
-bool is_new_day = not na(time) and ta.change(dayofmonth(time, "UTC")) != 0
+bool is_new_day    = not na(time) and ta.change(dayofmonth(time, "UTC")) != 0
+bool is_tokyo_open = h_gmt == 23 and m_gmt == 45
 
 // ─── DXY PRIOR DAY HIGH / LOW ─────────────────────────────────────────────────
 var float dxy_today_high = na
@@ -165,6 +192,22 @@ else
     dxy_today_high := na(dxy_today_high) ? dxy_h : math.max(dxy_today_high, dxy_h)
     dxy_today_low  := na(dxy_today_low)  ? dxy_l : math.min(dxy_today_low,  dxy_l)
 
+// ─── USDJPY PRIOR DAY HIGH / LOW ──────────────────────────────────────────────
+var float jpy_today_high = na
+var float jpy_today_low  = na
+var float jpy_pd_high    = na
+var float jpy_pd_low     = na
+
+if is_new_day
+    if not na(jpy_today_high)
+        jpy_pd_high := jpy_today_high
+        jpy_pd_low  := jpy_today_low
+    jpy_today_high := jpy_h
+    jpy_today_low  := jpy_l
+else
+    jpy_today_high := na(jpy_today_high) ? jpy_h : math.max(jpy_today_high, jpy_h)
+    jpy_today_low  := na(jpy_today_low)  ? jpy_l : math.min(jpy_today_low,  jpy_l)
+
 // ─── DXY LONDON OPEN LEVEL ────────────────────────────────────────────────────
 var float dxy_london_open   = na
 var float dxy_max_move_up   = 0.0
@@ -183,16 +226,24 @@ if is_london_open_bar
     dxy_lon_zone_bot   := math.min(dxy_o, dxy_c)
     dxy_pristine_long  := true
 
-// ─── DXY TOKYO OPEN GAP ───────────────────────────────────────────────────────
-bool is_tokyo_open = h_gmt == 23 and m_gmt == 45
+// ─── USDJPY LONDON OPEN LEVEL ─────────────────────────────────────────────────
+var float jpy_london_open = na
+var float jpy_max_move_up = 0.0
+var float jpy_max_move_dn = 0.0
 
+if is_london_open_bar
+    jpy_london_open := jpy_o
+    jpy_max_move_up := 0.0
+    jpy_max_move_dn := 0.0
+
+// ─── DXY TOKYO OPEN GAP ───────────────────────────────────────────────────────
 var float dxy_attr_target     = na
 var float dxy_attr_gap_pts    = 0.0
-var float dxy_attr_tokyo_open = na   // DXY 23:45 open = zone near edge (ATTR CORE)
+var float dxy_attr_tokyo_open = na
 var bool  attr_traded         = false
 var bool  attr_gap_touched    = false
-var float dxy_lon_open_close  = na   // DXY close at London open bar (ATTR CORE)
-var float dxy_gap_at_lon      = 0.0  // gap from zone near edge to DXY close at London open (pts)
+var float dxy_lon_open_close  = na
+var float dxy_gap_at_lon      = 0.0
 
 if is_tokyo_open
     dxy_attr_tokyo_open := dxy_o
@@ -214,13 +265,48 @@ if not na(dxy_attr_target)
     else if dxy_attr_gap_pts > 0 and dxy_c <= dxy_attr_target
         attr_gap_touched := true
 
-// ATTR CORE: capture DXY close at London open bar and measure gap-at-London
 if is_london_open_bar and not na(dxy_attr_target) and not attr_gap_touched
     dxy_lon_open_close := dxy_c
     if dxy_attr_gap_pts < 0
         dxy_gap_at_lon := math.max((dxy_attr_tokyo_open - dxy_c) * 10000, 0.0)
     else if dxy_attr_gap_pts > 0
         dxy_gap_at_lon := math.max((dxy_c - dxy_attr_tokyo_open) * 10000, 0.0)
+
+// ─── USDJPY TOKYO OPEN GAP ────────────────────────────────────────────────────
+var float jpy_gap_target     = na
+var float jpy_gap_pts        = 0.0
+var float jpy_tokyo_open     = na
+var bool  jpy_attr_traded    = false
+var bool  jpy_gap_touched    = false
+var float jpy_lon_open_close = na
+var float jpy_gap_at_lon     = 0.0
+
+if is_tokyo_open
+    jpy_tokyo_open     := jpy_o
+    float jpy_raw_gap   = (jpy_o - jpy_c[2]) * 10000
+    if math.abs(jpy_raw_gap) >= 10
+        jpy_gap_pts    := jpy_raw_gap
+        jpy_gap_target := jpy_c[2]
+    else
+        jpy_gap_pts    := (jpy_c - jpy_o) * 10000
+        jpy_gap_target := jpy_o
+    jpy_attr_traded    := false
+    jpy_gap_touched    := false
+    jpy_lon_open_close := na
+    jpy_gap_at_lon     := 0.0
+
+if not na(jpy_gap_target)
+    if jpy_gap_pts < 0 and jpy_c >= jpy_gap_target
+        jpy_gap_touched := true
+    else if jpy_gap_pts > 0 and jpy_c <= jpy_gap_target
+        jpy_gap_touched := true
+
+if is_london_open_bar and not na(jpy_gap_target) and not jpy_gap_touched
+    jpy_lon_open_close := jpy_c
+    if jpy_gap_pts < 0
+        jpy_gap_at_lon := math.max((jpy_tokyo_open - jpy_c) * 10000, 0.0)
+    else if jpy_gap_pts > 0
+        jpy_gap_at_lon := math.max((jpy_c - jpy_tokyo_open) * 10000, 0.0)
 
 // ─── DXY MAX MOVE & PRISTINE TRACKING ────────────────────────────────────────
 if not na(dxy_london_open) and not in_japan
@@ -233,6 +319,14 @@ if not na(dxy_london_open) and not in_japan
 if not in_japan and not is_london_open_bar and not na(dxy_lon_zone_top)
     if dxy_o >= dxy_lon_zone_top or dxy_c >= dxy_lon_zone_top
         dxy_pristine_long := false
+
+// ─── USDJPY MAX MOVE TRACKING ─────────────────────────────────────────────────
+if not na(jpy_london_open) and not in_japan
+    float jpy_above = (jpy_c - jpy_london_open) * 10000
+    if jpy_above > 0
+        jpy_max_move_up := math.max(jpy_max_move_up,  jpy_above)
+    else if jpy_above < 0
+        jpy_max_move_dn := math.max(jpy_max_move_dn, -jpy_above)
 
 // ─── DXY HTF BB REGIME ────────────────────────────────────────────────────────
 dxy_1h_basis  = request.security(dxy_symbol, "60",  ta.sma(close, bb_period),                                            lookahead=barmerge.lookahead_off)
@@ -251,6 +345,11 @@ dxy_4h_exp    = dxy_4h_width > dxy_4h_wavg
 dxy_4h_sup    = dxy_4h_basis > dxy_4h_basis3
 dxy_bb_4h     = dxy_4h_exp ? (dxy_4h_sup ? 1 : -1) : 0
 
+// ─── USDJPY BB4 FLAT REGIME (4H) ─────────────────────────────────────────────
+jpy_4h_width  = request.security(jpy_symbol, "240", ta.stdev(close, bb_period) * bb_std_mult * 2.0,                      lookahead=barmerge.lookahead_off)
+jpy_4h_wavg   = request.security(jpy_symbol, "240", ta.sma(ta.stdev(close, bb_period) * bb_std_mult * 2.0, bb_lookback), lookahead=barmerge.lookahead_off)
+bool jpy_bb4_flat = jpy_4h_width <= jpy_4h_wavg
+
 // ─── DXY CANDLE MEASUREMENTS ─────────────────────────────────────────────────
 dxy_bs   = math.abs(dxy_c - dxy_o)
 dxy_btop = math.max(dxy_o, dxy_c)
@@ -259,14 +358,25 @@ dxy_uw   = dxy_h - dxy_btop
 dxy_lw   = dxy_bbot - dxy_l
 dxy_cr   = dxy_h - dxy_l
 dxy_bs1  = math.abs(dxy_c[1] - dxy_o[1])
+dxy_b2r  = math.abs(dxy_c[2] - dxy_o[2])
+dxy_ind  = dxy_bs1 <= dxy_b2r * 0.5
+
+// ─── USDJPY CANDLE MEASUREMENTS ───────────────────────────────────────────────
+jpy_bs   = math.abs(jpy_c - jpy_o)
+jpy_btop = math.max(jpy_o, jpy_c)
+jpy_bbot = math.min(jpy_o, jpy_c)
+jpy_uw   = jpy_h - jpy_btop
+jpy_lw   = jpy_bbot - jpy_l
+jpy_cr   = jpy_h - jpy_l
+jpy_bs1  = math.abs(jpy_c[1] - jpy_o[1])
+jpy_b2r  = math.abs(jpy_c[2] - jpy_o[2])
+jpy_ind  = jpy_bs1 <= jpy_b2r * 0.5
 
 // ─── DXY ENTRY SIGNALS ───────────────────────────────────────────────────────
 bull_eng = use_engulf and dxy_c > dxy_o and not (dxy_c[1] > dxy_o[1]) and dxy_c > dxy_o[1] and dxy_o < dxy_c[1] and dxy_bs >= dxy_bs1 * 0.8
 bear_eng = use_engulf and dxy_c < dxy_o and not (dxy_c[1] < dxy_o[1]) and dxy_c < dxy_o[1] and dxy_o > dxy_c[1] and dxy_bs >= dxy_bs1 * 0.8
 bull_pin = use_pin and dxy_lw >= dxy_bs * pin_wick_mult and dxy_lw >= dxy_uw * 1.5 and dxy_cr > 0
 bear_pin = use_pin and dxy_uw >= dxy_bs * pin_wick_mult and dxy_uw >= dxy_lw * 1.5 and dxy_cr > 0
-dxy_b2r  = math.abs(dxy_c[2] - dxy_o[2])
-dxy_ind  = dxy_bs1 <= dxy_b2r * 0.5
 bull_3b  = use_3bar and dxy_c[2] < dxy_o[2] and dxy_ind and dxy_c > dxy_o and dxy_c > dxy_o[2]
 bear_3b  = use_3bar and dxy_c[2] > dxy_o[2] and dxy_ind and dxy_c < dxy_o and dxy_c < dxy_o[2]
 bool _dxy_bull_raw = bull_eng or bull_pin or bull_3b
@@ -275,64 +385,89 @@ bool _dxy_both     = _dxy_bull_raw and _dxy_bear_raw
 dxy_bull_sig = _dxy_bull_raw and not (_dxy_both and dxy_c <= dxy_o)
 dxy_bear_sig = _dxy_bear_raw and not (_dxy_both and dxy_c >= dxy_o)
 
-// LON_ATTR pin bar (always active, independent of use_pin)
-la_dxy_bp_r  = dxy_lw >= dxy_bs * pin_wick_mult and dxy_lw >= dxy_uw * 1.5 and dxy_cr > 0
-la_dxy_brp_r = dxy_uw >= dxy_bs * pin_wick_mult and dxy_uw >= dxy_lw * 1.5 and dxy_cr > 0
+// LON_ATTR pin bar (independent of use_pin toggle)
+la_dxy_bp_r      = dxy_lw >= dxy_bs * pin_wick_mult and dxy_lw >= dxy_uw * 1.5 and dxy_cr > 0
+la_dxy_brp_r     = dxy_uw >= dxy_bs * pin_wick_mult and dxy_uw >= dxy_lw * 1.5 and dxy_cr > 0
 bool _la_dxy_pb  = la_dxy_bp_r and la_dxy_brp_r
-la_dxy_bull_pin  = la_dxy_bp_r  and not (_la_dxy_pb and dxy_c <= dxy_o)
+la_dxy_bull_pin  = la_dxy_bp_r and not (_la_dxy_pb and dxy_c <= dxy_o)
+
+// ─── USDJPY ENTRY SIGNALS ─────────────────────────────────────────────────────
+jpy_bull_eng = use_engulf and jpy_c > jpy_o and not (jpy_c[1] > jpy_o[1]) and jpy_c > jpy_o[1] and jpy_o < jpy_c[1] and jpy_bs >= jpy_bs1 * 0.8
+jpy_bear_eng = use_engulf and jpy_c < jpy_o and not (jpy_c[1] < jpy_o[1]) and jpy_c < jpy_o[1] and jpy_o > jpy_c[1] and jpy_bs >= jpy_bs1 * 0.8
+jpy_bull_pin = use_pin and jpy_lw >= jpy_bs * pin_wick_mult and jpy_lw >= jpy_uw * 1.5 and jpy_cr > 0
+jpy_bear_pin = use_pin and jpy_uw >= jpy_bs * pin_wick_mult and jpy_uw >= jpy_lw * 1.5 and jpy_cr > 0
+jpy_bull_3b  = use_3bar and jpy_c[2] < jpy_o[2] and jpy_ind and jpy_c > jpy_o and jpy_c > jpy_o[2]
+jpy_bear_3b  = use_3bar and jpy_c[2] > jpy_o[2] and jpy_ind and jpy_c < jpy_o and jpy_c < jpy_o[2]
+bool _jpy_bull_raw = jpy_bull_eng or jpy_bull_pin or jpy_bull_3b
+bool _jpy_bear_raw = jpy_bear_eng or jpy_bear_pin or jpy_bear_3b
+bool _jpy_both     = _jpy_bull_raw and _jpy_bear_raw
+jpy_bull_sig = _jpy_bull_raw and not (_jpy_both and jpy_c <= jpy_o)
+jpy_bear_sig = _jpy_bear_raw and not (_jpy_both and jpy_c >= jpy_o)
+
+// DXY bearish candle for REV_SHORT Grade A filter
+bool dxy_bear_candle = dxy_c < dxy_o
 
 // ─── DXY DISTANCE & SL/TP LEVELS ─────────────────────────────────────────────
 float dxy_dist_from_open = not na(dxy_london_open) ? (dxy_c - dxy_london_open) * 10000 : na
-bool  dxy_at_open_level  = not na(dxy_dist_from_open) and math.abs(dxy_dist_from_open) <= rev_proximity
+bool  dxy_at_open_level  = not na(dxy_dist_from_open) and math.abs(dxy_dist_from_open) <= 250
 
-// Reversal SL
-float dxy_rl_raw_sl  = na(dxy_pd_low)  ? dxy_c - max_sl_pts / 10000.0 : dxy_pd_low  - struct_sl_buf / 10000.0
-float dxy_rl_sl      = math.max(dxy_rl_raw_sl,  dxy_c - max_sl_pts / 10000.0)
-float dxy_rl_sl_d    = dxy_c - dxy_rl_sl
-float dxy_rs_raw_sl  = na(dxy_pd_high) ? dxy_c + max_sl_pts / 10000.0 : dxy_pd_high + struct_sl_buf / 10000.0
-float dxy_rs_sl      = math.min(dxy_rs_raw_sl, dxy_c + max_sl_pts / 10000.0)
-float dxy_rs_sl_d    = dxy_rs_sl - dxy_c
+// Reversal SL (DXY-based for LON_ATTR reference)
+float dxy_rl_raw_sl = na(dxy_pd_low)  ? dxy_c - max_sl_pts / 10000.0 : dxy_pd_low  - struct_sl_buf / 10000.0
+float dxy_rl_sl     = math.max(dxy_rl_raw_sl,  dxy_c - max_sl_pts / 10000.0)
+float dxy_rl_sl_d   = dxy_c - dxy_rl_sl
+float dxy_rs_raw_sl = na(dxy_pd_high) ? dxy_c + max_sl_pts / 10000.0 : dxy_pd_high + struct_sl_buf / 10000.0
+float dxy_rs_sl     = math.min(dxy_rs_raw_sl, dxy_c + max_sl_pts / 10000.0)
+float dxy_rs_sl_d   = dxy_rs_sl - dxy_c
 
-// Attraction (GAP_REJ) TP
+// GAP_REJ_LONG TP (DXY)
 float dxy_al_tp     = attr_use_near_tp ? dxy_attr_target - attr_near_buf / 10000.0 : dxy_attr_target
-float dxy_as_tp     = attr_use_near_tp ? dxy_attr_target + attr_near_buf / 10000.0 : dxy_attr_target
 float dxy_al_sl_d   = not na(dxy_al_tp) ? dxy_al_tp - dxy_c : na
-float dxy_as_sl_d   = not na(dxy_as_tp) ? dxy_c - dxy_as_tp : na
 float dxy_al_reward = not na(dxy_al_sl_d) ? dxy_al_sl_d * 10000 : 0.0
-float dxy_as_reward = not na(dxy_as_sl_d) ? dxy_as_sl_d * 10000 : 0.0
 
-// LON_ATTR TP/SL
+// LON_ATTR TP/SL (DXY)
 float dxy_la_long_tp   = dxy_lon_zone_bot
 float dxy_la_long_sl_d = dxy_lon_zone_bot - dxy_c
 float dxy_la_long_sl   = dxy_c - dxy_la_long_sl_d
 
-// ─── ATTR CORE PER-BAR CALCULATIONS ──────────────────────────────────────────
-float dxy_wave_ext = 0.0
+// ─── DXY ATTR_CORE CALCULATIONS ──────────────────────────────────────────────
+float dxy_wave_ext  = 0.0
 if not na(dxy_lon_open_close)
     if dxy_attr_gap_pts < 0
         dxy_wave_ext := math.max((dxy_lon_open_close - dxy_c) * 10000, 0.0)
     else if dxy_attr_gap_pts > 0
         dxy_wave_ext := math.max((dxy_c - dxy_lon_open_close) * 10000, 0.0)
-bool dxy_impl_long  = (dxy_c - dxy_c[3]) * 10000 >= attr_approach_min
-bool dxy_impl_short = (dxy_c[3] - dxy_c) * 10000 >= attr_approach_min
-bool dxy_core_ok    = (not na(dxy_lon_open_close) and
-    dxy_gap_at_lon < core_gap_max and dxy_wave_ext < core_wave_max)
+bool dxy_impl_long  = (dxy_c - dxy_c[3]) * 10000 >= 150
+bool dxy_impl_short = (dxy_c[3] - dxy_c) * 10000 >= 150
+bool dxy_core_ok    = not na(dxy_lon_open_close) and dxy_gap_at_lon < 1500 and dxy_wave_ext < 1500
 
-// ─── SIGNAL CONDITIONS ────────────────────────────────────────────────────────
-bool rev_long_cond = (rev_enabled and not na(dxy_london_open) and
-    in_rev_sess and not in_japan and
-    dxy_max_move_down >= rev_min_move and
-    dxy_at_open_level and dxy_bull_sig and dxy_bb_1h == 1 and
-    not na(dxy_pd_low) and dxy_rl_sl_d > 0 and
-    barstate.isconfirmed)
+// ─── USDJPY DISTANCE / SL / TP LEVELS ────────────────────────────────────────
+float jpy_dist_from_open = not na(jpy_london_open) ? (jpy_c - jpy_london_open) * 10000 : na
 
-bool rev_short_cond = (rev_enabled and not na(dxy_london_open) and
-    in_rev_sess and not in_japan and
-    dxy_max_move_up >= rev_min_move and
-    dxy_at_open_level and dxy_bear_sig and dxy_bb_1h == -1 and
-    not na(dxy_pd_high) and dxy_rs_sl_d > 0 and
-    barstate.isconfirmed)
+// USDJPY structural SL for REV signals
+float jpy_rl_raw_sl = na(jpy_pd_low)  ? jpy_c - max_sl_pts / 10000.0 : jpy_pd_low  - struct_sl_buf / 10000.0
+float jpy_rl_sl     = math.max(jpy_rl_raw_sl, jpy_c - max_sl_pts / 10000.0)
+float jpy_rl_sl_d   = jpy_c - jpy_rl_sl
+float jpy_rs_raw_sl = na(jpy_pd_high) ? jpy_c + max_sl_pts / 10000.0 : jpy_pd_high + struct_sl_buf / 10000.0
+float jpy_rs_sl     = math.min(jpy_rs_raw_sl, jpy_c + max_sl_pts / 10000.0)
+float jpy_rs_sl_d   = jpy_rs_sl - jpy_c
 
+// USDJPY ATTR_CORE wave extension (how far price has moved toward zone from London open)
+float jpy_wave_ext = 0.0
+if not na(jpy_lon_open_close)
+    if jpy_gap_pts < 0
+        jpy_wave_ext := math.max((jpy_lon_open_close - jpy_c) * 10000, 0.0)
+    else if jpy_gap_pts > 0
+        jpy_wave_ext := math.max((jpy_c - jpy_lon_open_close) * 10000, 0.0)
+
+// ─── PAIR FILTER FLAGS ────────────────────────────────────────────────────────
+// GAP_REJ_SHORT best pairs (inv3): EURUSD, GBPUSD, USDCHF
+bool is_inv3_pair    = str.contains(_sym, "EURUSD") or str.contains(_sym, "GBPUSD") or str.contains(_sym, "USDCHF")
+bool jpy_grs_pair_ok = not jpy_grs_inv3_only or is_inv3_pair
+
+// LON_ATTR best pairs: USDJPY, NZDUSD, AUDUSD (32-month backtest)
+bool lon_attr_pair_ok = str.contains(_sym, "USDJPY") or str.contains(_sym, "NZDUSD") or str.contains(_sym, "AUDUSD")
+
+// ─── DXY SIGNAL CONDITIONS ────────────────────────────────────────────────────
 bool gap_rej_long_cond = (attr_enabled and not na(dxy_attr_target) and not attr_traded and attr_gap_touched and
     in_sess and not in_japan and
     dxy_attr_gap_pts < -attr_min_gap and dxy_c < dxy_attr_target and
@@ -341,399 +476,414 @@ bool gap_rej_long_cond = (attr_enabled and not na(dxy_attr_target) and not attr_
     not na(dxy_al_sl_d) and dxy_al_sl_d > 0 and
     barstate.isconfirmed)
 
-bool gap_rej_short_cond = (attr_enabled and not na(dxy_attr_target) and not attr_traded and attr_gap_touched and
-    in_sess and not in_japan and
-    dxy_attr_gap_pts > attr_min_gap and dxy_c > dxy_attr_target and
-    dxy_pd_range <= attr_max_prev_range and dxy_bb_4h == 0 and
-    dxy_bear_sig and dxy_as_reward >= attr_min_reward and
-    not na(dxy_as_sl_d) and dxy_as_sl_d > 0 and
-    barstate.isconfirmed)
-
-if gap_rej_long_cond or gap_rej_short_cond
-    attr_traded := true
-
-bool lon_attr_long_cond = (lon_attr_enabled and not lon_attr_traded and
+bool lon_attr_long_cond = (lon_attr_enabled and lon_attr_pair_ok and not lon_attr_traded and
     not na(dxy_london_open) and in_lon_attr_sess and not in_japan and
     dxy_dist_from_open <= -lon_attr_min_long and
     dxy_pristine_long and dxy_bb_4h == 0 and
     dxy_la_long_sl_d > 0 and la_dxy_bull_pin and
     barstate.isconfirmed)
 
+if gap_rej_long_cond
+    attr_traded := true
 if lon_attr_long_cond
     lon_attr_traded := true
 
-bool attr_core_long_cond = (attr_core_enabled and not na(dxy_attr_target) and not attr_traded
-    and not attr_gap_touched
-    and in_sess and not in_japan
-    and not na(dxy_lon_open_close)
-    and dxy_attr_gap_pts < -attr_min_gap
-    and dxy_c < dxy_attr_target
-    and dxy_al_reward >= attr_min_reward
-    and dxy_pd_range <= attr_max_prev_range
-    and dxy_bb_4h == 0
-    and dxy_bull_sig
-    and dxy_impl_long
-    and dxy_core_ok
-    and not na(dxy_al_sl_d) and dxy_al_sl_d > 0
-    and (attr_core_dir == "LONG only" or attr_core_dir == "Both")
-    and barstate.isconfirmed)
+// ─── USDJPY SIGNAL CONDITIONS ─────────────────────────────────────────────────
 
-bool attr_core_short_cond = (attr_core_enabled and not na(dxy_attr_target) and not attr_traded
-    and not attr_gap_touched
-    and in_sess and not in_japan
-    and not na(dxy_lon_open_close)
-    and dxy_attr_gap_pts > attr_min_gap
-    and dxy_c > dxy_attr_target
-    and dxy_as_reward >= attr_min_reward
-    and dxy_pd_range <= attr_max_prev_range
-    and dxy_bb_4h == 0
-    and dxy_bear_sig
-    and dxy_impl_short
-    and dxy_core_ok
-    and not na(dxy_as_sl_d) and dxy_as_sl_d > 0
-    and (attr_core_dir == "SHORT only" or attr_core_dir == "Both")
-    and barstate.isconfirmed)
+// GAP_REJ_SHORT: USDJPY gapped UP >= min_gap pts, gap not yet filled,
+// bearish entry candle on USDJPY, within London session
+bool jpy_grs_cond = (jpy_grs_enabled and jpy_grs_pair_ok and
+    not na(jpy_gap_target) and not jpy_attr_traded and not jpy_gap_touched and
+    in_sess and not in_japan and
+    jpy_gap_pts > jpy_grs_min_gap and jpy_c > jpy_gap_target and
+    (jpy_c - jpy_gap_target) > 0 and
+    jpy_bear_sig and
+    barstate.isconfirmed)
 
-if attr_core_long_cond or attr_core_short_cond
-    attr_traded := true
+// ATTR_CORE_LONG: USDJPY gapped DOWN, approaching zone from below, bullish candle
+// No BB restriction (backtesting showed any BB equally good)
+bool jpy_acl_cond = (jpy_acl_enabled and
+    not na(jpy_gap_target) and not jpy_attr_traded and not jpy_gap_touched and
+    in_sess and not in_japan and not na(jpy_lon_open_close) and
+    jpy_gap_pts < -jpy_ac_min_gap and jpy_c < jpy_gap_target and
+    (jpy_gap_target - jpy_c) > 0 and
+    jpy_bull_sig and
+    barstate.isconfirmed)
+
+// ATTR_CORE_SHORT: USDJPY gapped UP, approaching zone from above, bearish candle
+// BB4 flat REQUIRED (backtesting critical filter: cuts 50->24 signals, improves PF from noise to 1.61)
+bool jpy_acs_cond = (jpy_acs_enabled and
+    not na(jpy_gap_target) and not jpy_attr_traded and not jpy_gap_touched and
+    in_sess and not in_japan and not na(jpy_lon_open_close) and
+    jpy_gap_pts > jpy_ac_min_gap and jpy_c > jpy_gap_target and
+    (jpy_c - jpy_gap_target) > 0 and
+    jpy_bb4_flat and
+    jpy_bear_sig and
+    barstate.isconfirmed)
+
+if jpy_grs_cond or jpy_acl_cond or jpy_acs_cond
+    jpy_attr_traded := true
+
+// REV_LONG: USDJPY has dropped >= min_impulse pts from London open,
+// bullish candle, within max_dist pts of London open, BB4 flat required
+bool jpy_rl_cond = (jpy_rl_enabled and
+    not na(jpy_london_open) and in_rev_sess and not in_japan and
+    jpy_max_move_dn >= jpy_rl_min_impulse and
+    not na(jpy_dist_from_open) and jpy_dist_from_open < 0 and
+    math.abs(jpy_dist_from_open) <= jpy_rl_max_dist and
+    jpy_bb4_flat and not na(jpy_pd_low) and jpy_rl_sl_d > 0 and
+    jpy_bull_sig and
+    barstate.isconfirmed)
+
+// REV_SHORT: USDJPY has risen >= min_impulse pts from London open, bearish candle
+// Any BB. Optional Grade A filter: DXY also above London open + bearish candle = 80% WR
+bool _jpy_rs_base = (jpy_rs_enabled and
+    not na(jpy_london_open) and in_rev_sess and not in_japan and
+    jpy_max_move_up >= jpy_rs_min_impulse and
+    not na(jpy_dist_from_open) and jpy_dist_from_open > 0 and
+    jpy_dist_from_open <= jpy_rs_max_dist and
+    not na(jpy_pd_high) and jpy_rs_sl_d > 0 and
+    jpy_bear_sig and
+    barstate.isconfirmed)
+
+bool _dxy_confirms_rs = not na(dxy_dist_from_open) and dxy_dist_from_open > 0 and dxy_bear_candle
+bool jpy_rs_cond = _jpy_rs_base and (not jpy_rs_dxy_filter or _dxy_confirms_rs)
 
 // ─── STATE TRACKING ──────────────────────────────────────────────────────────
-var float dxy_tp_lvl     = na       // DXY TP level for open trade
-var float dxy_sl_lvl     = na       // DXY SL level for open trade
+var float ind_tp_lvl     = na       // indicator (DXY or JPY) TP level
+var float ind_sl_lvl     = na       // indicator SL level
 var float pair_tp_lvl    = na       // estimated pair TP price
 var float pair_sl_lvl    = na       // estimated pair SL price
-var bool  dxy_trade_long = true     // DXY direction of open trade
-var bool  dxy_exit_track = false    // position open and monitoring DXY exit
-var int   dxy_entry_bar  = -1       // bar_index of last entry
-var line  tp_line_ref    = na       // TP line object
-var line  sl_line_ref    = na       // SL line object
-var string sig_name      = ""       // signal name for webhook/labels
-var float dxy_entry_price = na       // DXY close at entry bar (SL_MOVE progress calc)
-var float pair_entry_px   = na       // pair close at entry bar (= breakeven SL level)
-var bool  sl_move_fired   = false    // prevents duplicate SL_MOVE per trade
+var bool  ind_trade_long = true     // indicator direction of open trade
+var bool  ind_exit_track = false    // position open and monitoring indicator exit
+var bool  use_jpy_exit   = false    // true = monitor USDJPY for exit; false = DXY
+var int   ind_entry_bar  = -1
+var line  tp_line_ref    = na
+var line  sl_line_ref    = na
+var string sig_name      = ""
+var float ind_entry_price = na
+var float pair_entry_px   = na
+var bool  sl_move_fired   = false
 
-// ─── HELPER: extend existing lines to current bar ─────────────────────────────
-// Called each bar while a trade is open to keep lines extending rightward.
-if dxy_exit_track and not na(tp_line_ref)
+// Extend lines while trade open
+if ind_exit_track and not na(tp_line_ref)
     line.set_x2(tp_line_ref, bar_index + 1)
     line.set_x2(sl_line_ref, bar_index + 1)
 
-// ─── ENTRY HELPER (local function) ───────────────────────────────────────────
-// Inline entry logic called once per signal type. pd_eff determines pair direction.
-//   pd_eff  = +pair_dir  for DXY LONG signals
-//   pd_eff  = -pair_dir  for DXY SHORT signals
-// Pair TP = pair_entry + pd_eff * dxy_sl_d_decimal * tick_factor
-// Pair SL = pair_entry - pd_eff * dxy_sl_d_decimal * tick_factor  (1:1 initial)
+float cr_px = high - low
 
-float cr_px = high - low   // pair candle range for label offset
-
-// ─── ENTRY: GAP REJECTION LONG ───────────────────────────────────────────────
+// ─── ENTRY: GAP REJECTION LONG (DXY) ─────────────────────────────────────────
 if gap_rej_long_cond
     if not na(tp_line_ref)
         line.delete(tp_line_ref)
         line.delete(sl_line_ref)
-    float pd_eff     = pair_dir
-    float p_sl_d     = dxy_al_sl_d * tick_factor
-    float p_tp       = close + pd_eff * p_sl_d
-    float p_sl       = close - pd_eff * p_sl_d
-    dxy_tp_lvl      := dxy_al_tp
-    dxy_sl_lvl      := dxy_c - dxy_al_sl_d
-    pair_tp_lvl     := p_tp
-    pair_sl_lvl     := p_sl
-    dxy_trade_long  := true
-    dxy_exit_track  := true
-    dxy_entry_bar   := bar_index
-    sig_name        := "GAP_REJ_LONG"
-    dxy_entry_price := dxy_c
-    pair_entry_px   := close
-    sl_move_fired   := false
-    bool pair_long   = pd_eff > 0
+    float pd_eff  = float(pair_dir)
+    float p_sl_d  = dxy_al_sl_d * tick_factor
+    float p_tp    = close + pd_eff * p_sl_d
+    float p_sl    = close - pd_eff * p_sl_d
+    ind_tp_lvl   := dxy_al_tp
+    ind_sl_lvl   := dxy_c - dxy_al_sl_d
+    pair_tp_lvl  := p_tp
+    pair_sl_lvl  := p_sl
+    ind_trade_long := true
+    ind_exit_track := true
+    use_jpy_exit   := false
+    ind_entry_bar  := bar_index
+    sig_name       := "GAP_REJ_LONG"
+    ind_entry_price := dxy_c
+    pair_entry_px  := close
+    sl_move_fired  := false
+    bool pair_long  = pd_eff > 0
     if show_tp_sl
-        tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20),  width=1, style=line.style_dashed)
-        sl_line_ref := line.new(bar_index, p_sl, bar_index + 1, p_sl, color=color.new(color.red,  20),  width=1, style=line.style_dashed)
+        tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20), width=1, style=line.style_dashed)
+        sl_line_ref := line.new(bar_index, p_sl, bar_index + 1, p_sl, color=color.new(color.red,  20), width=1, style=line.style_dashed)
     label.new(bar_index, pair_long ? low - cr_px : high + cr_px,
-        "▲ GAP REJ DXY↑\nTP: " + str.tostring(p_tp, format.mintick) + "  SL: " + str.tostring(p_sl, format.mintick) + "\nGap: " + str.tostring(math.round(math.abs(dxy_attr_gap_pts))) + " pts",
+        "GAP REJ DXY up\nTP: " + str.tostring(p_tp, format.mintick) + "  SL: " + str.tostring(p_sl, format.mintick) + "\nGap: " + str.tostring(math.round(math.abs(dxy_attr_gap_pts))) + "pts",
         color=color.new(color.orange, 10), textcolor=color.white,
         style=pair_long ? label.style_label_up : label.style_label_down, size=size.small)
     if enable_webhook
-        alert('{"event":"ENTRY","pair":"' + syminfo.ticker + '","signal":"GAP_REJ_LONG","pair_dir":"' + (pair_long ? "LONG" : "SHORT") + '","entry":' + str.tostring(close, format.mintick) + ',"tp":' + str.tostring(p_tp, format.mintick) + ',"sl":' + str.tostring(p_sl, format.mintick) + ',"sl_pts":' + str.tostring(math.round(dxy_al_sl_d * 10000)) + ',"dxy_entry":' + str.tostring(dxy_c) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
+        alert('{"event":"ENTRY","pair":"' + syminfo.ticker + '","signal":"GAP_REJ_LONG","indicator":"DXY","pair_dir":"' + (pair_long ? "LONG" : "SHORT") + '","entry":' + str.tostring(close, format.mintick) + ',"tp":' + str.tostring(p_tp, format.mintick) + ',"sl":' + str.tostring(p_sl, format.mintick) + ',"dxy_entry":' + str.tostring(dxy_c) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
 
-// ─── ENTRY: GAP REJECTION SHORT ──────────────────────────────────────────────
-if gap_rej_short_cond
+// ─── ENTRY: GAP REJECTION SHORT (USDJPY INDICATOR) ───────────────────────────
+if jpy_grs_cond
     if not na(tp_line_ref)
         line.delete(tp_line_ref)
         line.delete(sl_line_ref)
-    float pd_eff     = -pair_dir
-    float p_sl_d     = dxy_as_sl_d * tick_factor
-    float p_tp       = close + pd_eff * p_sl_d
-    float p_sl       = close - pd_eff * p_sl_d
-    dxy_tp_lvl      := dxy_as_tp
-    dxy_sl_lvl      := dxy_c + dxy_as_sl_d
-    pair_tp_lvl     := p_tp
-    pair_sl_lvl     := p_sl
-    dxy_trade_long  := false
-    dxy_exit_track  := true
-    dxy_entry_bar   := bar_index
-    sig_name        := "GAP_REJ_SHORT"
-    dxy_entry_price := dxy_c
-    pair_entry_px   := close
-    sl_move_fired   := false
-    bool pair_long   = pd_eff > 0
+    float pd_eff   = -float(pair_dir)
+    // jpy_zone_d = USDJPY distance from entry to gap fill target (positive: USDJPY above target)
+    float jpy_zone_d  = jpy_c - jpy_gap_target
+    float jpy_tp_lvl_ = jpy_c - jpy_grs_tp_mult * jpy_zone_d
+    float jpy_sl_lvl_ = jpy_c + jpy_zone_d
+    float p_sl_d      = jpy_zone_d * tick_factor
+    float p_tp        = close + pd_eff * jpy_grs_tp_mult * p_sl_d
+    float p_sl        = close - pd_eff * p_sl_d
+    ind_tp_lvl       := jpy_tp_lvl_
+    ind_sl_lvl       := jpy_sl_lvl_
+    pair_tp_lvl      := p_tp
+    pair_sl_lvl      := p_sl
+    ind_trade_long   := false
+    ind_exit_track   := true
+    use_jpy_exit     := true
+    ind_entry_bar    := bar_index
+    sig_name         := "GAP_REJ_SHORT"
+    ind_entry_price  := jpy_c
+    pair_entry_px    := close
+    sl_move_fired    := false
+    bool pair_long    = pd_eff > 0
     if show_tp_sl
         tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20), width=1, style=line.style_dashed)
         sl_line_ref := line.new(bar_index, p_sl, bar_index + 1, p_sl, color=color.new(color.red,  20), width=1, style=line.style_dashed)
     label.new(bar_index, pair_long ? low - cr_px : high + cr_px,
-        "▲ GAP REJ DXY↓\nTP: " + str.tostring(p_tp, format.mintick) + "  SL: " + str.tostring(p_sl, format.mintick) + "\nGap: " + str.tostring(math.round(dxy_attr_gap_pts)) + " pts",
+        "GAP REJ JPY dn\nTP: " + str.tostring(p_tp, format.mintick) + " (" + str.tostring(jpy_grs_tp_mult, "#.#") + "R)  SL: " + str.tostring(p_sl, format.mintick) + "\nJPY gap: " + str.tostring(math.round(jpy_gap_pts)) + "pts",
         color=color.new(color.orange, 10), textcolor=color.white,
         style=pair_long ? label.style_label_up : label.style_label_down, size=size.small)
     if enable_webhook
-        alert('{"event":"ENTRY","pair":"' + syminfo.ticker + '","signal":"GAP_REJ_SHORT","pair_dir":"' + (pair_long ? "LONG" : "SHORT") + '","entry":' + str.tostring(close, format.mintick) + ',"tp":' + str.tostring(p_tp, format.mintick) + ',"sl":' + str.tostring(p_sl, format.mintick) + ',"sl_pts":' + str.tostring(math.round(dxy_as_sl_d * 10000)) + ',"dxy_entry":' + str.tostring(dxy_c) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
+        alert('{"event":"ENTRY","pair":"' + syminfo.ticker + '","signal":"GAP_REJ_SHORT","indicator":"USDJPY","pair_dir":"' + (pair_long ? "LONG" : "SHORT") + '","entry":' + str.tostring(close, format.mintick) + ',"tp":' + str.tostring(p_tp, format.mintick) + ',"sl":' + str.tostring(p_sl, format.mintick) + ',"jpy_entry":' + str.tostring(jpy_c) + ',"jpy_gap_pts":' + str.tostring(math.round(jpy_gap_pts)) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
 
-// ─── ENTRY: REVERSAL LONG ─────────────────────────────────────────────────────
-if rev_long_cond
-    if not na(tp_line_ref)
-        line.delete(tp_line_ref)
-        line.delete(sl_line_ref)
-    float pd_eff     = pair_dir
-    float p_sl_d     = dxy_rl_sl_d * tick_factor
-    float p_tp       = close + pd_eff * p_sl_d
-    float p_sl       = close - pd_eff * p_sl_d
-    dxy_tp_lvl      := dxy_c + dxy_rl_sl_d
-    dxy_sl_lvl      := dxy_rl_sl
-    pair_tp_lvl     := p_tp
-    pair_sl_lvl     := p_sl
-    dxy_trade_long  := true
-    dxy_exit_track  := true
-    dxy_entry_bar   := bar_index
-    sig_name        := "REV_LONG"
-    dxy_entry_price := dxy_c
-    pair_entry_px   := close
-    sl_move_fired   := false
-    bool pair_long   = pd_eff > 0
-    if show_tp_sl
-        tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20), width=1, style=line.style_dashed)
-        sl_line_ref := line.new(bar_index, p_sl, bar_index + 1, p_sl, color=color.new(color.red,  20), width=1, style=line.style_dashed)
-    label.new(bar_index, pair_long ? low - cr_px : high + cr_px,
-        "▲ REV DXY↑\nTP: " + str.tostring(p_tp, format.mintick) + "  SL: " + str.tostring(p_sl, format.mintick) + "\nDXY SL: " + str.tostring(math.round(dxy_rl_sl_d * 10000)) + " pts",
-        color=color.new(color.teal, 10), textcolor=color.white,
-        style=pair_long ? label.style_label_up : label.style_label_down, size=size.small)
-    if enable_webhook
-        alert('{"event":"ENTRY","pair":"' + syminfo.ticker + '","signal":"REV_LONG","pair_dir":"' + (pair_long ? "LONG" : "SHORT") + '","entry":' + str.tostring(close, format.mintick) + ',"tp":' + str.tostring(p_tp, format.mintick) + ',"sl":' + str.tostring(p_sl, format.mintick) + ',"sl_pts":' + str.tostring(math.round(dxy_rl_sl_d * 10000)) + ',"dxy_entry":' + str.tostring(dxy_c) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
-
-// ─── ENTRY: REVERSAL SHORT ────────────────────────────────────────────────────
-if rev_short_cond
-    if not na(tp_line_ref)
-        line.delete(tp_line_ref)
-        line.delete(sl_line_ref)
-    float pd_eff     = -pair_dir
-    float p_sl_d     = dxy_rs_sl_d * tick_factor
-    float p_tp       = close + pd_eff * p_sl_d
-    float p_sl       = close - pd_eff * p_sl_d
-    dxy_tp_lvl      := dxy_c - dxy_rs_sl_d
-    dxy_sl_lvl      := dxy_rs_sl
-    pair_tp_lvl     := p_tp
-    pair_sl_lvl     := p_sl
-    dxy_trade_long  := false
-    dxy_exit_track  := true
-    dxy_entry_bar   := bar_index
-    sig_name        := "REV_SHORT"
-    dxy_entry_price := dxy_c
-    pair_entry_px   := close
-    sl_move_fired   := false
-    bool pair_long   = pd_eff > 0
-    if show_tp_sl
-        tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20), width=1, style=line.style_dashed)
-        sl_line_ref := line.new(bar_index, p_sl, bar_index + 1, p_sl, color=color.new(color.red,  20), width=1, style=line.style_dashed)
-    label.new(bar_index, pair_long ? low - cr_px : high + cr_px,
-        "▲ REV DXY↓\nTP: " + str.tostring(p_tp, format.mintick) + "  SL: " + str.tostring(p_sl, format.mintick) + "\nDXY SL: " + str.tostring(math.round(dxy_rs_sl_d * 10000)) + " pts",
-        color=color.new(color.purple, 10), textcolor=color.white,
-        style=pair_long ? label.style_label_up : label.style_label_down, size=size.small)
-    if enable_webhook
-        alert('{"event":"ENTRY","pair":"' + syminfo.ticker + '","signal":"REV_SHORT","pair_dir":"' + (pair_long ? "LONG" : "SHORT") + '","entry":' + str.tostring(close, format.mintick) + ',"tp":' + str.tostring(p_tp, format.mintick) + ',"sl":' + str.tostring(p_sl, format.mintick) + ',"sl_pts":' + str.tostring(math.round(dxy_rs_sl_d * 10000)) + ',"dxy_entry":' + str.tostring(dxy_c) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
-
-// ─── ENTRY: LON_ATTR LONG ─────────────────────────────────────────────────────
+// ─── ENTRY: LON_ATTR LONG (DXY) ──────────────────────────────────────────────
 if lon_attr_long_cond
     if not na(tp_line_ref)
         line.delete(tp_line_ref)
         line.delete(sl_line_ref)
-    float pd_eff     = pair_dir
-    float p_sl_d     = dxy_la_long_sl_d * tick_factor
-    float p_tp       = close + pd_eff * p_sl_d * lon_attr_tp_mult
-    float p_sl       = close - pd_eff * p_sl_d
-    dxy_tp_lvl      := dxy_la_long_tp
-    dxy_sl_lvl      := dxy_la_long_sl
-    pair_tp_lvl     := p_tp
-    pair_sl_lvl     := p_sl
-    dxy_trade_long  := true
-    dxy_exit_track  := true
-    dxy_entry_bar   := bar_index
-    sig_name        := "LON_ATTR_LONG"
-    dxy_entry_price := dxy_c
-    pair_entry_px   := close
-    sl_move_fired   := false
-    bool pair_long   = pd_eff > 0
+    float pd_eff  = float(pair_dir)
+    float p_sl_d  = dxy_la_long_sl_d * tick_factor
+    float p_tp    = close + pd_eff * p_sl_d * lon_attr_tp_mult
+    float p_sl    = close - pd_eff * p_sl_d
+    ind_tp_lvl   := dxy_la_long_tp
+    ind_sl_lvl   := dxy_la_long_sl
+    pair_tp_lvl  := p_tp
+    pair_sl_lvl  := p_sl
+    ind_trade_long := true
+    ind_exit_track := true
+    use_jpy_exit   := false
+    ind_entry_bar  := bar_index
+    sig_name       := "LON_ATTR_LONG"
+    ind_entry_price := dxy_c
+    pair_entry_px  := close
+    sl_move_fired  := false
+    bool pair_long  = pd_eff > 0
     if show_tp_sl
         tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20), width=1, style=line.style_dashed)
         sl_line_ref := line.new(bar_index, p_sl, bar_index + 1, p_sl, color=color.new(color.red,  20), width=1, style=line.style_dashed)
     label.new(bar_index, pair_long ? low - cr_px : high + cr_px,
-        "▲ LON_ATTR DXY↑\nTP: " + str.tostring(p_tp, format.mintick) + " (" + str.tostring(lon_attr_tp_mult, "#.#") + "R)  SL: " + str.tostring(p_sl, format.mintick) + "\n" + str.tostring(math.round(-dxy_dist_from_open)) + " pts below open  |  4H flat",
+        "LON_ATTR DXY up\nTP: " + str.tostring(p_tp, format.mintick) + " (" + str.tostring(lon_attr_tp_mult, "#.#") + "R)  SL: " + str.tostring(p_sl, format.mintick) + "\n" + str.tostring(math.round(-dxy_dist_from_open)) + "pts below open  |  4H flat",
         color=color.new(color.navy, 10), textcolor=color.white,
         style=pair_long ? label.style_label_up : label.style_label_down, size=size.small)
     if enable_webhook
-        alert('{"event":"ENTRY","pair":"' + syminfo.ticker + '","signal":"LON_ATTR_LONG","pair_dir":"' + (pair_long ? "LONG" : "SHORT") + '","entry":' + str.tostring(close, format.mintick) + ',"tp":' + str.tostring(p_tp, format.mintick) + ',"sl":' + str.tostring(p_sl, format.mintick) + ',"sl_pts":' + str.tostring(math.round(dxy_la_long_sl_d * 10000)) + ',"dxy_entry":' + str.tostring(dxy_c) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
+        alert('{"event":"ENTRY","pair":"' + syminfo.ticker + '","signal":"LON_ATTR_LONG","indicator":"DXY","pair_dir":"' + (pair_long ? "LONG" : "SHORT") + '","entry":' + str.tostring(close, format.mintick) + ',"tp":' + str.tostring(p_tp, format.mintick) + ',"sl":' + str.tostring(p_sl, format.mintick) + ',"dxy_entry":' + str.tostring(dxy_c) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
 
-// ─── ENTRY: ATTR CORE LONG ────────────────────────────────────────────────────
-if attr_core_long_cond
+// ─── ENTRY: ATTR_CORE LONG (USDJPY INDICATOR) ────────────────────────────────
+if jpy_acl_cond
     if not na(tp_line_ref)
         line.delete(tp_line_ref)
         line.delete(sl_line_ref)
-    float pd_eff     = pair_dir
-    float p_sl_d     = dxy_al_sl_d * tick_factor
-    float p_tp       = close + pd_eff * p_sl_d
-    float p_sl       = close - pd_eff * p_sl_d
-    dxy_tp_lvl      := dxy_al_tp
-    dxy_sl_lvl      := dxy_c - dxy_al_sl_d
-    pair_tp_lvl     := p_tp
-    pair_sl_lvl     := p_sl
-    dxy_trade_long  := true
-    dxy_exit_track  := true
-    dxy_entry_bar   := bar_index
-    sig_name        := "ATTR_CORE_LONG"
-    dxy_entry_price := dxy_c
-    pair_entry_px   := close
-    sl_move_fired   := false
-    bool pair_long   = pd_eff > 0
+    float pd_eff   = float(pair_dir)
+    float jpy_zone_d  = jpy_gap_target - jpy_c
+    float jpy_tp_lvl_ = jpy_c + jpy_acl_tp_mult * jpy_zone_d
+    float jpy_sl_lvl_ = jpy_c - jpy_zone_d
+    float p_sl_d      = jpy_zone_d * tick_factor
+    float p_tp        = close + pd_eff * jpy_acl_tp_mult * p_sl_d
+    float p_sl        = close - pd_eff * p_sl_d
+    ind_tp_lvl       := jpy_tp_lvl_
+    ind_sl_lvl       := jpy_sl_lvl_
+    pair_tp_lvl      := p_tp
+    pair_sl_lvl      := p_sl
+    ind_trade_long   := true
+    ind_exit_track   := true
+    use_jpy_exit     := true
+    ind_entry_bar    := bar_index
+    sig_name         := "ATTR_CORE_LONG"
+    ind_entry_price  := jpy_c
+    pair_entry_px    := close
+    sl_move_fired    := false
+    bool pair_long    = pd_eff > 0
     if show_tp_sl
         tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20), width=1, style=line.style_dashed)
         sl_line_ref := line.new(bar_index, p_sl, bar_index + 1, p_sl, color=color.new(color.red,  20), width=1, style=line.style_dashed)
     label.new(bar_index, pair_long ? low - cr_px : high + cr_px,
-        (pair_long ? "▲" : "▼") + " ATTR CORE DXY↑\nTP: " + str.tostring(p_tp, format.mintick) + "  SL: " + str.tostring(p_sl, format.mintick) + "\nGap@Lon: " + str.tostring(math.round(dxy_gap_at_lon)) + " pts  |  WaveExt: " + str.tostring(math.round(dxy_wave_ext)) + " pts",
+        "ATTR CORE JPY up\nTP: " + str.tostring(p_tp, format.mintick) + " (" + str.tostring(jpy_acl_tp_mult, "#.#") + "R)  SL: " + str.tostring(p_sl, format.mintick) + "\nJPY gap: " + str.tostring(math.round(math.abs(jpy_gap_pts))) + "pts  WaveExt: " + str.tostring(math.round(jpy_wave_ext)) + "pts",
         color=color.new(color.blue, 10), textcolor=color.white,
         style=pair_long ? label.style_label_up : label.style_label_down, size=size.small)
     if enable_webhook
-        alert('{"event":"ENTRY","pair":"' + syminfo.ticker + '","signal":"ATTR_CORE_LONG","pair_dir":"' + (pair_long ? "LONG" : "SHORT") + '","entry":' + str.tostring(close, format.mintick) + ',"tp":' + str.tostring(p_tp, format.mintick) + ',"sl":' + str.tostring(p_sl, format.mintick) + ',"sl_pts":' + str.tostring(math.round(dxy_al_sl_d * 10000)) + ',"gap_at_lon":' + str.tostring(math.round(dxy_gap_at_lon)) + ',"wave_ext":' + str.tostring(math.round(dxy_wave_ext)) + ',"dxy_entry":' + str.tostring(dxy_c) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
+        alert('{"event":"ENTRY","pair":"' + syminfo.ticker + '","signal":"ATTR_CORE_LONG","indicator":"USDJPY","pair_dir":"' + (pair_long ? "LONG" : "SHORT") + '","entry":' + str.tostring(close, format.mintick) + ',"tp":' + str.tostring(p_tp, format.mintick) + ',"sl":' + str.tostring(p_sl, format.mintick) + ',"jpy_entry":' + str.tostring(jpy_c) + ',"jpy_wave_ext":' + str.tostring(math.round(jpy_wave_ext)) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
 
-// ─── ENTRY: ATTR CORE SHORT ───────────────────────────────────────────────────
-if attr_core_short_cond
+// ─── ENTRY: ATTR_CORE SHORT (USDJPY INDICATOR) ───────────────────────────────
+if jpy_acs_cond
     if not na(tp_line_ref)
         line.delete(tp_line_ref)
         line.delete(sl_line_ref)
-    float pd_eff     = -pair_dir
-    float p_sl_d     = dxy_as_sl_d * tick_factor
-    float p_tp       = close + pd_eff * p_sl_d
-    float p_sl       = close - pd_eff * p_sl_d
-    dxy_tp_lvl      := dxy_as_tp
-    dxy_sl_lvl      := dxy_c + dxy_as_sl_d
-    pair_tp_lvl     := p_tp
-    pair_sl_lvl     := p_sl
-    dxy_trade_long  := false
-    dxy_exit_track  := true
-    dxy_entry_bar   := bar_index
-    sig_name        := "ATTR_CORE_SHORT"
-    dxy_entry_price := dxy_c
-    pair_entry_px   := close
-    sl_move_fired   := false
-    bool pair_long   = pd_eff > 0
+    float pd_eff   = -float(pair_dir)
+    float jpy_zone_d  = jpy_c - jpy_gap_target
+    float jpy_tp_lvl_ = jpy_c - jpy_acs_tp_mult * jpy_zone_d
+    float jpy_sl_lvl_ = jpy_c + jpy_zone_d
+    float p_sl_d      = jpy_zone_d * tick_factor
+    float p_tp        = close + pd_eff * jpy_acs_tp_mult * p_sl_d
+    float p_sl        = close - pd_eff * p_sl_d
+    ind_tp_lvl       := jpy_tp_lvl_
+    ind_sl_lvl       := jpy_sl_lvl_
+    pair_tp_lvl      := p_tp
+    pair_sl_lvl      := p_sl
+    ind_trade_long   := false
+    ind_exit_track   := true
+    use_jpy_exit     := true
+    ind_entry_bar    := bar_index
+    sig_name         := "ATTR_CORE_SHORT"
+    ind_entry_price  := jpy_c
+    pair_entry_px    := close
+    sl_move_fired    := false
+    bool pair_long    = pd_eff > 0
     if show_tp_sl
         tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20), width=1, style=line.style_dashed)
         sl_line_ref := line.new(bar_index, p_sl, bar_index + 1, p_sl, color=color.new(color.red,  20), width=1, style=line.style_dashed)
     label.new(bar_index, pair_long ? low - cr_px : high + cr_px,
-        (pair_long ? "▲" : "▼") + " ATTR CORE DXY↓\nTP: " + str.tostring(p_tp, format.mintick) + "  SL: " + str.tostring(p_sl, format.mintick) + "\nGap@Lon: " + str.tostring(math.round(dxy_gap_at_lon)) + " pts  |  WaveExt: " + str.tostring(math.round(dxy_wave_ext)) + " pts",
+        "ATTR CORE JPY dn [BB4 flat]\nTP: " + str.tostring(p_tp, format.mintick) + " (" + str.tostring(jpy_acs_tp_mult, "#.#") + "R)  SL: " + str.tostring(p_sl, format.mintick) + "\nJPY gap: " + str.tostring(math.round(jpy_gap_pts)) + "pts  WaveExt: " + str.tostring(math.round(jpy_wave_ext)) + "pts",
         color=color.new(color.blue, 10), textcolor=color.white,
         style=pair_long ? label.style_label_up : label.style_label_down, size=size.small)
     if enable_webhook
-        alert('{"event":"ENTRY","pair":"' + syminfo.ticker + '","signal":"ATTR_CORE_SHORT","pair_dir":"' + (pair_long ? "LONG" : "SHORT") + '","entry":' + str.tostring(close, format.mintick) + ',"tp":' + str.tostring(p_tp, format.mintick) + ',"sl":' + str.tostring(p_sl, format.mintick) + ',"sl_pts":' + str.tostring(math.round(dxy_as_sl_d * 10000)) + ',"gap_at_lon":' + str.tostring(math.round(dxy_gap_at_lon)) + ',"wave_ext":' + str.tostring(math.round(dxy_wave_ext)) + ',"dxy_entry":' + str.tostring(dxy_c) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
+        alert('{"event":"ENTRY","pair":"' + syminfo.ticker + '","signal":"ATTR_CORE_SHORT","indicator":"USDJPY","pair_dir":"' + (pair_long ? "LONG" : "SHORT") + '","entry":' + str.tostring(close, format.mintick) + ',"tp":' + str.tostring(p_tp, format.mintick) + ',"sl":' + str.tostring(p_sl, format.mintick) + ',"jpy_entry":' + str.tostring(jpy_c) + ',"jpy_wave_ext":' + str.tostring(math.round(jpy_wave_ext)) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
+
+// ─── ENTRY: REVERSAL LONG (USDJPY INDICATOR) ─────────────────────────────────
+if jpy_rl_cond
+    if not na(tp_line_ref)
+        line.delete(tp_line_ref)
+        line.delete(sl_line_ref)
+    float pd_eff  = float(pair_dir)
+    float p_sl_d  = jpy_rl_sl_d * tick_factor
+    float p_tp    = close + pd_eff * p_sl_d * jpy_rl_tp_mult
+    float p_sl    = close - pd_eff * p_sl_d
+    ind_tp_lvl   := jpy_c + jpy_rl_sl_d * jpy_rl_tp_mult
+    ind_sl_lvl   := jpy_rl_sl
+    pair_tp_lvl  := p_tp
+    pair_sl_lvl  := p_sl
+    ind_trade_long := true
+    ind_exit_track := true
+    use_jpy_exit   := true
+    ind_entry_bar  := bar_index
+    sig_name       := "REV_LONG"
+    ind_entry_price := jpy_c
+    pair_entry_px  := close
+    sl_move_fired  := false
+    bool pair_long  = pd_eff > 0
+    if show_tp_sl
+        tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20), width=1, style=line.style_dashed)
+        sl_line_ref := line.new(bar_index, p_sl, bar_index + 1, p_sl, color=color.new(color.red,  20), width=1, style=line.style_dashed)
+    label.new(bar_index, pair_long ? low - cr_px : high + cr_px,
+        "REV JPY up [BB4 flat]\nTP: " + str.tostring(p_tp, format.mintick) + " (" + str.tostring(jpy_rl_tp_mult, "#.#") + "R)  SL: " + str.tostring(p_sl, format.mintick) + "\nJPY drop: " + str.tostring(math.round(jpy_max_move_dn)) + "pts  dist: " + str.tostring(math.round(math.abs(jpy_dist_from_open))) + "pts",
+        color=color.new(color.teal, 10), textcolor=color.white,
+        style=pair_long ? label.style_label_up : label.style_label_down, size=size.small)
+    if enable_webhook
+        alert('{"event":"ENTRY","pair":"' + syminfo.ticker + '","signal":"REV_LONG","indicator":"USDJPY","pair_dir":"' + (pair_long ? "LONG" : "SHORT") + '","entry":' + str.tostring(close, format.mintick) + ',"tp":' + str.tostring(p_tp, format.mintick) + ',"sl":' + str.tostring(p_sl, format.mintick) + ',"jpy_entry":' + str.tostring(jpy_c) + ',"jpy_impulse_dn":' + str.tostring(math.round(jpy_max_move_dn)) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
+
+// ─── ENTRY: REVERSAL SHORT (USDJPY INDICATOR) ────────────────────────────────
+if jpy_rs_cond
+    if not na(tp_line_ref)
+        line.delete(tp_line_ref)
+        line.delete(sl_line_ref)
+    float pd_eff  = -float(pair_dir)
+    float p_sl_d  = jpy_rs_sl_d * tick_factor
+    float p_tp    = close + pd_eff * p_sl_d * jpy_rs_tp_mult
+    float p_sl    = close - pd_eff * p_sl_d
+    ind_tp_lvl   := jpy_c - jpy_rs_sl_d * jpy_rs_tp_mult
+    ind_sl_lvl   := jpy_rs_sl
+    pair_tp_lvl  := p_tp
+    pair_sl_lvl  := p_sl
+    ind_trade_long := false
+    ind_exit_track := true
+    use_jpy_exit   := true
+    ind_entry_bar  := bar_index
+    sig_name       := "REV_SHORT"
+    ind_entry_price := jpy_c
+    pair_entry_px  := close
+    sl_move_fired  := false
+    bool pair_long  = pd_eff > 0
+    string grade_a  = _dxy_confirms_rs ? " [DXY-A]" : ""
+    if show_tp_sl
+        tp_line_ref := line.new(bar_index, p_tp, bar_index + 1, p_tp, color=color.new(color.lime, 20), width=1, style=line.style_dashed)
+        sl_line_ref := line.new(bar_index, p_sl, bar_index + 1, p_sl, color=color.new(color.red,  20), width=1, style=line.style_dashed)
+    label.new(bar_index, pair_long ? low - cr_px : high + cr_px,
+        "REV JPY dn" + grade_a + "\nTP: " + str.tostring(p_tp, format.mintick) + " (" + str.tostring(jpy_rs_tp_mult, "#.#") + "R)  SL: " + str.tostring(p_sl, format.mintick) + "\nJPY rise: " + str.tostring(math.round(jpy_max_move_up)) + "pts  dist: " + str.tostring(math.round(jpy_dist_from_open)) + "pts",
+        color=color.new(color.purple, 10), textcolor=color.white,
+        style=pair_long ? label.style_label_up : label.style_label_down, size=size.small)
+    if enable_webhook
+        alert('{"event":"ENTRY","pair":"' + syminfo.ticker + '","signal":"REV_SHORT","indicator":"USDJPY","grade_a":' + str.tostring(_dxy_confirms_rs) + ',"pair_dir":"' + (pair_long ? "LONG" : "SHORT") + '","entry":' + str.tostring(close, format.mintick) + ',"tp":' + str.tostring(p_tp, format.mintick) + ',"sl":' + str.tostring(p_sl, format.mintick) + ',"jpy_entry":' + str.tostring(jpy_c) + ',"jpy_impulse_up":' + str.tostring(math.round(jpy_max_move_up)) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
 
 // ─── SL_MOVE: BREAKEVEN ADVISORY ─────────────────────────────────────────────
-// Fires when DXY has moved be_trigger_pct % of the way from entry to TP.
-// Advisory only — tells automation to consider moving pair stop to breakeven.
-// NEVER act on SL_MOVE automatically.
-if dxy_exit_track and enable_webhook and not sl_move_fired and barstate.isconfirmed
-    if not na(dxy_entry_price) and not na(dxy_tp_lvl) and bar_index > dxy_entry_bar
-        float _tp_dist  = math.abs(dxy_tp_lvl - dxy_entry_price)
-        bool  _toward   = dxy_trade_long ? dxy_c > dxy_entry_price : dxy_c < dxy_entry_price
-        float _progress = (_tp_dist > 0 and _toward) ? math.abs(dxy_c - dxy_entry_price) / _tp_dist * 100.0 : 0.0
+if ind_exit_track and enable_webhook and not sl_move_fired and barstate.isconfirmed
+    if not na(ind_entry_price) and not na(ind_tp_lvl) and bar_index > ind_entry_bar
+        float _ind_c   = use_jpy_exit ? jpy_c : dxy_c
+        float _tp_dist = math.abs(ind_tp_lvl - ind_entry_price)
+        bool  _toward  = ind_trade_long ? _ind_c > ind_entry_price : _ind_c < ind_entry_price
+        float _progress = (_tp_dist > 0 and _toward) ? math.abs(_ind_c - ind_entry_price) / _tp_dist * 100.0 : 0.0
         if _progress >= be_trigger_pct
             sl_move_fired := true
-            alert('{"event":"SL_MOVE","pair":"' + syminfo.ticker + '","signal":"' + sig_name + '","action":"MOVE_TO_BE","new_sl":' + str.tostring(pair_entry_px, format.mintick) + ',"pair_entry":' + str.tostring(pair_entry_px, format.mintick) + ',"dxy_price":' + str.tostring(dxy_c) + ',"progress_pct":' + str.tostring(math.round(_progress)) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
-
+            alert('{"event":"SL_MOVE","pair":"' + syminfo.ticker + '","signal":"' + sig_name + '","action":"MOVE_TO_BE","new_sl":' + str.tostring(pair_entry_px, format.mintick) + ',"progress_pct":' + str.tostring(math.round(_progress)) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
 
 // ─── PAIR SL: HARD STOP ON PAIR CHART ────────────────────────────────────────
-// Pair hard stop-loss hit before DXY exits. Caps loss at exactly -1R and
-// terminates trade tracking so the DXY EXIT block does not fire afterwards.
-if dxy_exit_track and not na(pair_sl_lvl) and bar_index > dxy_entry_bar and barstate.isconfirmed
-    bool pair_long   = (dxy_trade_long and pair_dir > 0) or (not dxy_trade_long and pair_dir < 0)
+if ind_exit_track and not na(pair_sl_lvl) and bar_index > ind_entry_bar and barstate.isconfirmed
+    bool pair_long   = (ind_trade_long and pair_dir > 0) or (not ind_trade_long and pair_dir < 0)
     bool pair_sl_hit = pair_long ? low <= pair_sl_lvl : high >= pair_sl_lvl
 
     if pair_sl_hit
         if show_tp_sl and not na(tp_line_ref)
             line.set_x2(tp_line_ref, bar_index)
             line.set_x2(sl_line_ref, bar_index)
-
         label.new(bar_index, pair_sl_lvl,
-            "✘ PAIR SL\n" + sig_name + "\n" + str.tostring(pair_sl_lvl, format.mintick),
+            "PAIR SL\n" + sig_name + "\n" + str.tostring(pair_sl_lvl, format.mintick),
             color=color.new(color.red, 10), textcolor=color.white,
             style=pair_long ? label.style_label_up : label.style_label_down, size=size.small)
-
         if enable_webhook
             alert('{"event":"PAIR_SL","pair":"' + syminfo.ticker + '","signal":"' + sig_name + '","result":"SL","exit_price":' + str.tostring(pair_sl_lvl, format.mintick) + ',"r_result":-1.0,"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
-
-        dxy_exit_track  := false
-        dxy_tp_lvl      := na
-        dxy_sl_lvl      := na
+        ind_exit_track  := false
+        ind_tp_lvl      := na
+        ind_sl_lvl      := na
         pair_tp_lvl     := na
         pair_sl_lvl     := na
         tp_line_ref     := na
         sl_line_ref     := na
         sig_name        := ""
         sl_move_fired   := false
-        dxy_entry_price := na
+        ind_entry_price := na
         pair_entry_px   := na
 
-// ─── DXY EXIT ────────────────────────────────────────────────────────────────
-// Monitor DXY price against its TP/SL levels. On hit: terminate lines and
-// draw exit label at estimated pair TP/SL price (not actual pair close).
-if dxy_exit_track and not na(dxy_tp_lvl) and not na(dxy_sl_lvl) and bar_index > dxy_entry_bar and barstate.isconfirmed
-    bool dxy_tp_cross = dxy_trade_long ? dxy_h >= dxy_tp_lvl : dxy_l <= dxy_tp_lvl
-    bool dxy_sl_cross = dxy_trade_long ? dxy_l <= dxy_sl_lvl : dxy_h >= dxy_sl_lvl
+// ─── INDICATOR EXIT (DXY or USDJPY depending on signal) ──────────────────────
+if ind_exit_track and not na(ind_tp_lvl) and not na(ind_sl_lvl) and bar_index > ind_entry_bar and barstate.isconfirmed
+    float ind_h   = use_jpy_exit ? jpy_h : dxy_h
+    float ind_l   = use_jpy_exit ? jpy_l : dxy_l
+    bool tp_cross = ind_trade_long ? ind_h >= ind_tp_lvl : ind_l <= ind_tp_lvl
+    bool sl_cross = ind_trade_long ? ind_l <= ind_sl_lvl : ind_h >= ind_sl_lvl
 
-    if dxy_tp_cross or dxy_sl_cross
-        bool is_tp       = dxy_tp_cross
+    if tp_cross or sl_cross
+        bool is_tp       = tp_cross
         string result    = is_tp ? "TP" : "SL"
         float exit_price = is_tp ? pair_tp_lvl : pair_sl_lvl
-        bool  pair_long  = (dxy_trade_long and pair_dir > 0) or (not dxy_trade_long and pair_dir < 0)
+        bool  pair_long  = (ind_trade_long and pair_dir > 0) or (not ind_trade_long and pair_dir < 0)
 
-        // Terminate lines at this bar
         if show_tp_sl and not na(tp_line_ref)
             line.set_x2(tp_line_ref, bar_index)
             line.set_x2(sl_line_ref, bar_index)
 
-        // Exit label at estimated pair TP or SL price
         label.new(bar_index, exit_price,
-            (is_tp ? "✔ TP" : "✘ SL") + "\n" + sig_name + "\n" + str.tostring(exit_price, format.mintick),
+            (is_tp ? "TP" : "SL") + "\n" + sig_name + "\n" + str.tostring(exit_price, format.mintick),
             color=is_tp ? color.new(color.lime, 10) : color.new(color.red, 10),
             textcolor=is_tp ? color.black : color.white,
             style=pair_long ? label.style_label_up : label.style_label_down, size=size.small)
 
         if enable_webhook
-            alert('{"event":"EXIT","pair":"' + syminfo.ticker + '","result":"' + result + '","signal":"' + sig_name + '","exit_price":' + str.tostring(exit_price, format.mintick) + ',"dxy_exit":' + str.tostring(dxy_c) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
+            alert('{"event":"EXIT","pair":"' + syminfo.ticker + '","result":"' + result + '","signal":"' + sig_name + '","exit_price":' + str.tostring(exit_price, format.mintick) + ',"time":"' + str.format_time(time, "yyyy-MM-dd HH:mm", "UTC") + '"}', alert.freq_once_per_bar)
 
-        // Reset state
-        dxy_exit_track  := false
-        dxy_tp_lvl      := na
-        dxy_sl_lvl      := na
+        ind_exit_track  := false
+        ind_tp_lvl      := na
+        ind_sl_lvl      := na
         pair_tp_lvl     := na
         pair_sl_lvl     := na
         tp_line_ref     := na
         sl_line_ref     := na
         sig_name        := ""
         sl_move_fired   := false
-        dxy_entry_price := na
+        ind_entry_price := na
         pair_entry_px   := na
 
 // ─── FRIDAY SESSION CLOSE RESET ──────────────────────────────────────────────
-// No trades held over the weekend. At Friday session end, terminate any open
-// trade lines and wipe all intraday DXY state so Monday starts clean.
 var bool week_reset_done = false
 bool is_fri = dayofweek(time, "UTC") == dayofweek.friday
 if not is_fri
@@ -742,43 +892,81 @@ bool do_friday_reset = is_fri and c_min >= e_min and not week_reset_done
 
 if do_friday_reset
     week_reset_done := true
-    if dxy_exit_track
+    if ind_exit_track
         if show_tp_sl and not na(tp_line_ref)
             line.set_x2(tp_line_ref, bar_index)
             line.set_x2(sl_line_ref, bar_index)
         label.new(bar_index, not na(pair_tp_lvl) ? pair_tp_lvl : close,
-            "⚑ WK END\n" + sig_name,
+            "WK END\n" + sig_name,
             color=color.new(color.gray, 30), textcolor=color.white,
             style=label.style_label_down, size=size.tiny)
-    dxy_exit_track    := false
-    dxy_tp_lvl        := na
-    dxy_sl_lvl        := na
-    pair_tp_lvl       := na
-    pair_sl_lvl       := na
-    tp_line_ref       := na
-    sl_line_ref       := na
-    sig_name          := ""
-    sl_move_fired     := false
-    dxy_entry_price   := na
-    pair_entry_px     := na
-    dxy_london_open   := na
-    dxy_max_move_up   := 0.0
-    dxy_max_move_down := 0.0
-    lon_attr_traded   := false
-    dxy_lon_zone_top  := na
-    dxy_lon_zone_bot  := na
-    dxy_pristine_long := true
-    attr_traded         := false
-    attr_gap_touched    := false
-    dxy_attr_target     := na
-    dxy_attr_gap_pts    := 0.0
+    // Reset trade state
+    ind_exit_track  := false
+    ind_tp_lvl      := na
+    ind_sl_lvl      := na
+    pair_tp_lvl     := na
+    pair_sl_lvl     := na
+    tp_line_ref     := na
+    sl_line_ref     := na
+    sig_name        := ""
+    sl_move_fired   := false
+    ind_entry_price := na
+    pair_entry_px   := na
+    use_jpy_exit    := false
+    // Reset DXY session state
+    dxy_london_open    := na
+    dxy_max_move_up    := 0.0
+    dxy_max_move_down  := 0.0
+    lon_attr_traded    := false
+    dxy_lon_zone_top   := na
+    dxy_lon_zone_bot   := na
+    dxy_pristine_long  := true
+    attr_traded        := false
+    attr_gap_touched   := false
+    dxy_attr_target    := na
+    dxy_attr_gap_pts   := 0.0
     dxy_attr_tokyo_open := na
-    dxy_lon_open_close  := na
-    dxy_gap_at_lon      := 0.0
+    dxy_lon_open_close := na
+    dxy_gap_at_lon     := 0.0
+    // Reset USDJPY session state
+    jpy_london_open    := na
+    jpy_max_move_up    := 0.0
+    jpy_max_move_dn    := 0.0
+    jpy_attr_traded    := false
+    jpy_gap_touched    := false
+    jpy_gap_target     := na
+    jpy_gap_pts        := 0.0
+    jpy_tokyo_open     := na
+    jpy_lon_open_close := na
+    jpy_gap_at_lon     := 0.0
+
+// ─── ALERT CONDITIONS ────────────────────────────────────────────────────────
+// Create alerts in TradingView by clicking the alarm-clock icon on this indicator
+// and selecting one of the two named conditions below. Apply to each pair chart
+// individually so {{ticker}} resolves to the correct pair.
+//
+// Alert 1 — "Trade Signal (6 types)":
+//   Fires for GAP_REJ_LONG, GAP_REJ_SHORT, ATTR_CORE_LONG, ATTR_CORE_SHORT,
+//   REV_LONG, REV_SHORT. Applies to all pairs per signal routing rules:
+//     GAP_REJ_SHORT  -> EURUSD, GBPUSD, USDCHF only (inv3 filter in script)
+//     ATTR_CORE / REV -> all 7 pairs
+//     GAP_REJ_LONG   -> all pairs
+//
+// Alert 2 — "LON_ATTR_LONG":
+//   Fires only for the London Open Attraction LONG signal.
+//   IMPORTANT: This signal only trades USDJPY, NZDUSD and AUDUSD.
+//   The pair filter is enforced in the script — this alert will not fire on
+//   other pair charts — but the message reminds you not to trade it elsewhere.
+
+bool _any_6_signals = gap_rej_long_cond or jpy_grs_cond or jpy_acl_cond or jpy_acs_cond or jpy_rl_cond or jpy_rs_cond
+
+alertcondition(_any_6_signals,
+    title   = "Trade Signal (6 types)",
+    message = "{{ticker}} {{interval}} — ENTRY SIGNAL\nSignal type: GAP_REJ / ATTR_CORE / REV — see chart label for exact type and direction.\nTP/SL lines drawn. Check DXY Pair Levels indicator.")
+
+alertcondition(lon_attr_long_cond,
+    title   = "LON_ATTR_LONG Signal",
+    message = "{{ticker}} {{interval}} — LON_ATTR_LONG entry\nIMPORTANT: This signal trades USDJPY, NZDUSD and AUDUSD ONLY.\nDo not set up on EURUSD, GBPUSD, USDCAD or USDCHF.")
 
 // ─── VISUALS ─────────────────────────────────────────────────────────────────
 bgcolor(show_session and in_sess ? color.new(color.blue, 93) : na, title="London Session")
-
-// Note: DXY opening level (~100) is not plotted here — plotting it on a pair
-// chart (~1.05) would distort the Y-axis scale and compress all pair drawings.
-
